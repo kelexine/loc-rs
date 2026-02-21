@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc, TimeZone};
 use rayon::prelude::*;
 
 use crate::cli::Args;
-use crate::extractor;
+use crate::extractors;
 use crate::language::{BINARY_EXTENSIONS, EXCLUDED_DIRS};
 use crate::models::{Breakdown, ExtensionStats, FileInfo, ScanResult};
 
@@ -24,6 +24,7 @@ pub struct ScanConfig {
     pub parallel: bool,
     pub extract_functions: bool,
     pub is_git_repo: bool,
+    pub custom_ignore: HashSet<String>,
 }
 
 impl ScanConfig {
@@ -54,6 +55,8 @@ impl ScanConfig {
             Some(exts)
         };
 
+        let custom_ignore = load_locignore(&target_dir);
+
         Ok(Self {
             target_dir,
             allowed_extensions,
@@ -62,6 +65,7 @@ impl ScanConfig {
             parallel: !args.no_parallel,
             extract_functions: args.functions || args.func_analysis,
             is_git_repo,
+            custom_ignore,
         })
     }
 }
@@ -71,7 +75,7 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
     let files = if config.is_git_repo {
         get_git_files(&config.target_dir)
     } else {
-        get_manual_files(&config.target_dir)
+        get_manual_files(&config.target_dir, &config.custom_ignore)
     };
 
     let mut sorted_files = files;
@@ -194,7 +198,13 @@ fn is_binary_file(path: &Path) -> bool {
 
 fn extract_file_functions(path: &Path) -> Vec<crate::models::FunctionInfo> {
     match std::fs::read_to_string(path) {
-        Ok(content) => extractor::extract_functions(path, &content),
+        Ok(content) => {
+            if let Some(ext) = extractors::get_extractor(path) {
+                ext.extract(&content)
+            } else {
+                vec![]
+            }
+        }
         Err(_) => vec![],
     }
 }
@@ -227,29 +237,41 @@ fn get_git_files(dir: &Path) -> Vec<PathBuf> {
                 .map(|s| dir.join(s))
                 .collect()
         }
-        _ => get_manual_files(dir),
+        _ => get_manual_files(dir, &HashSet::new()),
     }
 }
 
-fn get_manual_files(dir: &Path) -> Vec<PathBuf> {
+fn load_locignore(dir: &Path) -> HashSet<String> {
+    let path = dir.join(".locignore");
+    if let Ok(content) = std::fs::read_to_string(path) {
+        content.lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .map(|l| l.to_string())
+            .collect()
+    } else {
+        HashSet::new()
+    }
+}
+
+fn get_manual_files(dir: &Path, custom_ignore: &HashSet<String>) -> Vec<PathBuf> {
     use walkdir::WalkDir;
     WalkDir::new(dir)
         .follow_links(false)
         .into_iter()
         .filter_entry(|e| {
-            // depth == 0 is the root directory itself — never skip it,
-            // even if its name starts with '.' (e.g. TempDir gives /tmp/.tmpXXXXXX)
             if e.depth() == 0 {
                 return true;
             }
             if e.file_type().is_dir() {
                 let name = e.file_name().to_string_lossy();
-                // Exclude known build/tool dirs and all other hidden dirs
-                // (except .well-known which is a legitimate web directory)
-                !EXCLUDED_DIRS.contains(name.as_ref())
-                    && (name == ".well-known" || !name.starts_with('.'))
+                if EXCLUDED_DIRS.contains(name.as_ref()) || custom_ignore.contains(name.as_ref()) {
+                    return false;
+                }
+                name == ".well-known" || !name.starts_with('.')
             } else {
-                true
+                let name = e.file_name().to_string_lossy();
+                !custom_ignore.contains(name.as_ref())
             }
         })
         .filter_map(|e| e.ok())

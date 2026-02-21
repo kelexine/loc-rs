@@ -17,7 +17,7 @@ mod cli;
 mod counter;
 mod display;
 mod export;
-mod extractor;
+mod extractors;
 mod language;
 mod models;
 
