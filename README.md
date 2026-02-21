@@ -9,11 +9,14 @@
 
 - **Tree view** with per-file line counts, function counts, and last-modified dates
 - **Parallel scanning** via [Rayon](https://docs.rs/rayon) — uses all CPU cores
-- **Function extraction** for 10 languages including Rust, Python, JS, Go, PHP, Swift, etc.
+- **Function extraction** for 10 languages including Rust, Python, JS, Go, PHP, Swift, Ruby, and Nim
 - **Cyclomatic complexity** estimates per function
 - **Git integration** — respects `.gitignore` and `.locignore`, optional `git log` dates
+- **Interactive HTML Dashboard** — beautiful visual reports (`loc -e report.html`)
+- **Multi-format export** — JSON, JSONL, CSV, HTML
+- **Global Configuration** via `~/.config/loc-rs/config.toml`
+- **GitHub Action** wrapper included for CI/CD integration
 - **35+ languages** supported with aliases
-- **Multi-format export** — JSON, JSONL, CSV
 - **Size warnings** for oversized files
 - **BOM-aware binary detection** for UTF-16/32 text files
 
@@ -52,6 +55,7 @@ loc -f --func-analysis         # Full complexity report
 loc -t rust python             # Filter to Rust + Python only
 loc -e results.json            # Export to JSON
 loc -e stats.csv -f            # CSV with function data
+loc -e report.html             # Generate interactive HTML dashboard
 loc --warn-size 500            # Warn on files > 500 lines
 loc --git-dates                # Use git log for last-modified
 loc --no-parallel              # Disable parallel processing
@@ -66,10 +70,38 @@ loc --no-parallel              # Disable parallel processing
 | `--functions` | `-f` | Extract functions, methods, classes |
 | `--func-analysis` | | Full analysis report (auto-enables `-f`) |
 | `--type LANG...` | `-t` | Filter by language(s) |
-| `--export FILE` | `-e` | Export results (`.json` / `.jsonl` / `.csv`) |
+| `--export FILE` | `-e` | Export results (`.json` / `.jsonl` / `.csv` / `.html`) |
 | `--warn-size N` | | Warn for files exceeding N lines |
 | `--git-dates` | | Use `git log` for last-modified dates |
 | `--no-parallel` | | Disable Rayon parallelism |
+
+---
+
+## Configuration
+
+You can persist your default arguments globally in `~/.config/loc-rs/config.toml` (or your OS's equivalent standard config directory).
+
+```toml
+warn_size = 500
+default_types = ["rust", "python"]
+always_extract_functions = true
+```
+
+---
+
+## GitHub Action Integration
+
+Drop `loc-rs` into your CI/CD pipelines to monitor complexity and line counts.
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+  - uses: kelexine/loc-rs/.github/actions/loc-rs@main
+    with:
+      target_dir: .
+      warn_size: 500
+      functions: true
+```
 
 ---
 
