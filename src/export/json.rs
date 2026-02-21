@@ -19,7 +19,7 @@ pub fn export_json(result: &ScanResult, path: &Path, extract_functions: bool) ->
             "total_classes": result.total_classes(),
             "timestamp": Utc::now().to_rfc3339(),
             "function_extraction_enabled": extract_functions,
-            "generator": "loc v5.0.0 by kelexine (https://github.com/kelexine)",
+            "generator": concat!("loc v", env!("CARGO_PKG_VERSION"), " by kelexine (https://github.com/kelexine)"),
         },
         "breakdown": result.breakdown,
         "files": text_files.iter().map(|f| file_to_value(f, extract_functions)).collect::<Vec<_>>(),

@@ -3,7 +3,7 @@
 
 use clap::Parser;
 
-/// LOC v5 — Advanced Lines of Code counter
+/// LOC v0.1. — Advanced Lines of Code counter
 ///
 /// A fast, feature-rich LOC tool with function extraction, git integration,
 /// parallel processing, and multi-format export.
@@ -12,7 +12,7 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(
     name = "loc",
-    version = "5.0.0",
+    version = env!("CARGO_PKG_VERSION"),
     author = "kelexine <https://github.com/kelexine>",
     about = "Advanced LOC counter — functions, git dates, parallel scan, JSON/CSV export",
     after_help = "\
