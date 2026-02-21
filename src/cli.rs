@@ -32,10 +32,10 @@ EXAMPLES:
 SUPPORTED LANGUAGES:
   python, javascript, typescript, rust, go, java, kotlin, swift,
   c, cpp, csharp, ruby, php, html, css, shell, sql, markdown,
-  json, yaml, xml, jsx, vue, svelte, toml, scala, haskell, elixir, lua, dart, zig
+  json, yaml, xml, jsx, vue, svelte, toml, scala, haskell, elixir, lua, dart, zig, nim
 
 FUNCTION EXTRACTION:
-  Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#
+  Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#, PHP, Swift, Ruby, Nim
 
 IMPROVEMENTS OVER v4 (Python):
   • Rayon data-parallelism — uses all CPU cores

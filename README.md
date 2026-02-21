@@ -125,7 +125,7 @@ Language aliases are supported: `py`, `js`, `ts`, `rs`, `rb`, `sh`, `md`, `yml`,
 | PHP | ✓ | ✓ | ✓ | — | — | — |
 | Swift | ✓ | ✓ | ✓ | ✓ | — | — |
 | Ruby | ✓ | ✓ | ✓ | — | — | — |
-| Nim | ✓ | ✓ | — | — | public(*) | — |
+| Nim | ✓ | ✓ | — | — | public(*) flag | — |
 
 ---
 

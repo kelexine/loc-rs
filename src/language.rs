@@ -36,8 +36,8 @@ pub static LANGUAGE_MAP: Lazy<HashMap<&'static str, Vec<&'static str>>> = Lazy::
     m.insert("haskell",    vec![".hs", ".lhs"]);
     m.insert("elixir",     vec![".ex", ".exs"]);
     m.insert("lua",        vec![".lua"]);
-    m.insert("dart",       vec![".dart"]);
     m.insert("zig",        vec![".zig"]);
+    m.insert("nim",        vec![".nim", ".nims"]);
     m
 });
 
