@@ -1,5 +1,5 @@
 [package]
-name = "loc"
+name = "loc-rs"
 version = "0.1.5"
 rust-version = "1.92.0"
 edition = "2024"
