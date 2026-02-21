@@ -9,12 +9,13 @@
 
 - **Tree view** with per-file line counts, function counts, and last-modified dates
 - **Parallel scanning** via [Rayon](https://docs.rs/rayon) — uses all CPU cores
-- **Function extraction** for Rust, Python, JS/TS, Go, C/C++, Java/Kotlin/C#
+- **Function extraction** for 10 languages including Rust, Python, JS, Go, PHP, Swift, etc.
 - **Cyclomatic complexity** estimates per function
-- **Git integration** — respects `.gitignore`, optional `git log` dates
-- **30+ languages** supported with aliases
+- **Git integration** — respects `.gitignore` and `.locignore`, optional `git log` dates
+- **35+ languages** supported with aliases
 - **Multi-format export** — JSON, JSONL, CSV
 - **Size warnings** for oversized files
+- **BOM-aware binary detection** for UTF-16/32 text files
 
 ---
 
@@ -105,6 +106,7 @@ loc --no-parallel              # Disable parallel processing
 | `lua` | `.lua` |
 | `dart` | `.dart` |
 | `zig` | `.zig` |
+| `nim` | `.nim` `.nims` |
 
 Language aliases are supported: `py`, `js`, `ts`, `rs`, `rb`, `sh`, `md`, `yml`, `c++`, etc.
 
@@ -120,6 +122,10 @@ Language aliases are supported: `py`, `js`, `ts`, `rs`, `rb`, `sh`, `md`, `yml`,
 | Go | ✓ | ✓ | — | — | — | — |
 | C/C++ | ✓ | — | — | — | — | — |
 | Java/Kotlin/C# | ✓ | ✓ | — | — | — | — |
+| PHP | ✓ | ✓ | ✓ | — | — | — |
+| Swift | ✓ | ✓ | ✓ | ✓ | — | — |
+| Ruby | ✓ | ✓ | ✓ | — | — | — |
+| Nim | ✓ | ✓ | — | — | public(*) | — |
 
 ---
 
