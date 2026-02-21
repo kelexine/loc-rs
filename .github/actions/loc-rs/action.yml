@@ -1,0 +1,37 @@
+name: "loc-rs Analysis"
+description: "Advanced Lines of Code counter and complexity analyzer"
+inputs:
+  target_dir:
+    description: "Directory to scan"
+    required: false
+    default: "."
+  warn_size:
+    description: "Trigger warnings if any file exceeds this line count"
+    required: false
+    default: ""
+  functions:
+    description: "Enable function extraction and complexity analysis"
+    required: false
+    default: "true"
+runs:
+  using: "composite"
+  steps:
+    - name: Install loc-rs
+      shell: bash
+      run: |
+        cargo install --git https://github.com/kelexine/loc-rs --locked
+        # Note: Change to `cargo install loc` once published to crates.io
+    
+    - name: Run loc-rs Scan
+      shell: bash
+      run: |
+        OPTIONS=""
+        if [ -n "${{ inputs.warn_size }}" ]; then
+          OPTIONS="$OPTIONS --warn-size ${{ inputs.warn_size }}"
+        fi
+        if [ "${{ inputs.functions }}" == "true" ]; then
+          OPTIONS="$OPTIONS -f --func-analysis"
+        fi
+        
+        echo "Running: loc ${{ inputs.target_dir }} $OPTIONS"
+        loc ${{ inputs.target_dir }} $OPTIONS

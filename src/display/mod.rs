@@ -1,9 +1,9 @@
 // Author: kelexine (https://github.com/kelexine)
 // display.rs — Colored terminal output, tree view, and analysis reports
 
+use colored::*;
 use std::collections::BTreeMap;
 use std::path::Path;
-use colored::*;
 
 use crate::models::{Breakdown, FileInfo, ScanResult};
 
@@ -25,7 +25,9 @@ fn fmt_num(n: usize) -> String {
 }
 
 fn fmt_percent(part: usize, total: usize) -> String {
-    if total == 0 { return "  0.00%".to_string(); }
+    if total == 0 {
+        return "  0.00%".to_string();
+    }
     format!("{:>7.2}%", part as f64 / total as f64 * 100.0)
 }
 
@@ -55,14 +57,14 @@ fn insert_into_tree<'a>(
         let node = current_level
             .entry(dir.to_string())
             .or_insert_with(|| TreeNode::Dir(BTreeMap::new()));
-        
+
         // Advance the mutable reference deeper into the tree
         match node {
             TreeNode::Dir(children) => {
                 current_level = children;
             }
             TreeNode::File(_) => {
-                return; 
+                return;
             }
         }
     }
@@ -98,7 +100,9 @@ fn print_tree_node(
 
     match node {
         TreeNode::File(fi) => {
-            if fi.is_binary && !show_binary { return 0; }
+            if fi.is_binary && !show_binary {
+                return 0;
+            }
 
             let name_colored = if fi.is_binary {
                 name.yellow().to_string()
@@ -126,7 +130,8 @@ fn print_tree_node(
                 String::new()
             };
 
-            let date_tag = fi.last_modified
+            let date_tag = fi
+                .last_modified
                 .map(|d| format!(" {}", format!("[{}]", d.format("%Y-%m-%d")).dimmed()))
                 .unwrap_or_default();
 
@@ -136,7 +141,17 @@ fn print_tree_node(
                 format!(" {}", format!("({})", fmt_num(fi.lines)).bright_black())
             };
 
-            println!("{}{}{}{}{}{}{}{}", prefix, connector, name_colored, lines_tag, func_tag, date_tag, binary_tag, warn_tag);
+            println!(
+                "{}{}{}{}{}{}{}{}",
+                prefix,
+                connector,
+                name_colored,
+                lines_tag,
+                func_tag,
+                date_tag,
+                binary_tag,
+                warn_tag
+            );
             total += fi.lines;
         }
         TreeNode::Dir(children) => {
@@ -144,7 +159,14 @@ fn print_tree_node(
             let count = children.len();
             for (i, (child_name, child_node)) in children.iter().enumerate() {
                 let last = i == count - 1;
-                total += print_tree_node(child_name, child_node, &child_prefix, last, show_binary, warn_size);
+                total += print_tree_node(
+                    child_name,
+                    child_node,
+                    &child_prefix,
+                    last,
+                    show_binary,
+                    warn_size,
+                );
             }
         }
     }
@@ -177,23 +199,48 @@ pub fn display_results(
 
     println!();
     println!("{}", "=".repeat(70));
-    println!("{} {}", "[SUCCESS]".green().bold(), format!("Total Lines of Code: {}", fmt_num(total_lines)).bold());
-    println!("{} {}", "[INFO]   ".blue(), format!("Text Files: {}", fmt_num(result.text_file_count())));
+    println!(
+        "{} {}",
+        "[SUCCESS]".green().bold(),
+        format!("Total Lines of Code: {}", fmt_num(total_lines)).bold()
+    );
+    println!(
+        "{} {}",
+        "[INFO]   ".blue(),
+        format!("Text Files: {}", fmt_num(result.text_file_count()))
+    );
 
     let bin_count = result.binary_file_count();
     if bin_count > 0 {
-        println!("{} {}", "[INFO]   ".blue(), format!("Binary Files Skipped: {}", fmt_num(bin_count)));
+        println!(
+            "{} {}",
+            "[INFO]   ".blue(),
+            format!("Binary Files Skipped: {}", fmt_num(bin_count))
+        );
     }
 
     if result.total_functions() > 0 {
-        println!("{} {}", "[INFO]   ".blue(), format!("Functions/Methods: {}", fmt_num(result.total_functions())));
-        println!("{} {}", "[INFO]   ".blue(), format!("Classes/Structs:   {}", fmt_num(result.total_classes())));
+        println!(
+            "{} {}",
+            "[INFO]   ".blue(),
+            format!("Functions/Methods: {}", fmt_num(result.total_functions()))
+        );
+        println!(
+            "{} {}",
+            "[INFO]   ".blue(),
+            format!("Classes/Structs:   {}", fmt_num(result.total_classes()))
+        );
     }
 
     if let Some(ws) = warn_size {
         let large: Vec<_> = result.files.iter().filter(|f| f.lines > ws).collect();
         if !large.is_empty() {
-            println!("{} {} files exceed {} lines", "[WARN]   ".yellow(), large.len(), ws);
+            println!(
+                "{} {} files exceed {} lines",
+                "[WARN]   ".yellow(),
+                large.len(),
+                ws
+            );
         }
     }
 
@@ -214,10 +261,16 @@ fn display_breakdown(breakdown: &Breakdown, total_lines: usize, has_functions: b
     sorted.sort_by(|a, b| b.1.lines.cmp(&a.1.lines));
 
     if has_functions {
-        println!("{:<20} {:>14} {:>10} {:>12} {:>10}", "Extension", "Lines", "Files", "Functions", "Share");
+        println!(
+            "{:<20} {:>14} {:>10} {:>12} {:>10}",
+            "Extension", "Lines", "Files", "Functions", "Share"
+        );
         println!("{}", "-".repeat(68));
     } else {
-        println!("{:<20} {:>14} {:>10} {:>10}", "Extension", "Lines", "Files", "Share");
+        println!(
+            "{:<20} {:>14} {:>10} {:>10}",
+            "Extension", "Lines", "Files", "Share"
+        );
         println!("{}", "-".repeat(56));
     }
 
@@ -245,10 +298,17 @@ fn display_breakdown(breakdown: &Breakdown, total_lines: usize, has_functions: b
 }
 
 pub fn display_function_analysis(result: &ScanResult, root: &Path) {
-    let files_with_fns: Vec<_> = result.files.iter().filter(|f| f.function_count() > 0).collect();
+    let files_with_fns: Vec<_> = result
+        .files
+        .iter()
+        .filter(|f| f.function_count() > 0)
+        .collect();
 
     if files_with_fns.is_empty() {
-        println!("{}", "[WARN] No functions found in analyzed files.".yellow());
+        println!(
+            "{}",
+            "[WARN] No functions found in analyzed files.".yellow()
+        );
         return;
     }
 
@@ -260,11 +320,15 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
     let total_fns = result.total_functions();
     let total_cls = result.total_classes();
     let avg_len = if total_fns > 0 {
-        files_with_fns.iter()
+        files_with_fns
+            .iter()
             .flat_map(|f| f.functions.iter().filter(|fn_| !fn_.is_class))
             .map(|f| f.line_count())
-            .sum::<usize>() as f64 / total_fns as f64
-    } else { 0.0 };
+            .sum::<usize>() as f64
+            / total_fns as f64
+    } else {
+        0.0
+    };
 
     println!("{}", "Overall Statistics:".bold());
     println!("  Total Functions/Methods : {}", fmt_num(total_fns));
@@ -275,16 +339,25 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
     // Top 10 largest functions
     let mut all_fns: Vec<(&Path, &crate::models::FunctionInfo)> = files_with_fns
         .iter()
-        .flat_map(|fi| fi.functions.iter().filter(|f| !f.is_class).map(move |f| (fi.path.as_path(), f)))
+        .flat_map(|fi| {
+            fi.functions
+                .iter()
+                .filter(|f| !f.is_class)
+                .map(move |f| (fi.path.as_path(), f))
+        })
         .collect();
     all_fns.sort_by(|a, b| b.1.line_count().cmp(&a.1.line_count()));
 
     if !all_fns.is_empty() {
         println!("{}", "Top 10 Largest Functions:".bold());
-        println!("{:<42} {:<32} {:>8} {:>12}", "Function", "File", "Lines", "Complexity");
+        println!(
+            "{:<42} {:<32} {:>8} {:>12}",
+            "Function", "File", "Lines", "Complexity"
+        );
         println!("{}", "-".repeat(96));
         for (path, func) in all_fns.iter().take(10) {
-            let rel = path.strip_prefix(root)
+            let rel = path
+                .strip_prefix(root)
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| path.display().to_string());
             let fname = truncate(&func.name, 40);
@@ -296,14 +369,26 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
             } else {
                 format!("{:>12}", func.complexity).green().to_string()
             };
-            println!("{:<42} {:<32} {:>8} {}", fname, file, fmt_num(func.line_count()), complexity_str);
+            println!(
+                "{:<42} {:<32} {:>8} {}",
+                fname,
+                file,
+                fmt_num(func.line_count()),
+                complexity_str
+            );
         }
         println!();
     }
 
     // High-complexity functions
-    let mut complex_fns: Vec<_> = files_with_fns.iter()
-        .flat_map(|fi| fi.functions.iter().filter(|f| !f.is_class && f.complexity > 10).map(move |f| (fi.path.as_path(), f)))
+    let mut complex_fns: Vec<_> = files_with_fns
+        .iter()
+        .flat_map(|fi| {
+            fi.functions
+                .iter()
+                .filter(|f| !f.is_class && f.complexity > 10)
+                .map(move |f| (fi.path.as_path(), f))
+        })
         .collect();
 
     if !complex_fns.is_empty() {
@@ -312,12 +397,18 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
         println!("{:<42} {:<32} {:>12}", "Function", "File", "Complexity");
         println!("{}", "-".repeat(86));
         for (path, func) in complex_fns.iter().take(15) {
-            let rel = path.strip_prefix(root)
+            let rel = path
+                .strip_prefix(root)
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| path.display().to_string());
             let fname = truncate(&func.name, 40);
             let file = truncate(&rel, 30);
-            println!("{:<42} {:<32} {}", fname, file, format!("{:>12}", func.complexity).red());
+            println!(
+                "{:<42} {:<32} {}",
+                fname,
+                file,
+                format!("{:>12}", func.complexity).red()
+            );
         }
         println!();
     }
@@ -330,13 +421,19 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
     println!();
 
     for fi in sorted_files.iter().take(10) {
-        let rel = fi.path.strip_prefix(root)
+        let rel = fi
+            .path
+            .strip_prefix(root)
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| fi.path.display().to_string());
 
         println!("{}", rel.cyan());
-        println!("  Functions: {}, Classes: {}, Avg length: {:.1} lines",
-            fi.function_count(), fi.class_count(), fi.avg_function_length());
+        println!(
+            "  Functions: {}, Classes: {}, Avg length: {:.1} lines",
+            fi.function_count(),
+            fi.class_count(),
+            fi.avg_function_length()
+        );
 
         for func in fi.functions.iter().take(5) {
             let kind = match (func.is_class, func.is_async, func.is_method) {
@@ -345,16 +442,26 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
                 (_, _, true) => "method  ",
                 _ => "fn      ",
             };
-            let params: String = func.parameters.iter().take(3)
+            let params: String = func
+                .parameters
+                .iter()
+                .take(3)
                 .cloned()
                 .collect::<Vec<_>>()
                 .join(", ");
-            let ellipsis = if func.parameters.len() > 3 { ", ..." } else { "" };
+            let ellipsis = if func.parameters.len() > 3 {
+                ", ..."
+            } else {
+                ""
+            };
             let complexity_note = if func.complexity > 5 {
                 format!(" {}", format!("[cc={}]", func.complexity).yellow())
-            } else { String::new() };
+            } else {
+                String::new()
+            };
 
-            println!("    {} {}({}{}) — {} lines{}",
+            println!(
+                "    {} {}({}{}) — {} lines{}",
                 kind.green(),
                 func.name,
                 params,
@@ -364,7 +471,11 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
             );
         }
         if fi.functions.len() > 5 {
-            println!("    {} and {} more ...", "~".dimmed(), fi.functions.len() - 5);
+            println!(
+                "    {} and {} more ...",
+                "~".dimmed(),
+                fi.functions.len() - 5
+            );
         }
         println!();
     }
@@ -388,8 +499,8 @@ fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::models::FileInfo;
+    use std::path::PathBuf;
 
     #[test]
     fn test_iterative_tree_building_deep() {
@@ -399,10 +510,15 @@ mod tests {
         for i in 0..26 {
             path_parts.push(Box::leak(format!("{}", (b'a' + i) as char).into_boxed_str()) as &str);
         }
-        let info = FileInfo::new(PathBuf::from("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z/file.rs"), 10, false, None);
-        
+        let info = FileInfo::new(
+            PathBuf::from("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z/file.rs"),
+            10,
+            false,
+            None,
+        );
+
         insert_into_tree(&mut tree, &path_parts, &info);
-        
+
         // Verify the depth
         let mut node = &tree["a"];
         for i in 1..26 {
@@ -413,7 +529,7 @@ mod tests {
                 _ => panic!("Expected directory at depth {}", i),
             }
         }
-        
+
         match node {
             TreeNode::File(fi) => assert_eq!(fi.lines, 10),
             _ => panic!("Expected file at the leaf"),

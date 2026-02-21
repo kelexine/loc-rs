@@ -1,10 +1,10 @@
 // Author: kelexine (https://github.com/kelexine)
 // models.rs — Core data structures for the LOC counter
 
-use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Information about a single function, method, or class extracted from source code.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,8 +52,19 @@ pub struct FileInfo {
 }
 
 impl FileInfo {
-    pub fn new(path: PathBuf, lines: usize, is_binary: bool, last_modified: Option<DateTime<Utc>>) -> Self {
-        Self { path, lines, is_binary, last_modified, functions: Vec::new() }
+    pub fn new(
+        path: PathBuf,
+        lines: usize,
+        is_binary: bool,
+        last_modified: Option<DateTime<Utc>>,
+    ) -> Self {
+        Self {
+            path,
+            lines,
+            is_binary,
+            last_modified,
+            functions: Vec::new(),
+        }
     }
 
     pub fn with_functions(mut self, functions: Vec<FunctionInfo>) -> Self {
@@ -106,7 +117,11 @@ pub struct ScanResult {
 
 impl ScanResult {
     pub fn total_lines(&self) -> usize {
-        self.files.iter().filter(|f| !f.is_binary).map(|f| f.lines).sum()
+        self.files
+            .iter()
+            .filter(|f| !f.is_binary)
+            .map(|f| f.lines)
+            .sum()
     }
 
     pub fn text_file_count(&self) -> usize {

@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 // loc — Advanced Lines of Code Counter
 //
 // Author : kelexine (https://github.com/kelexine)
@@ -14,6 +16,7 @@
 //   • Typed errors via anyhow — no silent panics
 
 mod cli;
+mod config;
 mod counter;
 mod display;
 mod export;

@@ -5,8 +5,10 @@ edition = "2024"
 authors = ["kelexine <https://github.com/kelexine>"]
 description = "Advanced Lines of Code counter with function extraction, git integration, and parallel processing"
 license = "MIT"
-keywords = ["loc", "lines-of-code", "code-analysis", "cli"]
-
+repository = "https://github.com/kelexine/loc-rs"
+readme = "README.md"
+keywords = ["loc", "lines-of-code", "code-analysis", "cli", "metrics"]
+categories = ["command-line-utilities", "development-tools"]
 [[bin]]
 name = "loc"
 path = "src/main.rs"
@@ -23,6 +25,8 @@ walkdir     = "2"
 regex       = "1"
 anyhow      = "1"
 once_cell   = "1"
+toml = "0.8"
+dirs = "5"
 
 [dev-dependencies]
 tempfile   = "3"
