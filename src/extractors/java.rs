@@ -40,3 +40,23 @@ impl Extractor for JavaExtractor {
         functions
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_java_functions() {
+        let content = "
+public class Main {
+    public static void main(String[] args) {}
+    private int calc(int a, int b) => a + b;
+}
+";
+        let extractor = JavaExtractor;
+        let fns = extractor.extract(content);
+        assert_eq!(fns.len(), 2);
+        assert_eq!(fns[0].name, "main");
+        assert_eq!(fns[1].name, "calc");
+    }
+}

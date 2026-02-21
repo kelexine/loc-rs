@@ -98,14 +98,10 @@ pub fn find_closing_brace(lines: &[&str], start_line: usize) -> usize {
 
 pub fn parse_params(raw: &str) -> Vec<String> {
     raw.split(',')
-       .filter_map(|p| {
-           let p = p.trim();
-           if p.is_empty() || p == "void" { return None; }
-           let name = p.split_whitespace()
-               .last()
-               .unwrap_or(p)
-               .trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
-           if name.is_empty() { None } else { Some(name.to_string()) }
+       .flat_map(|p| {
+           p.split_whitespace()
+            .map(|s| s.trim_matches(|c: char| !c.is_alphanumeric() && c != '_').to_string())
+            .filter(|s| !s.is_empty() && s != "void")
        })
        .collect()
 }

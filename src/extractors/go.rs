@@ -41,3 +41,27 @@ impl Extractor for GoExtractor {
         functions
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_go_functions() {
+        let content = "
+package main
+func Hello() {}
+func (r *Repo) Get(id int) string {
+    return \"\"
+}
+";
+        let extractor = GoExtractor;
+        let fns = extractor.extract(content);
+        assert_eq!(fns.len(), 2);
+        assert_eq!(fns[0].name, "Hello");
+        assert!(!fns[0].is_method);
+        assert_eq!(fns[1].name, "Get");
+        assert!(fns[1].is_method);
+        assert_eq!(fns[1].parameters, vec!["id", "int"]);
+    }
+}

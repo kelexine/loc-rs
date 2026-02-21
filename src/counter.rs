@@ -190,6 +190,16 @@ fn is_binary_file(path: &Path) -> bool {
         Ok(mut f) => {
             use std::io::Read;
             let n = f.read(&mut buf).unwrap_or(0);
+            
+            // BOM Check for UTF-16/32 to avoid false positive on null bytes
+            if n >= 2 && ((buf[0] == 0xFE && buf[1] == 0xFF) || (buf[0] == 0xFF && buf[1] == 0xFE)) {
+                return false; // UTF-16
+            }
+            if n >= 4 && ((buf[0] == 0x00 && buf[1] == 0x00 && buf[2] == 0xFE && buf[3] == 0xFF) || 
+                          (buf[0] == 0xFF && buf[1] == 0xFE && buf[2] == 0x00 && buf[3] == 0x00)) {
+                return false; // UTF-32
+            }
+
             buf[..n].contains(&0u8)
         }
         Err(_) => true,
@@ -354,5 +364,44 @@ mod tests {
         let ext_bin_path = dir.path().join("image.png");
         fs::write(&ext_bin_path, "pretend PNG").unwrap();
         assert!(is_binary_file(&ext_bin_path));
+    }
+
+    #[test]
+    fn test_is_binary_bom_detection() {
+        let dir = tempdir().unwrap();
+        
+        // UTF-16 BE
+        let u16be_path = dir.path().join("utf16be.txt");
+        fs::write(&u16be_path, vec![0xFE, 0xFF, 0x00, 0x61]).unwrap(); 
+        assert!(!is_binary_file(&u16be_path), "UTF-16BE should not be binary");
+
+        // UTF-16 LE
+        let u16le_path = dir.path().join("utf16le.txt");
+        fs::write(&u16le_path, vec![0xFF, 0xFE, 0x61, 0x00]).unwrap();
+        assert!(!is_binary_file(&u16le_path), "UTF-16LE should not be binary");
+
+        // UTF-32 LE
+        let u32le_path = dir.path().join("utf32le.txt");
+        fs::write(&u32le_path, vec![0xFF, 0xFE, 0x00, 0x00, 0x61, 0x00, 0x00, 0x00]).unwrap();
+        assert!(!is_binary_file(&u32le_path), "UTF-32LE should not be binary");
+    }
+
+    #[test]
+    fn test_manual_files_with_ignore() {
+        let dir = tempdir().unwrap();
+        fs::create_dir(dir.path().join("node_modules")).unwrap();
+        fs::write(dir.path().join("node_modules/index.js"), "js").unwrap();
+        fs::write(dir.path().join("keep.rs"), "rust").unwrap();
+        fs::write(dir.path().join("ignore_me.txt"), "text").unwrap();
+        
+        let mut custom_ignore = HashSet::new();
+        custom_ignore.insert("ignore_me.txt".to_string());
+        
+        let files = get_manual_files(dir.path(), &custom_ignore);
+        let names: HashSet<_> = files.iter().map(|f| f.file_name().unwrap().to_str().unwrap()).collect();
+        
+        assert!(names.contains("keep.rs"));
+        assert!(!names.contains("ignore_me.txt"));
+        assert!(!names.contains("index.js")); // should be ignored by hardcoded node_modules exclusion
     }
 }

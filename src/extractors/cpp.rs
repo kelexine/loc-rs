@@ -7,7 +7,7 @@ use crate::models::FunctionInfo;
 use super::{Extractor, LineMap, find_closing_brace, parse_params, estimate_complexity};
 
 static RE_C_FN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?m)^(?![ \t]*#)(?![ \t]*//)[ \t]*(?:static\s+|inline\s+|virtual\s+|explicit\s+)?(?:\w[\w*& \t]+\s+)+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*\((?P<params>[^)]*)\)\s*(?:const\s*)?(?:noexcept\s*)?(?:override\s*)?\{").unwrap()
+    Regex::new(r"(?m)^[ \t]*(?:\w[\w*& \t]+\s+)+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*\((?P<params>[^)]*)\)\s*(?:const\s*)?(?:noexcept\s*)?(?:override\s*)?\{").unwrap()
 });
 
 pub struct CppExtractor;
@@ -38,5 +38,28 @@ impl Extractor for CppExtractor {
         }
 
         functions
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_cpp_functions() {
+        let content = "
+void Hello() {}
+int main(int argc, char** argv) { return 0; }
+class Box {
+public:
+    void SetWidth(double wid) {}
+};
+";
+        let extractor = CppExtractor;
+        let fns = extractor.extract(content);
+        assert_eq!(fns.len(), 3);
+        assert_eq!(fns[0].name, "Hello");
+        assert_eq!(fns[1].name, "main");
+        assert_eq!(fns[2].name, "SetWidth");
     }
 }

@@ -64,3 +64,28 @@ impl Extractor for JavascriptExtractor {
         functions
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_js_functions() {
+        let content = "
+export async function fetchData(url) {}
+const process = (data) => {}
+class Calculator {
+    add(a, b) {}
+}
+";
+        let extractor = JavascriptExtractor;
+        let fns = extractor.extract(content);
+        assert_eq!(fns.len(), 4);
+        assert_eq!(fns[0].name, "fetchData");
+        assert!(fns[0].is_async);
+        assert_eq!(fns[1].name, "process");
+        assert_eq!(fns[2].name, "Calculator");
+        assert!(fns[2].is_class);
+        assert_eq!(fns[3].name, "add");
+    }
+}
