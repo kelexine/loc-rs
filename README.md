@@ -1,7 +1,7 @@
 # loc — Advanced Lines of Code Counter
 
 > A fast, feature-rich LOC tool written in Rust.  
-> **Author:** [kelexine](https://github.com/kelexine) · **Version:** 0.1.4
+> **Author:** [kelexine](https://github.com/kelexine) · **Version:** 0.1.5
 
 ---
 

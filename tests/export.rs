@@ -81,6 +81,9 @@ fn test_export_html() {
 
     let content = fs::read_to_string(&out_html).unwrap();
     assert!(content.contains("<!DOCTYPE html>"), "HTML missing doctype");
-    assert!(content.contains("const reportData = {"), "HTML missing injected JSON data");
+    assert!(
+        content.contains("const reportData = {"),
+        "HTML missing injected JSON data"
+    );
     assert!(content.contains("main.rs"), "HTML missing file data");
 }

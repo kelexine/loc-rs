@@ -31,8 +31,9 @@ impl FunctionInfo {
     /// Truncate docstring to 100 chars for export compactness.
     pub fn truncated_docstring(&self) -> Option<String> {
         self.docstring.as_ref().map(|d| {
-            if d.len() > 100 {
-                format!("{}...", &d[..100])
+            if d.chars().count() > 100 {
+                let truncated: String = d.chars().take(100).collect();
+                format!("{}...", truncated)
             } else {
                 d.clone()
             }

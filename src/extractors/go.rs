@@ -70,6 +70,6 @@ func (r *Repo) Get(id int) string {
         assert!(!fns[0].is_method);
         assert_eq!(fns[1].name, "Get");
         assert!(fns[1].is_method);
-        assert_eq!(fns[1].parameters, vec!["id", "int"]);
+        assert_eq!(fns[1].parameters, vec!["id int"]);
     }
 }

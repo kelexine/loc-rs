@@ -194,7 +194,7 @@ pub fn display_results(
     let mut total_lines = 0;
     for (i, (name, node)) in tree.iter().enumerate() {
         let is_last = i == count - 1;
-        total_lines += print_tree_node(name, &node, "", is_last, show_binary, warn_size);
+        total_lines += print_tree_node(name, node, "", is_last, show_binary, warn_size);
     }
 
     println!();
@@ -205,30 +205,30 @@ pub fn display_results(
         format!("Total Lines of Code: {}", fmt_num(total_lines)).bold()
     );
     println!(
-        "{} {}",
+        "{} Text Files: {}",
         "[INFO]   ".blue(),
-        format!("Text Files: {}", fmt_num(result.text_file_count()))
+        fmt_num(result.text_file_count())
     );
 
     let bin_count = result.binary_file_count();
     if bin_count > 0 {
         println!(
-            "{} {}",
+            "{} Binary Files Skipped: {}",
             "[INFO]   ".blue(),
-            format!("Binary Files Skipped: {}", fmt_num(bin_count))
+            fmt_num(bin_count)
         );
     }
 
     if result.total_functions() > 0 {
         println!(
-            "{} {}",
+            "{} Functions/Methods: {}",
             "[INFO]   ".blue(),
-            format!("Functions/Methods: {}", fmt_num(result.total_functions()))
+            fmt_num(result.total_functions())
         );
         println!(
-            "{} {}",
+            "{} Classes/Structs:   {}",
             "[INFO]   ".blue(),
-            format!("Classes/Structs:   {}", fmt_num(result.total_classes()))
+            fmt_num(result.total_classes())
         );
     }
 
@@ -312,31 +312,40 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
         return;
     }
 
-    println!();
-    println!("{}", "[INFO] Function Analysis Report".blue().bold());
+    println!("\n{}", "[INFO] Function Analysis Report".blue().bold());
     println!("{}", "=".repeat(90));
     println!();
 
+    display_overall_stats(result, &files_with_fns);
+    display_largest_functions(&files_with_fns, root);
+    display_complex_functions(&files_with_fns, root);
+    display_top_files(&files_with_fns, root);
+
+    println!("{}", "=".repeat(90));
+    println!();
+}
+
+fn display_overall_stats(result: &ScanResult, files_with_fns: &[&FileInfo]) {
     let total_fns = result.total_functions();
     let total_cls = result.total_classes();
-    let avg_len = if total_fns > 0 {
-        files_with_fns
-            .iter()
-            .flat_map(|f| f.functions.iter().filter(|fn_| !fn_.is_class))
-            .map(|f| f.line_count())
-            .sum::<usize>() as f64
-            / total_fns as f64
-    } else {
+    let non_class_fns: Vec<_> = files_with_fns
+        .iter()
+        .flat_map(|f| f.functions.iter().filter(|fn_| !fn_.is_class))
+        .collect();
+    let avg_len = if non_class_fns.is_empty() {
         0.0
+    } else {
+        non_class_fns.iter().map(|f| f.line_count()).sum::<usize>() as f64
+            / non_class_fns.len() as f64
     };
 
     println!("{}", "Overall Statistics:".bold());
     println!("  Total Functions/Methods : {}", fmt_num(total_fns));
     println!("  Total Classes/Structs   : {}", fmt_num(total_cls));
-    println!("  Average Function Length : {:.1} lines", avg_len);
-    println!();
+    println!("  Average Function Length : {:.1} lines\n", avg_len);
+}
 
-    // Top 10 largest functions
+fn display_largest_functions(files_with_fns: &[&FileInfo], root: &Path) {
     let mut all_fns: Vec<(&Path, &crate::models::FunctionInfo)> = files_with_fns
         .iter()
         .flat_map(|fi| {
@@ -348,39 +357,43 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
         .collect();
     all_fns.sort_by(|a, b| b.1.line_count().cmp(&a.1.line_count()));
 
-    if !all_fns.is_empty() {
-        println!("{}", "Top 10 Largest Functions:".bold());
-        println!(
-            "{:<42} {:<32} {:>8} {:>12}",
-            "Function", "File", "Lines", "Complexity"
-        );
-        println!("{}", "-".repeat(96));
-        for (path, func) in all_fns.iter().take(10) {
-            let rel = path
-                .strip_prefix(root)
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|_| path.display().to_string());
-            let fname = truncate(&func.name, 40);
-            let file = truncate(&rel, 30);
-            let complexity_str = if func.complexity > 10 {
-                format!("{:>12}", func.complexity).red().to_string()
-            } else if func.complexity > 5 {
-                format!("{:>12}", func.complexity).yellow().to_string()
-            } else {
-                format!("{:>12}", func.complexity).green().to_string()
-            };
-            println!(
-                "{:<42} {:<32} {:>8} {}",
-                fname,
-                file,
-                fmt_num(func.line_count()),
-                complexity_str
-            );
-        }
-        println!();
+    if all_fns.is_empty() {
+        return;
     }
 
-    // High-complexity functions
+    println!("{}", "Top 10 Largest Functions:".bold());
+    println!(
+        "{:<42} {:<32} {:>8} {:>12}",
+        "Function", "File", "Lines", "Complexity"
+    );
+    println!("{}", "-".repeat(96));
+
+    for (path, func) in all_fns.iter().take(10) {
+        let rel = path
+            .strip_prefix(root)
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| path.display().to_string());
+
+        let complexity_str = if func.complexity > 10 {
+            format!("{:>12}", func.complexity).red().to_string()
+        } else if func.complexity > 5 {
+            format!("{:>12}", func.complexity).yellow().to_string()
+        } else {
+            format!("{:>12}", func.complexity).green().to_string()
+        };
+
+        println!(
+            "{:<42} {:<32} {:>8} {}",
+            truncate(&func.name, 40),
+            truncate(&rel, 30),
+            fmt_num(func.line_count()),
+            complexity_str
+        );
+    }
+    println!();
+}
+
+fn display_complex_functions(files_with_fns: &[&FileInfo], root: &Path) {
     let mut complex_fns: Vec<_> = files_with_fns
         .iter()
         .flat_map(|fi| {
@@ -391,34 +404,36 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
         })
         .collect();
 
-    if !complex_fns.is_empty() {
-        complex_fns.sort_by(|a, b| b.1.complexity.cmp(&a.1.complexity));
-        println!("{}", "High Complexity Functions (>10):".bold());
-        println!("{:<42} {:<32} {:>12}", "Function", "File", "Complexity");
-        println!("{}", "-".repeat(86));
-        for (path, func) in complex_fns.iter().take(15) {
-            let rel = path
-                .strip_prefix(root)
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|_| path.display().to_string());
-            let fname = truncate(&func.name, 40);
-            let file = truncate(&rel, 30);
-            println!(
-                "{:<42} {:<32} {}",
-                fname,
-                file,
-                format!("{:>12}", func.complexity).red()
-            );
-        }
-        println!();
+    if complex_fns.is_empty() {
+        return;
     }
 
-    // Top 10 files by function count
-    let mut sorted_files = files_with_fns.clone();
-    sorted_files.sort_by(|a, b| b.function_count().cmp(&a.function_count()));
+    complex_fns.sort_by(|a, b| b.1.complexity.cmp(&a.1.complexity));
+    println!("{}", "High Complexity Functions (>10):".bold());
+    println!("{:<42} {:<32} {:>12}", "Function", "File", "Complexity");
+    println!("{}", "-".repeat(86));
 
-    println!("{}", "Top 10 Files by Function Count:".bold());
+    for (path, func) in complex_fns.iter().take(15) {
+        let rel = path
+            .strip_prefix(root)
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| path.display().to_string());
+
+        println!(
+            "{:<42} {:<32} {}",
+            truncate(&func.name, 40),
+            truncate(&rel, 30),
+            format!("{:>12}", func.complexity).red()
+        );
+    }
     println!();
+}
+
+fn display_top_files(files_with_fns: &[&FileInfo], root: &Path) {
+    let mut sorted_files = files_with_fns.to_vec();
+    sorted_files.sort_by_key(|b| std::cmp::Reverse(b.function_count()));
+
+    println!("{}", "Top 10 Files by Function Count:\n".bold());
 
     for fi in sorted_files.iter().take(10) {
         let rel = fi
@@ -442,13 +457,8 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
                 (_, _, true) => "method  ",
                 _ => "fn      ",
             };
-            let params: String = func
-                .parameters
-                .iter()
-                .take(3)
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ");
+
+            let params: Vec<_> = func.parameters.iter().take(3).cloned().collect();
             let ellipsis = if func.parameters.len() > 3 {
                 ", ..."
             } else {
@@ -464,12 +474,13 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
                 "    {} {}({}{}) — {} lines{}",
                 kind.green(),
                 func.name,
-                params,
+                params.join(", "),
                 ellipsis,
                 func.line_count(),
                 complexity_note,
             );
         }
+
         if fi.functions.len() > 5 {
             println!(
                 "    {} and {} more ...",
@@ -479,9 +490,6 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
         }
         println!();
     }
-
-    println!("{}", "=".repeat(90));
-    println!();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

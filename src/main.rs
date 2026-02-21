@@ -67,10 +67,10 @@ fn main() {
     }
 
     // Optional export
-    if let Some(ref output_file) = args.export {
-        if let Err(e) = export::export(&result, output_file, config.extract_functions) {
-            eprintln!("{} {}", "[ERROR]".red().bold(), e);
-            process::exit(1);
-        }
+    if let Some(ref output_file) = args.export
+        && let Err(e) = export::export(&result, output_file, config.extract_functions)
+    {
+        eprintln!("{} {}", "[ERROR]".red().bold(), e);
+        process::exit(1);
     }
 }

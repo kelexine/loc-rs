@@ -76,10 +76,13 @@ pub fn find_closing_brace(lines: &[&str], start_line: usize) -> usize {
 
     for (i, line) in lines[start_line.saturating_sub(1)..].iter().enumerate() {
         let mut chars = line.chars().peekable();
+        let mut escaped_eol = false;
         while let Some(ch) = chars.next() {
             if in_string {
                 if ch == '\\' {
-                    chars.next(); // Skip next char (escaped)
+                    if chars.next().is_none() {
+                        escaped_eol = true;
+                    }
                 } else if ch == string_char {
                     in_string = false;
                 }
@@ -87,9 +90,24 @@ pub fn find_closing_brace(lines: &[&str], start_line: usize) -> usize {
             }
 
             match ch {
-                '"' | '\'' => {
+                '"' | '`' => {
                     in_string = true;
                     string_char = ch;
+                }
+                '\'' => {
+                    let mut dist = 0;
+                    let mut found = false;
+                    for c in chars.clone() {
+                        dist += 1;
+                        if c == '\'' {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if found && dist < 12 {
+                        in_string = true;
+                        string_char = ch;
+                    }
                 }
                 '/' if chars.peek() == Some(&'/') => break, // Line comment
                 '{' => {
@@ -105,21 +123,45 @@ pub fn find_closing_brace(lines: &[&str], start_line: usize) -> usize {
                 _ => {}
             }
         }
+
+        // Reset string state if not explicitly continued or a backtick string
+        if in_string && !escaped_eol && string_char != '`' {
+            in_string = false;
+        }
     }
     (start_line + 80).min(lines.len())
 }
 
 pub fn parse_params(raw: &str) -> Vec<String> {
-    raw.split(',')
-        .flat_map(|p| {
-            p.split_whitespace()
-                .map(|s| {
-                    s.trim_matches(|c: char| !c.is_alphanumeric() && c != '_')
-                        .to_string()
-                })
-                .filter(|s| !s.is_empty() && s != "void")
-        })
-        .collect()
+    let mut params = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0i32;
+
+    for ch in raw.chars() {
+        match ch {
+            '<' | '[' | '(' => {
+                depth += 1;
+                current.push(ch);
+            }
+            '>' | ']' | ')' => {
+                depth -= 1;
+                current.push(ch);
+            }
+            ',' if depth == 0 => {
+                let trimmed = current.trim().to_string();
+                if !trimmed.is_empty() && trimmed != "void" {
+                    params.push(trimmed);
+                }
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+    let trimmed = current.trim().to_string();
+    if !trimmed.is_empty() && trimmed != "void" {
+        params.push(trimmed);
+    }
+    params
 }
 
 pub fn estimate_complexity(block: &[&str]) -> u32 {

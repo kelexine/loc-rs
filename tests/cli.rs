@@ -29,8 +29,14 @@ fn test_type_filter_rust_only() {
     let out = run_loc(&[fixture.path().to_str().unwrap(), "-t", "rust"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     // Python and markdown files should not appear
-    assert!(!stdout.contains("script.py"), "Python file should be filtered out");
-    assert!(!stdout.contains("notes.md"), "Markdown file should be filtered out");
+    assert!(
+        !stdout.contains("script.py"),
+        "Python file should be filtered out"
+    );
+    assert!(
+        !stdout.contains("notes.md"),
+        "Markdown file should be filtered out"
+    );
     assert!(stdout.contains("main.rs"), "Rust file should appear");
 }
 

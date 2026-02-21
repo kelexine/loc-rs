@@ -1,7 +1,7 @@
 // Author: kelexine (https://github.com/kelexine)
 // counter.rs — File discovery, line counting, and parallel processing
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::UNIX_EPOCH;
@@ -13,9 +13,10 @@ use rayon::prelude::*;
 use crate::cli::Args;
 use crate::extractors;
 use crate::language::{BINARY_EXTENSIONS, EXCLUDED_DIRS};
-use crate::models::{Breakdown, ExtensionStats, FileInfo, ScanResult};
+use crate::models::{Breakdown, FileInfo, ScanResult};
 
 /// Configuration for a scan run.
+#[derive(Clone)]
 pub struct ScanConfig {
     pub target_dir: PathBuf,
     pub allowed_extensions: Option<HashSet<String>>,
@@ -25,6 +26,8 @@ pub struct ScanConfig {
     pub extract_functions: bool,
     pub is_git_repo: bool,
     pub custom_ignore: HashSet<String>,
+    pub include_hidden: bool,
+    pub git_dates_cache: Option<HashMap<PathBuf, DateTime<Utc>>>,
 }
 
 impl ScanConfig {
@@ -42,10 +45,10 @@ impl ScanConfig {
 
         // Build allowed extension set from language filter flags
         let mut types_to_use = args.file_types.clone();
-        if types_to_use.is_empty() {
-            if let Some(ref default_types) = global_config.default_types {
-                types_to_use = default_types.clone();
-            }
+        if types_to_use.is_empty()
+            && let Some(ref default_types) = global_config.default_types
+        {
+            types_to_use = default_types.clone();
         }
 
         let allowed_extensions = if types_to_use.is_empty() {
@@ -80,30 +83,53 @@ impl ScanConfig {
             extract_functions,
             is_git_repo,
             custom_ignore,
+            include_hidden: args.include_hidden,
+            git_dates_cache: None,
         })
     }
 }
 
 /// Run the full scan and return a ScanResult.
 pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
-    let files = if config.is_git_repo {
+    let files = if config.is_git_repo && !config.include_hidden {
         get_git_files(&config.target_dir)
     } else {
-        get_manual_files(&config.target_dir, &config.custom_ignore)
+        get_manual_files(
+            &config.target_dir,
+            &config.custom_ignore,
+            config.include_hidden,
+        )
     };
 
     let mut sorted_files = files;
     sorted_files.sort_unstable();
 
-    let file_infos: Vec<FileInfo> = if config.parallel && sorted_files.len() > 50 {
+    let mut runner_config = config.clone();
+    if runner_config.use_git_dates && runner_config.is_git_repo {
+        runner_config.git_dates_cache = Some(get_all_git_dates(&runner_config.target_dir));
+    }
+
+    let file_infos: Vec<FileInfo> = if runner_config.parallel && sorted_files.len() > 50 {
         sorted_files
             .par_iter()
-            .filter_map(|path| process_file(path, config).ok().flatten())
+            .filter_map(|path| match process_file(path, &runner_config) {
+                Ok(opt) => opt,
+                Err(e) => {
+                    eprintln!("[WARN] Skipped {}: {}", path.display(), e);
+                    None
+                }
+            })
             .collect()
     } else {
         sorted_files
             .iter()
-            .filter_map(|path| process_file(path, config).ok().flatten())
+            .filter_map(|path| match process_file(path, &runner_config) {
+                Ok(opt) => opt,
+                Err(e) => {
+                    eprintln!("[WARN] Skipped {}: {}", path.display(), e);
+                    None
+                }
+            })
             .collect()
     };
 
@@ -125,7 +151,7 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
         } else {
             fi.extension().to_string()
         };
-        let stats = breakdown.entry(ext).or_insert_with(ExtensionStats::default);
+        let stats = breakdown.entry(ext).or_default();
         stats.lines += fi.lines;
         stats.files += 1;
         stats.functions += fi.function_count();
@@ -167,7 +193,11 @@ fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>> {
 
     let lines = if is_binary { 0 } else { count_lines(path) };
     let last_modified = if config.use_git_dates {
-        get_git_last_modified(path, &config.target_dir)
+        if let Some(ref cache) = config.git_dates_cache {
+            cache.get(path).copied()
+        } else {
+            get_fs_last_modified(path)
+        }
     } else {
         get_fs_last_modified(path)
     };
@@ -276,7 +306,7 @@ fn get_git_files(dir: &Path) -> Vec<PathBuf> {
                 .map(|s| dir.join(s))
                 .collect()
         }
-        _ => get_manual_files(dir, &HashSet::new()),
+        _ => get_manual_files(dir, &HashSet::new(), false),
     }
 }
 
@@ -294,24 +324,30 @@ fn load_locignore(dir: &Path) -> HashSet<String> {
     }
 }
 
-fn get_manual_files(dir: &Path, custom_ignore: &HashSet<String>) -> Vec<PathBuf> {
+fn get_manual_files(
+    dir: &Path,
+    custom_ignore: &HashSet<String>,
+    include_hidden: bool,
+) -> Vec<PathBuf> {
     use walkdir::WalkDir;
     WalkDir::new(dir)
         .follow_links(false)
         .into_iter()
-        .filter_entry(|e| {
+        .filter_entry(move |e| {
             if e.depth() == 0 {
                 return true;
             }
+            let name = e.file_name().to_string_lossy();
             if e.file_type().is_dir() {
-                let name = e.file_name().to_string_lossy();
                 if EXCLUDED_DIRS.contains(name.as_ref()) || custom_ignore.contains(name.as_ref()) {
                     return false;
                 }
-                name == ".well-known" || !name.starts_with('.')
+                if name == ".git" {
+                    return false;
+                }
+                include_hidden || name == ".well-known" || !name.starts_with('.')
             } else {
-                let name = e.file_name().to_string_lossy();
-                !custom_ignore.contains(name.as_ref())
+                !custom_ignore.contains(name.as_ref()) && (include_hidden || !name.starts_with('.'))
             }
         })
         .filter_map(|e| e.ok())
@@ -320,22 +356,35 @@ fn get_manual_files(dir: &Path, custom_ignore: &HashSet<String>) -> Vec<PathBuf>
         .collect()
 }
 
-fn get_git_last_modified(path: &Path, root: &Path) -> Option<DateTime<Utc>> {
-    let rel = path.strip_prefix(root).ok()?;
+fn get_all_git_dates(root: &Path) -> HashMap<PathBuf, DateTime<Utc>> {
+    let mut map = std::collections::HashMap::new();
     let output = Command::new("git")
-        .args(["log", "-1", "--format=%ct", "--", rel.to_str()?])
+        .args(["log", "--format=commit %ct", "--name-only"])
         .current_dir(root)
-        .output()
-        .ok()?;
+        .output();
 
-    if !output.status.success() {
-        return None;
+    if let Ok(out) = output
+        && out.status.success()
+    {
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let mut current_ts = None;
+        for line in stdout.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            if let Some(rest) = line.strip_prefix("commit ") {
+                if let Ok(ts) = rest.parse::<i64>() {
+                    current_ts = Utc.timestamp_opt(ts, 0).single();
+                }
+            } else if let Some(ts) = current_ts {
+                let path = root.join(line);
+                // Insert only if not present (since git log is newest-first)
+                map.entry(path).or_insert(ts);
+            }
+        }
     }
-    let ts: i64 = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .parse()
-        .ok()?;
-    Utc.timestamp_opt(ts, 0).single()
+    map
 }
 
 fn get_fs_last_modified(path: &Path) -> Option<DateTime<Utc>> {
@@ -343,8 +392,7 @@ fn get_fs_last_modified(path: &Path) -> Option<DateTime<Utc>> {
         .ok()
         .and_then(|m| m.modified().ok())
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| Utc.timestamp_opt(d.as_secs() as i64, 0).single())
-        .flatten()
+        .and_then(|d| Utc.timestamp_opt(d.as_secs() as i64, 0).single())
 }
 
 #[cfg(test)]
@@ -446,7 +494,7 @@ mod tests {
         let mut custom_ignore = HashSet::new();
         custom_ignore.insert("ignore_me.txt".to_string());
 
-        let files = get_manual_files(dir.path(), &custom_ignore);
+        let files = get_manual_files(dir.path(), &custom_ignore, false);
         let names: HashSet<_> = files
             .iter()
             .map(|f| f.file_name().unwrap().to_str().unwrap())

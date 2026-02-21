@@ -1,6 +1,7 @@
 [package]
 name = "loc"
-version = "0.1.4"
+version = "0.1.5"
+rust-version = "1.92.0"
 edition = "2024"
 authors = ["kelexine <https://github.com/kelexine>"]
 description = "Advanced Lines of Code counter with function extraction, git integration, and parallel processing"

@@ -30,6 +30,15 @@ impl Extractor for RustExtractor {
             if !seen.insert(m.start()) {
                 continue;
             }
+
+            // Look back to see if it's annotated with #[test]
+            let prefix = &content[..m.start()];
+            let pre_trim = prefix.trim_end();
+            if pre_trim.ends_with("]") && pre_trim.contains("#[test]")
+                || pre_trim.contains("#[tokio::test]")
+            {
+                continue;
+            }
             let line_start = line_map.offset_to_line(m.start());
             let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
             let params = parse_params(cap.name("params").map_or("", |p| p.as_str()));

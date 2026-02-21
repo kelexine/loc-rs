@@ -90,19 +90,11 @@ fn find_ruby_end(lines: &[&str], start_line: usize) -> usize {
             continue;
         }
 
-        // Block openers (naive but effective for start-of-line constructs)
-        if t.starts_with("def ")
-            || t.starts_with("class ")
-            || t.starts_with("module ")
-            || t.starts_with("if ")
-            || t.starts_with("unless ")
-            || t.starts_with("while ")
-            || t.starts_with("for ")
-            || t.starts_with("case ")
-            || t.starts_with("begin")
-            || t.ends_with(" do")
-            || t == "do"
-        {
+        // Block openers
+        let openers = [
+            "def ", "class ", "module ", "if ", "unless ", "while ", "for ", "case ", "begin",
+        ];
+        if openers.iter().any(|&p| t.starts_with(p)) || t.ends_with(" do") || t == "do" {
             depth += 1;
         }
 

@@ -275,6 +275,6 @@ pub fn export_html(result: &ScanResult, path: &Path, extract_functions: bool) ->
     let mut writer = BufWriter::new(f);
     writer.write_all(html_content.as_bytes())?;
 
-    eprintln!("[SUCCESS] Exported HTML Visual Report → {}", path.display());
+    println!("[SUCCESS] Exported HTML Visual Report → {}", path.display());
     Ok(())
 }

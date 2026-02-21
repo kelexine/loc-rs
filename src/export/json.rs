@@ -29,7 +29,7 @@ pub fn export_json(result: &ScanResult, path: &Path, extract_functions: bool) ->
     serde_json::to_writer_pretty(BufWriter::new(f), &data)
         .with_context(|| "Failed to serialize JSON")?;
 
-    eprintln!("[SUCCESS] Exported JSON → {}", path.display());
+    println!("[SUCCESS] Exported JSON → {}", path.display());
     Ok(())
 }
 
@@ -43,7 +43,7 @@ pub fn export_jsonl(result: &ScanResult, path: &Path) -> Result<()> {
         writeln!(writer, "{}", line)?;
     }
 
-    eprintln!("[SUCCESS] Exported JSONL → {}", path.display());
+    println!("[SUCCESS] Exported JSONL → {}", path.display());
     Ok(())
 }
 

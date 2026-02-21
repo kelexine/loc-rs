@@ -86,4 +86,8 @@ pub struct Args {
     /// Disable parallel file processing
     #[arg(long = "no-parallel")]
     pub no_parallel: bool,
+
+    /// Include hidden files and directories (skipped by default)
+    #[arg(short = 'H', long = "include-hidden")]
+    pub include_hidden: bool,
 }

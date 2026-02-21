@@ -18,12 +18,12 @@ impl GlobalConfig {
             path.push("loc-rs");
             path.push("config.toml");
 
-            if path.exists() {
-                if let Ok(content) = std::fs::read_to_string(&path) {
-                    match toml::from_str(&content) {
-                        Ok(config) => return config,
-                        Err(e) => eprintln!("[WARNING] Failed to parse {}: {}", path.display(), e),
-                    }
+            if path.exists()
+                && let Ok(content) = std::fs::read_to_string(&path)
+            {
+                match toml::from_str(&content) {
+                    Ok(config) => return config,
+                    Err(e) => eprintln!("[WARNING] Failed to parse {}: {}", path.display(), e),
                 }
             }
         }
@@ -44,7 +44,10 @@ mod tests {
         "#;
         let config: GlobalConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.warn_size, Some(500));
-        assert_eq!(config.default_types, Some(vec!["rust".to_string(), "python".to_string()]));
+        assert_eq!(
+            config.default_types,
+            Some(vec!["rust".to_string(), "python".to_string()])
+        );
         assert_eq!(config.always_extract_functions, Some(true));
     }
 

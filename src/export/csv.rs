@@ -13,7 +13,7 @@ pub fn export_csv(result: &ScanResult, path: &Path, include_functions: bool) -> 
 
     // Header
     if include_functions {
-        wtr.write_record(&[
+        wtr.write_record([
             "Path",
             "Lines",
             "Extension",
@@ -23,7 +23,7 @@ pub fn export_csv(result: &ScanResult, path: &Path, include_functions: bool) -> 
             "Last Modified",
         ])?;
     } else {
-        wtr.write_record(&["Path", "Lines", "Extension", "Last Modified"])?;
+        wtr.write_record(["Path", "Lines", "Extension", "Last Modified"])?;
     }
 
     for fi in result.files.iter().filter(|f| !f.is_binary) {
@@ -33,7 +33,7 @@ pub fn export_csv(result: &ScanResult, path: &Path, include_functions: bool) -> 
             .unwrap_or_default();
 
         if include_functions {
-            wtr.write_record(&[
+            wtr.write_record([
                 fi.path.to_string_lossy().as_ref(),
                 &fi.lines.to_string(),
                 fi.extension(),
@@ -43,7 +43,7 @@ pub fn export_csv(result: &ScanResult, path: &Path, include_functions: bool) -> 
                 &last_mod,
             ])?;
         } else {
-            wtr.write_record(&[
+            wtr.write_record([
                 fi.path.to_string_lossy().as_ref(),
                 &fi.lines.to_string(),
                 fi.extension(),
@@ -53,6 +53,6 @@ pub fn export_csv(result: &ScanResult, path: &Path, include_functions: bool) -> 
     }
 
     wtr.flush()?;
-    eprintln!("[SUCCESS] Exported CSV → {}", path.display());
+    println!("[SUCCESS] Exported CSV → {}", path.display());
     Ok(())
 }
