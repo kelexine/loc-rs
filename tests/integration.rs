@@ -276,3 +276,22 @@ fn test_multilingual_summary() {
     assert!(stdout.contains("rs"), "Summary missing Rust");
     assert!(stdout.contains("py"), "Summary missing Python");
 }
+
+#[test]
+fn test_export_html() {
+    let fixture = make_fixture(&[("main.rs", "fn main() {}\n")]);
+    let out_html = fixture.path().join("report.html");
+
+    let out = run_loc(&[
+        fixture.path().to_str().unwrap(),
+        "-e",
+        out_html.to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+    assert!(out_html.exists(), "HTML export file not created");
+
+    let content = fs::read_to_string(&out_html).unwrap();
+    assert!(content.contains("<!DOCTYPE html>"), "HTML missing doctype");
+    assert!(content.contains("const reportData = {"), "HTML missing injected JSON data");
+    assert!(content.contains("main.rs"), "HTML missing file data");
+}

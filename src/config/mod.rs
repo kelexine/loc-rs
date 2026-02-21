@@ -30,3 +30,30 @@ impl GlobalConfig {
         Self::default()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_global_config_full() {
+        let toml_str = r#"
+        warn_size = 500
+        default_types = ["rust", "python"]
+        always_extract_functions = true
+        "#;
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.warn_size, Some(500));
+        assert_eq!(config.default_types, Some(vec!["rust".to_string(), "python".to_string()]));
+        assert_eq!(config.always_extract_functions, Some(true));
+    }
+
+    #[test]
+    fn test_parse_global_config_empty() {
+        let toml_str = "";
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.warn_size, None);
+        assert_eq!(config.default_types, None);
+        assert_eq!(config.always_extract_functions, None);
+    }
+}
