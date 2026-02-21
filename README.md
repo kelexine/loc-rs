@@ -123,28 +123,6 @@ Language aliases are supported: `py`, `js`, `ts`, `rs`, `rb`, `sh`, `md`, `yml`,
 
 ---
 
-## Project Structure
-
-```
-loc-rs/
-├── Cargo.toml          # Package manifest & dependencies
-├── Cargo.lock          # Locked dependency versions
-├── README.md
-├── LICENSE
-├── .gitignore
-├── src/
-│   ├── main.rs         # Entry point & orchestration
-│   ├── cli.rs          # Clap-derived CLI argument definitions
-│   ├── models.rs       # Core data structures (FileInfo, FunctionInfo, etc.)
-│   ├── language.rs     # Language → extension mapping, binary/excluded sets
-│   ├── counter.rs      # File discovery, line counting, parallel scan
-│   ├── extractor.rs    # Per-language regex function extractors
-│   ├── display.rs      # Colored terminal output, tree view, analysis report
-│   └── export.rs       # JSON / JSONL / CSV export
-└── tests/
-    └── integration.rs  # Integration tests
-```
-
 ## License
 
 MIT © [kelexine](https://github.com/kelexine)
