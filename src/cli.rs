@@ -3,7 +3,7 @@
 
 use clap::Parser;
 
-/// LOC v0.1. — Advanced Lines of Code counter
+/// LOC — Advanced Lines of Code counter
 ///
 /// A fast, feature-rich LOC tool with function extraction, git integration,
 /// parallel processing, and multi-format export.

@@ -1,7 +1,7 @@
 // loc — Advanced Lines of Code Counter
 //
 // Author : kelexine (https://github.com/kelexine)
-// Version: Dynamic (Cargo.toml)
+// Version: See Cargo.toml
 // License: MIT
 //
 // A complete Rust rewrite of the Python v4 LOC counter, with improvements:
