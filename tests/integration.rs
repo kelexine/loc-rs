@@ -63,13 +63,17 @@ fn test_basic_scan_exits_zero() {
     ]);
 
     let out = run_loc(&[fixture.path().to_str().unwrap()]);
-    assert!(out.status.success(), "loc exited non-zero: {:?}", out.status);
+    assert!(
+        out.status.success(),
+        "loc exited non-zero: {:?}",
+        out.status
+    );
 }
 
 #[test]
 fn test_total_lines_reported() {
     let fixture = make_fixture(&[
-        ("a.py", "x = 1\ny = 2\nz = 3\n"),       // 3 lines
+        ("a.py", "x = 1\ny = 2\nz = 3\n"),          // 3 lines
         ("b.py", "print('hello')\nprint('bye')\n"), // 2 lines
     ]);
 
@@ -78,7 +82,8 @@ fn test_total_lines_reported() {
     // The summary line contains the total; 5 lines expected
     assert!(
         stdout.contains('5') || stdout.contains("5"),
-        "Expected total of 5 lines in output:\n{}", stdout
+        "Expected total of 5 lines in output:\n{}",
+        stdout
     );
 }
 
@@ -93,8 +98,14 @@ fn test_type_filter_rust_only() {
     let out = run_loc(&[fixture.path().to_str().unwrap(), "-t", "rust"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     // Python and markdown files should not appear
-    assert!(!stdout.contains("script.py"), "Python file should be filtered out");
-    assert!(!stdout.contains("notes.md"), "Markdown file should be filtered out");
+    assert!(
+        !stdout.contains("script.py"),
+        "Python file should be filtered out"
+    );
+    assert!(
+        !stdout.contains("notes.md"),
+        "Markdown file should be filtered out"
+    );
     assert!(stdout.contains("main.rs"), "Rust file should appear");
 }
 
@@ -110,21 +121,24 @@ fn test_detailed_breakdown_flag() {
     // Detailed output should contain the "Extension" header
     assert!(
         stdout.contains("Extension") || stdout.contains("rs"),
-        "Detailed breakdown missing in output:\n{}", stdout
+        "Detailed breakdown missing in output:\n{}",
+        stdout
     );
 }
 
 #[test]
 fn test_function_extraction_flag() {
-    let fixture = make_fixture(&[
-        ("lib.rs", "pub fn hello() -> &'static str {\n    \"hello\"\n}\n\nfn world() {}\n"),
-    ]);
+    let fixture = make_fixture(&[(
+        "lib.rs",
+        "pub fn hello() -> &'static str {\n    \"hello\"\n}\n\nfn world() {}\n",
+    )]);
 
     let out = run_loc(&[fixture.path().to_str().unwrap(), "-f"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains("fn"),
-        "Function count not shown with -f:\n{}", stdout
+        "Function count not shown with -f:\n{}",
+        stdout
     );
 }
 
@@ -147,41 +161,43 @@ fn test_warn_size_flag() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains("LARGE") || stdout.contains("exceed"),
-        "Expected size warning in output:\n{}", stdout
+        "Expected size warning in output:\n{}",
+        stdout
     );
 }
 
 #[test]
 fn test_export_json() {
-    let fixture = make_fixture(&[
-        ("main.rs", "fn main() {}\n"),
-    ]);
+    let fixture = make_fixture(&[("main.rs", "fn main() {}\n")]);
     let out_json = fixture.path().join("out.json");
 
     let out = run_loc(&[
         fixture.path().to_str().unwrap(),
-        "-e", out_json.to_str().unwrap(),
+        "-e",
+        out_json.to_str().unwrap(),
     ]);
     assert!(out.status.success());
     assert!(out_json.exists(), "JSON export file not created");
 
     let content = fs::read_to_string(&out_json).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&content)
-        .expect("Exported JSON is not valid");
-    assert!(parsed.get("metadata").is_some(), "JSON missing 'metadata' key");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&content).expect("Exported JSON is not valid");
+    assert!(
+        parsed.get("metadata").is_some(),
+        "JSON missing 'metadata' key"
+    );
     assert!(parsed.get("files").is_some(), "JSON missing 'files' key");
 }
 
 #[test]
 fn test_export_csv() {
-    let fixture = make_fixture(&[
-        ("main.rs", "fn main() {}\n"),
-    ]);
+    let fixture = make_fixture(&[("main.rs", "fn main() {}\n")]);
     let out_csv = fixture.path().join("out.csv");
 
     let out = run_loc(&[
         fixture.path().to_str().unwrap(),
-        "-e", out_csv.to_str().unwrap(),
+        "-e",
+        out_csv.to_str().unwrap(),
     ]);
     assert!(out.status.success());
     assert!(out_csv.exists(), "CSV export file not created");
@@ -222,20 +238,21 @@ fn test_no_trailing_newline_integration() {
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     // Should be 2 lines
-    assert!(stdout.contains('2'), "Expected 2 lines for no trailing newline file");
+    assert!(
+        stdout.contains('2'),
+        "Expected 2 lines for no trailing newline file"
+    );
 }
 
 #[test]
 fn test_jsonl_export() {
-    let fixture = make_fixture(&[
-        ("a.rs", "fn a() {}\n"),
-        ("b.py", "def b(): pass\n"),
-    ]);
+    let fixture = make_fixture(&[("a.rs", "fn a() {}\n"), ("b.py", "def b(): pass\n")]);
     let out_jsonl = fixture.path().join("out.jsonl");
 
     let out = run_loc(&[
         fixture.path().to_str().unwrap(),
-        "-e", out_jsonl.to_str().unwrap(),
+        "-e",
+        out_jsonl.to_str().unwrap(),
     ]);
     assert!(out.status.success());
     assert!(out_jsonl.exists());

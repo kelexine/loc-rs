@@ -1,10 +1,10 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/ruby.rs — Ruby function/class extraction
 
+use super::{Extractor, LineMap, estimate_complexity, parse_params};
+use crate::models::FunctionInfo;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use crate::models::FunctionInfo;
-use super::{Extractor, LineMap, estimate_complexity, parse_params};
 
 static RE_RUBY_FN: Lazy<Regex> = Lazy::new(|| {
     // Matches: def name(args) or def self.name
@@ -27,21 +27,30 @@ impl Extractor for RubyExtractor {
 
         for cap in RE_RUBY_FN.captures_iter(content) {
             let m = cap.get(0).unwrap();
-            if !seen.insert(m.start()) { continue; }
+            if !seen.insert(m.start()) {
+                continue;
+            }
             let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
             let line_start = line_map.offset_to_line(m.start());
             let params = parse_params(cap.name("params").map_or("", |p| p.as_str()));
-            
+
             let is_method = content[m.start()..m.end()].contains("self.");
-            
+
             let line_end = find_ruby_end(&lines, line_start);
             let block = &lines[line_start.saturating_sub(1)..line_end.min(lines.len())];
             let complexity = estimate_complexity(block);
 
             functions.push(FunctionInfo {
-                name, line_start, line_end, parameters: params,
-                is_async: false, is_method, is_class: false,
-                docstring: None, decorators: vec![], complexity,
+                name,
+                line_start,
+                line_end,
+                parameters: params,
+                is_async: false,
+                is_method,
+                is_class: false,
+                docstring: None,
+                decorators: vec![],
+                complexity,
             });
         }
 
@@ -50,11 +59,18 @@ impl Extractor for RubyExtractor {
             let line_start = line_map.offset_to_line(m.start());
             let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
             let line_end = find_ruby_end(&lines, line_start);
-            
+
             functions.push(FunctionInfo {
-                name, line_start, line_end, parameters: vec![],
-                is_async: false, is_method: false, is_class: true,
-                docstring: None, decorators: vec![], complexity: 1,
+                name,
+                line_start,
+                line_end,
+                parameters: vec![],
+                is_async: false,
+                is_method: false,
+                is_class: true,
+                docstring: None,
+                decorators: vec![],
+                complexity: 1,
             });
         }
 
@@ -68,18 +84,28 @@ fn find_ruby_end(lines: &[&str], start_line: usize) -> usize {
     let mut depth = 0;
     for (i, line) in lines[start_line.saturating_sub(1)..].iter().enumerate() {
         let t = line.trim();
-        
+
         // Skip comments entirely
-        if t.starts_with('#') { continue; }
+        if t.starts_with('#') {
+            continue;
+        }
 
         // Block openers (naive but effective for start-of-line constructs)
-        if t.starts_with("def ") || t.starts_with("class ") || t.starts_with("module ") || 
-           t.starts_with("if ") || t.starts_with("unless ") || t.starts_with("while ") || 
-           t.starts_with("for ") || t.starts_with("case ") || t.starts_with("begin") || 
-           t.ends_with(" do") || t == "do" {
+        if t.starts_with("def ")
+            || t.starts_with("class ")
+            || t.starts_with("module ")
+            || t.starts_with("if ")
+            || t.starts_with("unless ")
+            || t.starts_with("while ")
+            || t.starts_with("for ")
+            || t.starts_with("case ")
+            || t.starts_with("begin")
+            || t.ends_with(" do")
+            || t == "do"
+        {
             depth += 1;
         }
-        
+
         // Block closers
         if t == "end" || t.starts_with("end ") || t.ends_with(" end") {
             depth -= 1;

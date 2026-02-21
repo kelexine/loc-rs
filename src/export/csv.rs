@@ -1,11 +1,11 @@
 // Author: kelexine (https://github.com/kelexine)
 // export/csv.rs — CSV export logic
 
+use crate::models::ScanResult;
+use anyhow::{Context, Result};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
-use anyhow::{Context, Result};
-use crate::models::ScanResult;
 
 pub fn export_csv(result: &ScanResult, path: &Path, include_functions: bool) -> Result<()> {
     let f = File::create(path).with_context(|| format!("Cannot create {}", path.display()))?;
@@ -13,13 +13,22 @@ pub fn export_csv(result: &ScanResult, path: &Path, include_functions: bool) -> 
 
     // Header
     if include_functions {
-        wtr.write_record(&["Path", "Lines", "Extension", "Functions", "Classes", "Avg Fn Length", "Last Modified"])?;
+        wtr.write_record(&[
+            "Path",
+            "Lines",
+            "Extension",
+            "Functions",
+            "Classes",
+            "Avg Fn Length",
+            "Last Modified",
+        ])?;
     } else {
         wtr.write_record(&["Path", "Lines", "Extension", "Last Modified"])?;
     }
 
     for fi in result.files.iter().filter(|f| !f.is_binary) {
-        let last_mod = fi.last_modified
+        let last_mod = fi
+            .last_modified
             .map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string())
             .unwrap_or_default();
 

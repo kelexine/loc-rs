@@ -1,19 +1,19 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/mod.rs — Trait definition and shared utilities for extractors
 
-pub mod rust;
-pub mod python;
-pub mod javascript;
-pub mod go;
 pub mod cpp;
+pub mod go;
 pub mod java;
-pub mod php;
-pub mod swift;
-pub mod ruby;
+pub mod javascript;
 pub mod nim;
+pub mod php;
+pub mod python;
+pub mod ruby;
+pub mod rust;
+pub mod swift;
 
-use std::path::Path;
 use crate::models::FunctionInfo;
+use std::path::Path;
 
 pub struct LineMap {
     offsets: Vec<usize>,
@@ -43,7 +43,8 @@ pub trait Extractor {
 }
 
 pub fn get_extractor(path: &Path) -> Option<Box<dyn Extractor>> {
-    let ext = path.extension()
+    let ext = path
+        .extension()
         .and_then(|e| e.to_str())
         .map(|e| format!(".{}", e.to_lowercase()))
         .unwrap_or_default();
@@ -51,9 +52,13 @@ pub fn get_extractor(path: &Path) -> Option<Box<dyn Extractor>> {
     match ext.as_str() {
         ".rs" => Some(Box::new(rust::RustExtractor)),
         ".py" | ".pyw" | ".pyi" => Some(Box::new(python::PythonExtractor)),
-        ".js" | ".mjs" | ".cjs" | ".ts" | ".tsx" | ".jsx" => Some(Box::new(javascript::JavascriptExtractor)),
+        ".js" | ".mjs" | ".cjs" | ".ts" | ".tsx" | ".jsx" => {
+            Some(Box::new(javascript::JavascriptExtractor))
+        }
         ".go" => Some(Box::new(go::GoExtractor)),
-        ".c" | ".h" | ".cpp" | ".cc" | ".cxx" | ".hpp" | ".hxx" => Some(Box::new(cpp::CppExtractor)),
+        ".c" | ".h" | ".cpp" | ".cc" | ".cxx" | ".hpp" | ".hxx" => {
+            Some(Box::new(cpp::CppExtractor))
+        }
         ".java" | ".kt" | ".kts" | ".cs" | ".scala" => Some(Box::new(java::JavaExtractor)),
         ".php" | ".php3" | ".php4" | ".php5" | ".phtml" => Some(Box::new(php::PhpExtractor)),
         ".swift" => Some(Box::new(swift::SwiftExtractor)),
@@ -106,18 +111,21 @@ pub fn find_closing_brace(lines: &[&str], start_line: usize) -> usize {
 
 pub fn parse_params(raw: &str) -> Vec<String> {
     raw.split(',')
-       .flat_map(|p| {
-           p.split_whitespace()
-            .map(|s| s.trim_matches(|c: char| !c.is_alphanumeric() && c != '_').to_string())
-            .filter(|s| !s.is_empty() && s != "void")
-       })
-       .collect()
+        .flat_map(|p| {
+            p.split_whitespace()
+                .map(|s| {
+                    s.trim_matches(|c: char| !c.is_alphanumeric() && c != '_')
+                        .to_string()
+                })
+                .filter(|s| !s.is_empty() && s != "void")
+        })
+        .collect()
 }
 
 pub fn estimate_complexity(block: &[&str]) -> u32 {
     const KEYWORDS: &[&str] = &[
-        "if ", "else if", "elif ", " while ", " for ", " match ", "case ",
-        " catch ", " except ", "&&", "||", "? ",
+        "if ", "else if", "elif ", " while ", " for ", " match ", "case ", " catch ", " except ",
+        "&&", "||", "? ",
     ];
     let mut cc = 1u32;
     for line in block {
@@ -140,7 +148,7 @@ mod tests {
             "    if true && false { }",
             "  }",
             "} else if y {",
-            "}"
+            "}",
         ];
         // 1 (base) + 1 (if) + 1 (for) + 1 (if) + 1 (&&) + 2 (else if & if ) = 7
         assert_eq!(estimate_complexity(&block), 7);
@@ -154,7 +162,7 @@ mod tests {
             "  if true {",
             "    println!(\"{}\", x);",
             "  }",
-            "}"
+            "}",
         ];
         // Should end at line 6
         assert_eq!(find_closing_brace(&lines, 1), 6);

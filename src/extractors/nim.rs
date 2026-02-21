@@ -1,10 +1,10 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/nim.rs — Nim function extraction
 
+use super::{Extractor, LineMap, estimate_complexity, parse_params};
+use crate::models::FunctionInfo;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use crate::models::FunctionInfo;
-use super::{Extractor, LineMap, estimate_complexity, parse_params};
 
 static RE_NIM_FN: Lazy<Regex> = Lazy::new(|| {
     // Matches: proc name*(args) or func name[T](args)
@@ -24,22 +24,33 @@ impl Extractor for NimExtractor {
             let line_start = line_map.offset_to_line(m.start());
             let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
             let params = parse_params(cap.name("params").map_or("", |p| p.as_str()));
-            
+
             let indent = cap.name("indent").map_or(0, |i| i.as_str().len());
             let is_method = content[m.start()..m.end()].starts_with("method");
-            
+
             let line_end = find_indentation_end(&lines, line_start, indent);
             let block = &lines[line_start.saturating_sub(1)..line_end.min(lines.len())];
             let complexity = estimate_complexity(block);
 
             // Nim's `*` indicates public export, treated as a decorator here
             let is_exported = content[m.start()..m.end()].contains('*');
-            let decorators = if is_exported { vec!["public(*)".into()] } else { vec![] };
+            let decorators = if is_exported {
+                vec!["public(*)".into()]
+            } else {
+                vec![]
+            };
 
             functions.push(FunctionInfo {
-                name, line_start, line_end, parameters: params,
-                is_async: false, is_method, is_class: false,
-                docstring: None, decorators, complexity,
+                name,
+                line_start,
+                line_end,
+                parameters: params,
+                is_async: false,
+                is_method,
+                is_class: false,
+                docstring: None,
+                decorators,
+                complexity,
             });
         }
 

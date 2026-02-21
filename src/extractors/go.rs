@@ -1,18 +1,19 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/go.rs — Go function extraction
 
+use super::{Extractor, LineMap, estimate_complexity, find_closing_brace, parse_params};
+use crate::models::FunctionInfo;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use crate::models::FunctionInfo;
-use super::{Extractor, LineMap, find_closing_brace, parse_params, estimate_complexity};
 
 static RE_GO_FN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?m)^func\s+(?:\([^)]+\)\s+)?(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*\((?P<params>[^)]*)\)").unwrap()
+    Regex::new(
+        r"(?m)^func\s+(?:\([^)]+\)\s+)?(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*\((?P<params>[^)]*)\)",
+    )
+    .unwrap()
 });
 
-static RE_GO_RECV: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^func\s+\([^)]+\)").unwrap()
-});
+static RE_GO_RECV: Lazy<Regex> = Lazy::new(|| Regex::new(r"^func\s+\([^)]+\)").unwrap());
 
 pub struct GoExtractor;
 
@@ -32,9 +33,16 @@ impl Extractor for GoExtractor {
             let block = &lines[line_start.saturating_sub(1)..line_end.min(lines.len())];
             let complexity = estimate_complexity(block);
             functions.push(FunctionInfo {
-                name, line_start, line_end, parameters: params,
-                is_async: false, is_method, is_class: false,
-                docstring: None, decorators: vec![], complexity,
+                name,
+                line_start,
+                line_end,
+                parameters: params,
+                is_async: false,
+                is_method,
+                is_class: false,
+                docstring: None,
+                decorators: vec![],
+                complexity,
             });
         }
 

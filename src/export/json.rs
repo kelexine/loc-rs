@@ -1,13 +1,13 @@
 // Author: kelexine (https://github.com/kelexine)
 // export/json.rs — JSON and JSONL export logic
 
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::Path;
+use crate::models::{FileInfo, ScanResult};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use serde_json::json;
-use crate::models::{FileInfo, ScanResult};
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::Path;
 
 pub fn export_json(result: &ScanResult, path: &Path, extract_functions: bool) -> Result<()> {
     let text_files: Vec<_> = result.files.iter().filter(|f| !f.is_binary).collect();
@@ -60,21 +60,26 @@ pub fn file_to_value(fi: &FileInfo, include_functions: bool) -> serde_json::Valu
         obj["function_count"] = json!(fi.function_count());
         obj["class_count"] = json!(fi.class_count());
         obj["avg_function_length"] = json!((fi.avg_function_length() * 100.0).round() / 100.0);
-        obj["functions"] = json!(fi.functions.iter().map(|f| {
-            json!({
-                "name": f.name,
-                "line_start": f.line_start,
-                "line_end": f.line_end,
-                "line_count": f.line_count(),
-                "parameters": f.parameters,
-                "is_async": f.is_async,
-                "is_method": f.is_method,
-                "is_class": f.is_class,
-                "docstring": f.truncated_docstring(),
-                "decorators": f.decorators,
-                "complexity": f.complexity,
-            })
-        }).collect::<Vec<_>>());
+        obj["functions"] = json!(
+            fi.functions
+                .iter()
+                .map(|f| {
+                    json!({
+                        "name": f.name,
+                        "line_start": f.line_start,
+                        "line_end": f.line_end,
+                        "line_count": f.line_count(),
+                        "parameters": f.parameters,
+                        "is_async": f.is_async,
+                        "is_method": f.is_method,
+                        "is_class": f.is_class,
+                        "docstring": f.truncated_docstring(),
+                        "decorators": f.decorators,
+                        "complexity": f.complexity,
+                    })
+                })
+                .collect::<Vec<_>>()
+        );
     }
 
     obj

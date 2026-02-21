@@ -1,18 +1,18 @@
 // Author: kelexine (https://github.com/kelexine)
 // export/html.rs — HTML visual report export logic
 
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::Path;
+use super::json::file_to_value;
+use crate::models::ScanResult;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use serde_json::json;
-use crate::models::ScanResult;
-use super::json::file_to_value;
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::Path;
 
 pub fn export_html(result: &ScanResult, path: &Path, extract_functions: bool) -> Result<()> {
     let text_files: Vec<_> = result.files.iter().filter(|f| !f.is_binary).collect();
-    
+
     // Prepare the data to inject into JS
     let data = json!({
         "metadata": {
@@ -29,7 +29,8 @@ pub fn export_html(result: &ScanResult, path: &Path, extract_functions: bool) ->
     });
 
     let json_data = serde_json::to_string(&data)?;
-    let html_content = format!(r#"<!DOCTYPE html>
+    let html_content = format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -266,7 +267,9 @@ pub fn export_html(result: &ScanResult, path: &Path, extract_functions: bool) ->
     </script>
 </body>
 </html>
-"#, data = json_data);
+"#,
+        data = json_data
+    );
 
     let f = File::create(path).with_context(|| format!("Cannot create {}", path.display()))?;
     let mut writer = BufWriter::new(f);

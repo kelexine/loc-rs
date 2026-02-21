@@ -1,10 +1,10 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/swift.rs — Swift function/class extraction
 
+use super::{Extractor, LineMap, estimate_complexity, find_closing_brace, parse_params};
+use crate::models::FunctionInfo;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use crate::models::FunctionInfo;
-use super::{Extractor, LineMap, find_closing_brace, parse_params, estimate_complexity};
 
 static RE_SWIFT_FN: Lazy<Regex> = Lazy::new(|| {
     // Matches: [modifiers] func name<Generics>(args) [async] [throws]
@@ -26,16 +26,18 @@ impl Extractor for SwiftExtractor {
 
         for cap in RE_SWIFT_FN.captures_iter(content) {
             let m = cap.get(0).unwrap();
-            if !seen.insert(m.start()) { continue; }
+            if !seen.insert(m.start()) {
+                continue;
+            }
             let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
             let line_start = line_map.offset_to_line(m.start());
             let params = parse_params(cap.name("params").map_or("", |p| p.as_str()));
-            
+
             // Heuristic: If it has mutating/override/class/static, it's a method
-            let is_method = content[m.start()..m.end()].contains("mutating ") || 
-                            content[m.start()..m.end()].contains("override ") ||
-                            content[m.start()..m.end()].contains("static ") ||
-                            content[m.start()..m.end()].contains("class func");
+            let is_method = content[m.start()..m.end()].contains("mutating ")
+                || content[m.start()..m.end()].contains("override ")
+                || content[m.start()..m.end()].contains("static ")
+                || content[m.start()..m.end()].contains("class func");
 
             let is_async = content[m.start()..m.end()].contains("async");
             let line_end = find_closing_brace(&lines, line_start);
@@ -43,9 +45,16 @@ impl Extractor for SwiftExtractor {
             let complexity = estimate_complexity(block);
 
             functions.push(FunctionInfo {
-                name, line_start, line_end, parameters: params,
-                is_async, is_method, is_class: false,
-                docstring: None, decorators: vec![], complexity,
+                name,
+                line_start,
+                line_end,
+                parameters: params,
+                is_async,
+                is_method,
+                is_class: false,
+                docstring: None,
+                decorators: vec![],
+                complexity,
             });
         }
 
@@ -55,9 +64,16 @@ impl Extractor for SwiftExtractor {
             let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
             let line_end = find_closing_brace(&lines, line_start);
             functions.push(FunctionInfo {
-                name, line_start, line_end, parameters: vec![],
-                is_async: false, is_method: false, is_class: true,
-                docstring: None, decorators: vec![], complexity: 1,
+                name,
+                line_start,
+                line_end,
+                parameters: vec![],
+                is_async: false,
+                is_method: false,
+                is_class: true,
+                docstring: None,
+                decorators: vec![],
+                complexity: 1,
             });
         }
 
