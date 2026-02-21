@@ -7,6 +7,10 @@ pub mod javascript;
 pub mod go;
 pub mod cpp;
 pub mod java;
+pub mod php;
+pub mod swift;
+pub mod ruby;
+pub mod nim;
 
 use std::path::Path;
 use crate::models::FunctionInfo;
@@ -51,6 +55,10 @@ pub fn get_extractor(path: &Path) -> Option<Box<dyn Extractor>> {
         ".go" => Some(Box::new(go::GoExtractor)),
         ".c" | ".h" | ".cpp" | ".cc" | ".cxx" | ".hpp" | ".hxx" => Some(Box::new(cpp::CppExtractor)),
         ".java" | ".kt" | ".kts" | ".cs" | ".scala" => Some(Box::new(java::JavaExtractor)),
+        ".php" | ".php3" | ".php4" | ".php5" | ".phtml" => Some(Box::new(php::PhpExtractor)),
+        ".swift" => Some(Box::new(swift::SwiftExtractor)),
+        ".rb" | ".rake" | ".gemspec" => Some(Box::new(ruby::RubyExtractor)),
+        ".nim" | ".nims" => Some(Box::new(nim::NimExtractor)),
         _ => None,
     }
 }
