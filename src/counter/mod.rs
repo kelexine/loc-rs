@@ -153,6 +153,9 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
         };
         let stats = breakdown.entry(ext).or_default();
         stats.lines += fi.lines;
+        stats.code += fi.code;
+        stats.comment += fi.comment;
+        stats.blank += fi.blank;
         stats.files += 1;
         stats.functions += fi.function_count();
     }
@@ -191,7 +194,12 @@ fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>> {
         return Ok(None);
     }
 
-    let lines = if is_binary { 0 } else { count_lines(path) };
+    let (total, code, comment, blank) = if is_binary {
+        (0, 0, 0, 0)
+    } else {
+        analyze_file(path)
+    };
+
     let last_modified = if config.use_git_dates {
         if let Some(ref cache) = config.git_dates_cache {
             cache.get(path).copied()
@@ -202,7 +210,15 @@ fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>> {
         get_fs_last_modified(path)
     };
 
-    let mut fi = FileInfo::new(path.to_path_buf(), lines, is_binary, last_modified);
+    let mut fi = FileInfo::new(
+        path.to_path_buf(),
+        total,
+        code,
+        comment,
+        blank,
+        is_binary,
+        last_modified,
+    );
 
     if config.extract_functions && !is_binary {
         let functions = extract_file_functions(path);
@@ -212,20 +228,80 @@ fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>> {
     Ok(Some(fi))
 }
 
-fn count_lines(path: &Path) -> usize {
-    let content = match std::fs::read(path) {
-        Ok(b) => b,
-        Err(_) => return 0,
+fn analyze_file(path: &Path) -> (usize, usize, usize, usize) {
+    let content = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(_) => return (0, 0, 0, 0),
     };
-    // Fast byte-level newline count
-    content.iter().filter(|&&b| b == b'\n').count() + {
-        // Count last line if it doesn't end with newline
-        if content.last().map(|&b| b != b'\n').unwrap_or(false) {
-            1
-        } else {
-            0
+
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{}", e.to_lowercase()))
+        .unwrap_or_default();
+
+    let spec = crate::language::COMMENT_REGISTRY.get(ext.as_str());
+
+    let mut total = 0;
+    let mut code = 0;
+    let mut comment = 0;
+    let mut blank = 0;
+
+    let mut in_multi_comment = false;
+
+    for line in content.lines() {
+        total += 1;
+        let trimmed = line.trim();
+
+        if trimmed.is_empty() {
+            if in_multi_comment {
+                comment += 1;
+            } else {
+                blank += 1;
+            }
+            continue;
         }
+
+        if let Some(s) = spec {
+            if in_multi_comment {
+                comment += 1;
+                if let Some((_, end)) = s.multi {
+                    if trimmed.contains(end) {
+                        in_multi_comment = false;
+                    }
+                }
+                continue;
+            }
+
+            if let Some((start, end)) = s.multi {
+                if trimmed.starts_with(start) {
+                    comment += 1;
+                    if !trimmed.contains(end) || trimmed.find(start) == trimmed.find(end) {
+                         in_multi_comment = true;
+                    }
+                    continue;
+                }
+            }
+
+            if let Some(single) = s.single {
+                if trimmed.starts_with(single) {
+                    comment += 1;
+                    continue;
+                }
+            }
+        }
+
+        code += 1;
     }
+
+    // Handle files that don't end with a newline (lines() ignores trailing empty line)
+    if content.ends_with('\n') {
+        // Correct, lines() gave us the right count
+    } else if !content.is_empty() {
+        // lines() also gave us the right count for a single line with no newline
+    }
+
+    (total, code, comment, blank)
 }
 
 fn is_binary_file(path: &Path) -> bool {

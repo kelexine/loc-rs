@@ -58,6 +58,7 @@ fn main() {
         &config.target_dir,
         args.detailed,
         args.binary,
+        args.tree,
         config.warn_size,
     );
 

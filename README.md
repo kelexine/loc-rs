@@ -1,13 +1,15 @@
 # loc — Advanced Lines of Code Counter
 
 > A fast, feature-rich LOC tool written in Rust.  
-> **Author:** [kelexine](https://github.com/kelexine) · **Version:** 0.1.5
+> **Author:** [kelexine](https://github.com/kelexine) · **Version:** 0.1.6
 
 ---
 
 ## Features
 
-- **Tree view** with per-file line counts, function counts, and last-modified dates
+- **Minimalist Dashboard**: Clean, borderless summary of all project metrics
+- **Code/Comment/Blank split**: Distinguishes between actual code, comments, and blank lines across dozens of languages
+- **Optional Tree view**: Recursive directory tree with per-file metrics (now opt-in via `--tree`)
 - **Parallel scanning** via [Rayon](https://docs.rs/rayon) — uses all CPU cores
 - **Function extraction** for 10 languages including Rust, Python, JS, Go, PHP, Swift, Ruby, and Nim
 - **Cyclomatic complexity** estimates per function
@@ -47,9 +49,9 @@ loc [OPTIONS] [DIRECTORY]
 ### Examples
 
 ```bash
-loc                            # Scan current directory
-loc src/                       # Scan a specific path
-loc -d                         # Breakdown by extension
+loc                            # Scan current directory (summary only)
+loc --tree                     # Show recursive project structure
+loc -d                         # Breakdown by extension (Code/Comment/Blank)
 loc -f                         # Extract functions/methods
 loc -f --func-analysis         # Full complexity report
 loc -t rust python             # Filter to Rust + Python only
@@ -59,13 +61,15 @@ loc -e report.html             # Generate interactive HTML dashboard
 loc --warn-size 500            # Warn on files > 500 lines
 loc --git-dates                # Use git log for last-modified
 loc --no-parallel              # Disable parallel processing
+loc --include-hidden           # Include hidden files and directories
 ```
 
 ### All Flags
 
 | Flag | Short | Description |
 |---|---|---|
-| `--detailed` | `-d` | Per-extension breakdown table |
+| `--detailed` | `-d` | Per-extension breakdown (Code, Comment, Blank) |
+| `--tree` | | Show recursive directory tree (hidden by default) |
 | `--binary` | `-b` | Show binary files in tree |
 | `--functions` | `-f` | Extract functions, methods, classes |
 | `--func-analysis` | | Full analysis report (auto-enables `-f`) |
@@ -73,6 +77,7 @@ loc --no-parallel              # Disable parallel processing
 | `--export FILE` | `-e` | Export results (`.json` / `.jsonl` / `.csv` / `.html`) |
 | `--warn-size N` | | Warn for files exceeding N lines |
 | `--git-dates` | | Use `git log` for last-modified dates |
+| `--include-hidden` | `-H` | Include hidden files and directories |
 | `--no-parallel` | | Disable Rayon parallelism |
 
 ---

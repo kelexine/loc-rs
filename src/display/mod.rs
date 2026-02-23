@@ -183,78 +183,81 @@ pub fn display_results(
     root: &Path,
     show_details: bool,
     show_binary: bool,
+    show_tree: bool,
     warn_size: Option<usize>,
 ) {
-    println!();
-    println!("{}", "Directory Structure:".bold());
-    println!();
+    let total_lines: usize = result.files.iter().map(|f| f.lines).sum();
+    let text_files = result.text_file_count();
+    let bin_files = result.binary_file_count();
+    let total_fns = result.total_functions();
+    let total_cls = result.total_classes();
 
-    let tree = build_tree(&result.files, root);
-    let count = tree.len();
-    let mut total_lines = 0;
-    for (i, (name, node)) in tree.iter().enumerate() {
-        let is_last = i == count - 1;
-        total_lines += print_tree_node(name, node, "", is_last, show_binary, warn_size);
+    if show_tree {
+        println!();
+        println!("{}", "Project Structure:".bold());
+        println!();
+        let tree = build_tree(&result.files, root);
+        let count = tree.len();
+        for (i, (name, node)) in tree.iter().enumerate() {
+            let last = i == count - 1;
+            print_tree_node(name, node, "", last, show_binary, warn_size);
+        }
+        println!("{}", "━".repeat(90).bright_black());
     }
 
     println!();
-    println!("{}", "=".repeat(70));
+    println!("  {}", "LOC-RS ANALYSIS SUMMARY".bold().cyan());
+    println!("  {}", "─".repeat(76).bright_black());
+    
     println!(
-        "{} {}",
-        "[SUCCESS]".green().bold(),
-        format!("Total Lines of Code: {}", fmt_num(total_lines)).bold()
-    );
-    println!(
-        "{} Text Files: {}",
-        "[INFO]   ".blue(),
-        fmt_num(result.text_file_count())
+        "  Total Lines of Code    : {:<16}   Text Files         : {:<16}",
+        fmt_num(total_lines).green().bold(),
+        fmt_num(text_files).blue()
     );
 
-    let bin_count = result.binary_file_count();
-    if bin_count > 0 {
+    println!(
+        "  Code / Comment / Blank : {} / {} / {}",
+        fmt_num(result.total_code()).green(),
+        fmt_num(result.total_comment()).magenta(),
+        fmt_num(result.total_blank()).dimmed()
+    );
+
+    if bin_files > 0 || total_fns > 0 {
         println!(
-            "{} Binary Files Skipped: {}",
-            "[INFO]   ".blue(),
-            fmt_num(bin_count)
+            "  Functions        : {:<16}   Binary Files       : {:<16}",
+            fmt_num(total_fns).magenta(),
+            fmt_num(bin_files).yellow()
         );
     }
 
-    if result.total_functions() > 0 {
+    if total_cls > 0 {
         println!(
-            "{} Functions/Methods: {}",
-            "[INFO]   ".blue(),
-            fmt_num(result.total_functions())
-        );
-        println!(
-            "{} Classes/Structs:   {}",
-            "[INFO]   ".blue(),
-            fmt_num(result.total_classes())
+            "  Classes/Structs  : {:<16}   ",
+            fmt_num(total_cls).magenta()
         );
     }
 
     if let Some(ws) = warn_size {
-        let large: Vec<_> = result.files.iter().filter(|f| f.lines > ws).collect();
-        if !large.is_empty() {
+        let large_files = result.files.iter().filter(|f| f.lines > ws).count();
+        if large_files > 0 {
             println!(
-                "{} {} files exceed {} lines",
-                "[WARN]   ".yellow(),
-                large.len(),
-                ws
+                "  {} {}",
+                "⚠ ".yellow().bold(),
+                format!("{} files exceed the threshold of {} lines", large_files, fmt_num(ws)).yellow()
             );
         }
     }
 
-    println!("{}", "=".repeat(70));
+    println!("  {}", "─".repeat(76).bright_black());
     println!();
 
     if show_details {
-        display_breakdown(&result.breakdown, total_lines, result.total_functions() > 0);
+        display_breakdown(&result.breakdown, total_lines, total_fns > 0);
     }
 }
 
 fn display_breakdown(breakdown: &Breakdown, total_lines: usize, has_functions: bool) {
-    println!();
-    println!("{}", "[INFO] Breakdown by extension:".blue());
+    println!("{}", "Breakdown by Extension:".bold().underline());
     println!();
 
     let mut sorted: Vec<_> = breakdown.iter().collect();
@@ -262,35 +265,46 @@ fn display_breakdown(breakdown: &Breakdown, total_lines: usize, has_functions: b
 
     if has_functions {
         println!(
-            "{:<20} {:>14} {:>10} {:>12} {:>10}",
-            "Extension", "Lines", "Files", "Functions", "Share"
+            "  {:<18} {:>10} {:>10} {:>10} {:>10} {:>10}",
+            "Extension".dimmed(), "Code".dimmed(), "Comment".dimmed(), "Blank".dimmed(), "Functions".dimmed(), "Share".dimmed()
         );
-        println!("{}", "-".repeat(68));
+        println!("  {}", "─".repeat(74).bright_black());
     } else {
         println!(
-            "{:<20} {:>14} {:>10} {:>10}",
-            "Extension", "Lines", "Files", "Share"
+            "  {:<18} {:>10} {:>10} {:>10} {:>10}",
+            "Extension".dimmed(), "Code".dimmed(), "Comment".dimmed(), "Blank".dimmed(), "Share".dimmed()
         );
-        println!("{}", "-".repeat(56));
+        println!("  {}", "─".repeat(62).bright_black());
     }
 
     for (ext, stats) in &sorted {
+        let ext_colored = match ext.as_str() {
+            "rs" => ext.green(),
+            "py" => ext.yellow(),
+            "js" | "ts" => ext.cyan(),
+            "go" => ext.blue(),
+            "c" | "cpp" => ext.red(),
+            _ => ext.white(),
+        };
+
         if has_functions {
             println!(
-                "{:<20} {:>14} {:>10} {:>12} {:>10}",
-                ext,
-                fmt_num(stats.lines),
-                fmt_num(stats.files),
+                "  {:<18} {:>10} {:>10} {:>10} {:>10} {:>10}",
+                ext_colored,
+                fmt_num(stats.code).bold(),
+                fmt_num(stats.comment).magenta(),
+                fmt_num(stats.blank).dimmed(),
                 fmt_num(stats.functions),
-                fmt_percent(stats.lines, total_lines),
+                fmt_percent(stats.lines, total_lines).bright_black(),
             );
         } else {
             println!(
-                "{:<20} {:>14} {:>10} {:>10}",
-                ext,
-                fmt_num(stats.lines),
-                fmt_num(stats.files),
-                fmt_percent(stats.lines, total_lines),
+                "  {:<18} {:>10} {:>10} {:>10} {:>10}",
+                ext_colored,
+                fmt_num(stats.code).bold(),
+                fmt_num(stats.comment).magenta(),
+                fmt_num(stats.blank).dimmed(),
+                fmt_percent(stats.lines, total_lines).bright_black(),
             );
         }
     }
@@ -521,6 +535,9 @@ mod tests {
         let info = FileInfo::new(
             PathBuf::from("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z/file.rs"),
             10,
+            10,
+            0,
+            0,
             false,
             None,
         );

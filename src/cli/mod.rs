@@ -90,4 +90,8 @@ pub struct Args {
     /// Include hidden files and directories (skipped by default)
     #[arg(short = 'H', long = "include-hidden")]
     pub include_hidden: bool,
+
+    /// Show recursive directory tree (off by default)
+    #[arg(long = "tree")]
+    pub tree: bool,
 }

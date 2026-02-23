@@ -46,6 +46,9 @@ impl FunctionInfo {
 pub struct FileInfo {
     pub path: PathBuf,
     pub lines: usize,
+    pub code: usize,
+    pub comment: usize,
+    pub blank: usize,
     pub is_binary: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_modified: Option<DateTime<Utc>>,
@@ -56,12 +59,18 @@ impl FileInfo {
     pub fn new(
         path: PathBuf,
         lines: usize,
+        code: usize,
+        comment: usize,
+        blank: usize,
         is_binary: bool,
         last_modified: Option<DateTime<Utc>>,
     ) -> Self {
         Self {
             path,
             lines,
+            code,
+            comment,
+            blank,
             is_binary,
             last_modified,
             functions: Vec::new(),
@@ -102,6 +111,9 @@ impl FileInfo {
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct ExtensionStats {
     pub lines: usize,
+    pub code: usize,
+    pub comment: usize,
+    pub blank: usize,
     pub files: usize,
     pub functions: usize,
 }
@@ -122,6 +134,30 @@ impl ScanResult {
             .iter()
             .filter(|f| !f.is_binary)
             .map(|f| f.lines)
+            .sum()
+    }
+
+    pub fn total_code(&self) -> usize {
+        self.files
+            .iter()
+            .filter(|f| !f.is_binary)
+            .map(|f| f.code)
+            .sum()
+    }
+
+    pub fn total_comment(&self) -> usize {
+        self.files
+            .iter()
+            .filter(|f| !f.is_binary)
+            .map(|f| f.comment)
+            .sum()
+    }
+
+    pub fn total_blank(&self) -> usize {
+        self.files
+            .iter()
+            .filter(|f| !f.is_binary)
+            .map(|f| f.blank)
             .sum()
     }
 

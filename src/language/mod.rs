@@ -107,6 +107,73 @@ pub static BINARY_EXTENSIONS: Lazy<std::collections::HashSet<&'static str>> = La
     .collect()
 });
 
+/// Specification for comment markers in a language.
+#[derive(Debug, Clone, Copy)]
+pub struct CommentSpec {
+    /// Single-line comment marker (e.g. "//" or "#")
+    pub single: Option<&'static str>,
+    /// Multi-line comment (start, end)
+    pub multi: Option<(&'static str, &'static str)>,
+}
+
+/// Registry for comment specifications by extension.
+pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::new(|| {
+    let mut m = HashMap::new();
+
+    let c_style = CommentSpec {
+        single: Some("//"),
+        multi: Some(("/*", "*/")),
+    };
+    let bash_style = CommentSpec {
+        single: Some("#"),
+        multi: None,
+    };
+    let py_style = CommentSpec {
+        single: Some("#"),
+        multi: Some(("\"\"\"", "\"\"\"")), // Triple quotes are often used as docstrings but act like block comments
+    };
+    let html_style = CommentSpec {
+        single: None,
+        multi: Some(("<!--", "-->")),
+    };
+    let sql_style = CommentSpec {
+        single: Some("--"),
+        multi: Some(("/*", "*/")),
+    };
+    let lua_style = CommentSpec {
+        single: Some("--"),
+        multi: Some(("--[[", "]]")),
+    };
+    let haskell_style = CommentSpec {
+        single: Some("--"),
+        multi: Some(("{-", "-}")),
+    };
+    let ruby_style = CommentSpec {
+        single: Some("#"),
+        multi: Some(("=begin", "=end")),
+    };
+
+    // Mapping
+    let mappings = [
+        (vec![".rs", ".go", ".java", ".kt", ".kts", ".swift", ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hxx", ".h++", ".cs", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".php", ".scala", ".sc", ".zig"], c_style),
+        (vec![".py", ".pyw", ".pyi"], py_style),
+        (vec![".sh", ".bash", ".zsh", ".fish", ".rb", ".rake", ".gemspec", ".yaml", ".yml", ".toml", ".ex", ".exs", ".nim", ".nims"], bash_style),
+        (vec![".html", ".htm", ".xml", ".xsl", ".xslt", ".vue", ".svelte"], html_style),
+        (vec![".sql"], sql_style),
+        (vec![".lua"], lua_style),
+        (vec![".hs", ".lhs"], haskell_style),
+        (vec![".rb"], ruby_style), // Overwrite for block comments
+    ];
+
+    for (exts, spec) in mappings {
+        for ext in exts {
+            m.insert(ext, spec);
+        }
+    }
+
+    m
+});
+
 /// Directories excluded by default in non-git mode.
 pub static EXCLUDED_DIRS: Lazy<std::collections::HashSet<&'static str>> = Lazy::new(|| {
     [
