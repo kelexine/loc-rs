@@ -265,29 +265,29 @@ fn analyze_file(path: &Path) -> (usize, usize, usize, usize) {
         if let Some(s) = spec {
             if in_multi_comment {
                 comment += 1;
-                if let Some((_, end)) = s.multi {
-                    if trimmed.contains(end) {
-                        in_multi_comment = false;
-                    }
+                if let Some((_, end)) = s.multi
+                    && trimmed.contains(end)
+                {
+                    in_multi_comment = false;
                 }
                 continue;
             }
 
-            if let Some((start, end)) = s.multi {
-                if trimmed.starts_with(start) {
-                    comment += 1;
-                    if !trimmed.contains(end) || trimmed.find(start) == trimmed.find(end) {
-                         in_multi_comment = true;
-                    }
-                    continue;
+            if let Some((start, end)) = s.multi
+                && trimmed.starts_with(start)
+            {
+                comment += 1;
+                if !trimmed.contains(end) || trimmed.find(start) == trimmed.find(end) {
+                    in_multi_comment = true;
                 }
+                continue;
             }
 
-            if let Some(single) = s.single {
-                if trimmed.starts_with(single) {
-                    comment += 1;
-                    continue;
-                }
+            if let Some(single) = s.single
+                && trimmed.starts_with(single)
+            {
+                comment += 1;
+                continue;
             }
         }
 

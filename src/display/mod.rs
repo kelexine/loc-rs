@@ -208,7 +208,7 @@ pub fn display_results(
     println!();
     println!("  {}", "LOC-RS ANALYSIS SUMMARY".bold().cyan());
     println!("  {}", "─".repeat(76).bright_black());
-    
+
     println!(
         "  Total Lines of Code    : {:<16}   Text Files         : {:<16}",
         fmt_num(total_lines).green().bold(),
@@ -243,7 +243,12 @@ pub fn display_results(
             println!(
                 "  {} {}",
                 "⚠ ".yellow().bold(),
-                format!("{} files exceed the threshold of {} lines", large_files, fmt_num(ws)).yellow()
+                format!(
+                    "{} files exceed the threshold of {} lines",
+                    large_files,
+                    fmt_num(ws)
+                )
+                .yellow()
             );
         }
     }
@@ -266,13 +271,22 @@ fn display_breakdown(breakdown: &Breakdown, total_lines: usize, has_functions: b
     if has_functions {
         println!(
             "  {:<18} {:>10} {:>10} {:>10} {:>10} {:>10}",
-            "Extension".dimmed(), "Code".dimmed(), "Comment".dimmed(), "Blank".dimmed(), "Functions".dimmed(), "Share".dimmed()
+            "Extension".dimmed(),
+            "Code".dimmed(),
+            "Comment".dimmed(),
+            "Blank".dimmed(),
+            "Functions".dimmed(),
+            "Share".dimmed()
         );
         println!("  {}", "─".repeat(74).bright_black());
     } else {
         println!(
             "  {:<18} {:>10} {:>10} {:>10} {:>10}",
-            "Extension".dimmed(), "Code".dimmed(), "Comment".dimmed(), "Blank".dimmed(), "Share".dimmed()
+            "Extension".dimmed(),
+            "Code".dimmed(),
+            "Comment".dimmed(),
+            "Blank".dimmed(),
+            "Share".dimmed()
         );
         println!("  {}", "─".repeat(62).bright_black());
     }

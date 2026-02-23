@@ -155,10 +155,26 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
 
     // Mapping
     let mappings = [
-        (vec![".rs", ".go", ".java", ".kt", ".kts", ".swift", ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hxx", ".h++", ".cs", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".php", ".scala", ".sc", ".zig"], c_style),
+        (
+            vec![
+                ".rs", ".go", ".java", ".kt", ".kts", ".swift", ".c", ".h", ".cpp", ".cc", ".cxx",
+                ".hpp", ".hxx", ".h++", ".cs", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".mts",
+                ".php", ".scala", ".sc", ".zig",
+            ],
+            c_style,
+        ),
         (vec![".py", ".pyw", ".pyi"], py_style),
-        (vec![".sh", ".bash", ".zsh", ".fish", ".rb", ".rake", ".gemspec", ".yaml", ".yml", ".toml", ".ex", ".exs", ".nim", ".nims"], bash_style),
-        (vec![".html", ".htm", ".xml", ".xsl", ".xslt", ".vue", ".svelte"], html_style),
+        (
+            vec![
+                ".sh", ".bash", ".zsh", ".fish", ".rb", ".rake", ".gemspec", ".yaml", ".yml",
+                ".toml", ".ex", ".exs", ".nim", ".nims",
+            ],
+            bash_style,
+        ),
+        (
+            vec![".html", ".htm", ".xml", ".xsl", ".xslt", ".vue", ".svelte"],
+            html_style,
+        ),
         (vec![".sql"], sql_style),
         (vec![".lua"], lua_style),
         (vec![".hs", ".lhs"], haskell_style),
