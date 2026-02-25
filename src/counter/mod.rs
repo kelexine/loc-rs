@@ -369,7 +369,7 @@ fn check_git_repo(dir: &Path) -> bool {
 
 fn get_git_files(dir: &Path) -> Vec<PathBuf> {
     let output = Command::new("git")
-        .args(["ls-files", "-z"])
+        .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
         .current_dir(dir)
         .output();
 
