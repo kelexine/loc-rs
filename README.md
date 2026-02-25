@@ -1,7 +1,7 @@
 # loc — Advanced Lines of Code Counter
 
 > A fast, feature-rich LOC tool written in Rust.  
-> **Author:** [kelexine](https://github.com/kelexine) · **Version:** 0.1.6
+> **Author:** [kelexine](https://github.com/kelexine)
 
 ---
 
@@ -26,7 +26,13 @@
 
 ## Installation
 
-### From source (requires Rust ≥ 1.70)
+
+### From cargo
+
+```bash
+cargo install loc-rs
+```
+### From source (requires Rust ≥ 1.9.0)
 
 ```bash
 git clone https://github.com/kelexine/loc-rs

@@ -26,18 +26,27 @@ fn test_type_filter_rust_only() {
         ("notes.md", "# Notes\n"),
     ]);
 
-    let out = run_loc(&[fixture.path().to_str().unwrap(), "-t", "rust"]);
+    // -d (detailed) is required to render the breakdown table where extensions appear.
+    // Without it the summary shows totals only — no per-extension or per-file names.
+    let out = run_loc(&[fixture.path().to_str().unwrap(), "-t", "rust", "-d"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // Python and markdown files should not appear
+    // Python and markdown files should not appear in the breakdown
     assert!(
-        !stdout.contains("script.py"),
-        "Python file should be filtered out"
+        !stdout.contains("py"),
+        "Python extension should be filtered out:\n{}",
+        stdout
     );
     assert!(
-        !stdout.contains("notes.md"),
-        "Markdown file should be filtered out"
+        !stdout.contains("md"),
+        "Markdown extension should be filtered out:\n{}",
+        stdout
     );
-    assert!(stdout.contains("main.rs"), "Rust file should appear");
+    // The "rs" extension row must appear in the detailed breakdown
+    assert!(
+        stdout.contains("rs"),
+        "Rust extension should appear in breakdown:\n{}",
+        stdout
+    );
 }
 
 #[test]
@@ -66,7 +75,7 @@ fn test_function_extraction_flag() {
     let out = run_loc(&[fixture.path().to_str().unwrap(), "-f"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
-        stdout.contains("fn"),
+        stdout.contains("Functions"),
         "Function count not shown with -f:\n{}",
         stdout
     );

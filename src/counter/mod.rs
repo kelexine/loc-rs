@@ -477,6 +477,13 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
 
+    /// Thin shim so tests can assert on raw line counts without
+    /// exposing a public `count_lines` API. Delegates to `analyze_file`
+    /// and returns the total-lines field (index 0 of the tuple).
+    fn count_lines(path: &std::path::Path) -> usize {
+        analyze_file(path).0
+    }
+
     #[test]
     fn test_count_lines_basic() {
         let dir = tempdir().unwrap();
