@@ -6,7 +6,7 @@
 // Version: See Cargo.toml
 // License: MIT
 //
-// A complete Rust rewrite of the Python v4 LOC counter, with improvements:
+// Features:
 //   • True data-parallelism via Rayon (all CPU cores)
 //   • Zero-copy byte-level line counting
 //   • Pre-compiled regex patterns via once_cell::Lazy

@@ -35,16 +35,8 @@ SUPPORTED LANGUAGES:
   json, yaml, xml, jsx, vue, svelte, toml, scala, haskell, elixir, lua, dart, zig, nim
 
 FUNCTION EXTRACTION:
-  Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#, PHP, Swift, Ruby, Nim
-
-IMPROVEMENTS OVER v4 (Python):
-  • Rayon data-parallelism — uses all CPU cores
-  • Zero-copy line counting via raw byte scan
-  • Pre-compiled regex (once_cell) — no per-file regex compilation
-  • Richer Rust extraction: structs, impl blocks, pub/async detection
-  • Python decorator and docstring extraction
-  • Filesystem mtime fallback when not in a git repo
-  • walkdir-based traversal (faster than os.walk)"
+  Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#, PHP, Swift, Ruby, Nim"
+  
 )]
 pub struct Args {
     /// Target directory to scan (default: current directory)
