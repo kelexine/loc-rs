@@ -1,91 +1,154 @@
 // Author: kelexine (https://github.com/kelexine)
-// extractors/rust.rs — Rust function/struct extraction
+// extractors/rust.rs — Rust function/struct extraction via Tree-sitter
 
-use super::{Extractor, LineMap, estimate_complexity, find_closing_brace, parse_params};
+use super::{Extractor, estimate_complexity};
 use crate::models::FunctionInfo;
-use once_cell::sync::Lazy;
-use regex::Regex;
-
-static RE_RUST_FN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?m)^[ \t]*(?P<pub>pub(?:\([^)]+\))?\s+)?(?P<async>async\s+)?fn\s+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)(?:<[^>]*>)?\s*\((?P<params>[^)]*)\)")
-        .expect("Rust fn regex")
-});
-
-static RE_RUST_STRUCT: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?m)^[ \t]*(?:pub(?:\([^)]+\))?\s+)?struct\s+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)")
-        .expect("Rust struct regex")
-});
+use tree_sitter::{Node, Parser};
 
 pub struct RustExtractor;
 
 impl Extractor for RustExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
+        let mut parser = Parser::new();
+        if parser.set_language(&tree_sitter_rust::LANGUAGE.into()).is_err() {
+            return vec![];
+        }
+
+        let tree = match parser.parse(content, None) {
+            Some(tree) => tree,
+            None => return vec![],
+        };
+
         let lines: Vec<&str> = content.lines().collect();
-        let line_map = LineMap::new(content);
         let mut functions = Vec::new();
-        let mut seen = std::collections::HashSet::new();
 
-        for cap in RE_RUST_FN.captures_iter(content) {
-            let m = cap.get(0).unwrap();
-            if !seen.insert(m.start()) {
-                continue;
-            }
-
-            // Look back to see if it's annotated with #[test]
-            let prefix = &content[..m.start()];
-            let pre_trim = prefix.trim_end();
-            if pre_trim.ends_with("]") && pre_trim.contains("#[test]")
-                || pre_trim.contains("#[tokio::test]")
-            {
-                continue;
-            }
-            let line_start = line_map.offset_to_line(m.start());
-            let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
-            let params = parse_params(cap.name("params").map_or("", |p| p.as_str()));
-            let is_async = cap.name("async").is_some();
-            let is_pub = cap.name("pub").is_some();
-            let line_end = find_closing_brace(&lines, line_start);
-            let block = &lines[line_start.saturating_sub(1)..line_end.min(lines.len())];
-            let complexity = estimate_complexity(block);
-            let is_method = content[..m.start()]
-                .rfind("impl ")
-                .map(|pos| !content[pos..m.start()].contains("\n\n"))
-                .unwrap_or(false);
-
-            functions.push(FunctionInfo {
-                name,
-                line_start,
-                line_end,
-                parameters: params,
-                is_async,
-                is_method,
-                is_class: false,
-                docstring: None,
-                decorators: if is_pub { vec!["pub".into()] } else { vec![] },
-                complexity,
-            });
-        }
-
-        for cap in RE_RUST_STRUCT.captures_iter(content) {
-            let m = cap.get(0).unwrap();
-            let line_start = line_map.offset_to_line(m.start());
-            let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
-            let line_end = find_closing_brace(&lines, line_start);
-            functions.push(FunctionInfo {
-                name,
-                line_start,
-                line_end,
-                parameters: vec![],
-                is_async: false,
-                is_method: false,
-                is_class: true,
-                docstring: None,
-                decorators: vec![],
-                complexity: 1,
-            });
-        }
+        traverse(tree.root_node(), content, &lines, &mut functions, false);
 
         functions.sort_by_key(|f| f.line_start);
         functions
     }
+}
+
+fn traverse(
+    node: Node,
+    content: &str,
+    lines: &[&str],
+    functions: &mut Vec<FunctionInfo>,
+    in_impl: bool,
+) {
+    let kind = node.kind();
+    let is_impl = kind == "impl_item";
+
+    if kind == "function_item" {
+        if let Some(info) = parse_function(node, content, lines, in_impl) {
+            functions.push(info);
+        }
+    } else if kind == "struct_item" {
+        if let Some(info) = parse_struct(node, content) {
+            functions.push(info);
+        }
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        traverse(child, content, lines, functions, in_impl || is_impl);
+    }
+}
+
+fn parse_function(node: Node, content: &str, lines: &[&str], is_method: bool) -> Option<FunctionInfo> {
+    let mut name = String::new();
+    let mut is_async = false;
+    let mut is_pub = false;
+    let mut has_test_attr = false;
+    let mut params_str = String::new();
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        let kind = child.kind();
+        if kind == "identifier" && name.is_empty() {
+            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        } else if kind == "async" {
+            is_async = true;
+        } else if kind == "visibility_modifier" {
+            is_pub = true;
+        } else if kind == "parameters" {
+            params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        } else if kind == "attribute_item" {
+            let attr_text = child.utf8_text(content.as_bytes()).unwrap_or("");
+            if attr_text.contains("test") {
+                has_test_attr = true;
+            }
+        }
+    }
+
+    if has_test_attr {
+        return None;
+    }
+
+    if name.is_empty() {
+        name = "?".to_string();
+    }
+
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    let block = &lines[start_line.saturating_sub(1)..end_line.min(lines.len())];
+    let complexity = estimate_complexity(block);
+
+    // Extract parameters
+    let mut parameters = Vec::new();
+    let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');
+    if !trimmed_params.is_empty() {
+        for p in trimmed_params.split(',') {
+            let p_trim = p.trim();
+            if !p_trim.is_empty() {
+                parameters.push(p_trim.to_string());
+            }
+        }
+    }
+
+    Some(FunctionInfo {
+        name,
+        line_start: start_line,
+        line_end: end_line,
+        parameters,
+        is_async,
+        is_method,
+        is_class: false,
+        docstring: None,
+        decorators: if is_pub { vec!["pub".into()] } else { vec![] },
+        complexity,
+    })
+}
+
+fn parse_struct(node: Node, content: &str) -> Option<FunctionInfo> {
+    let mut name = String::new();
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "type_identifier" {
+            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            break;
+        }
+    }
+
+    if name.is_empty() {
+        name = "?".to_string();
+    }
+
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    Some(FunctionInfo {
+        name,
+        line_start: start_line,
+        line_end: end_line,
+        parameters: vec![],
+        is_async: false,
+        is_method: false,
+        is_class: true,
+        docstring: None,
+        decorators: vec![],
+        complexity: 1,
+    })
 }

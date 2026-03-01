@@ -1,125 +1,215 @@
 // Author: kelexine (https://github.com/kelexine)
-// extractors/python.rs — Python function/class extraction
+// extractors/python.rs — Python function/class extraction via Tree-sitter
 
-use super::{Extractor, LineMap, estimate_complexity, parse_params};
+use super::{Extractor, estimate_complexity};
 use crate::models::FunctionInfo;
-use once_cell::sync::Lazy;
-use regex::Regex;
-
-static RE_PY_FN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?m)^(?P<indent>[ \t]*)(?P<async>async\s+)?def\s+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*\((?P<params>[^)]*)\)\s*(?:->[^:]+)?:").unwrap()
-});
-
-static RE_PY_CLASS: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?m)^(?P<indent>[ \t]*)class\s+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)(?:\((?P<bases>[^)]*)\))?\s*:").unwrap()
-});
-
-static RE_PY_DECORATOR: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?m)^[ \t]*@([a-zA-Z_][a-zA-Z0-9_.]*)").unwrap());
+use tree_sitter::{Node, Parser};
 
 pub struct PythonExtractor;
 
 impl Extractor for PythonExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
+        let mut parser = Parser::new();
+        if parser.set_language(&tree_sitter_python::LANGUAGE.into()).is_err() {
+            return vec![];
+        }
+
+        let tree = match parser.parse(content, None) {
+            Some(tree) => tree,
+            None => return vec![],
+        };
+
         let lines: Vec<&str> = content.lines().collect();
-        let line_map = LineMap::new(content);
         let mut functions = Vec::new();
 
-        for cap in RE_PY_FN.captures_iter(content) {
-            let m = cap.get(0).unwrap();
-            let line_start = line_map.offset_to_line(m.start());
-            let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
-            let params = parse_params(cap.name("params").map_or("", |p| p.as_str()));
-            let is_async = cap.name("async").is_some();
-            let indent = cap.name("indent").map_or(0, |i| i.as_str().len());
-            let is_method = params
-                .first()
-                .map(|p| p == "self" || p == "cls")
-                .unwrap_or(false);
-            let line_end = find_python_end(&lines, line_start, indent);
-            let block = &lines[line_start.saturating_sub(1)..line_end.min(lines.len())];
-            let complexity = estimate_complexity(block);
-            let decorators = collect_python_decorators(content, m.start());
-            let docstring = extract_py_docstring(block);
-
-            functions.push(FunctionInfo {
-                name,
-                line_start,
-                line_end,
-                parameters: params,
-                is_async,
-                is_method,
-                is_class: false,
-                docstring,
-                decorators,
-                complexity,
-            });
-        }
-
-        for cap in RE_PY_CLASS.captures_iter(content) {
-            let m = cap.get(0).unwrap();
-            let line_start = line_map.offset_to_line(m.start());
-            let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
-            let bases = parse_params(cap.name("bases").map_or("", |b| b.as_str()));
-            let indent = cap.name("indent").map_or(0, |i| i.as_str().len());
-            let line_end = find_python_end(&lines, line_start, indent);
-            functions.push(FunctionInfo {
-                name,
-                line_start,
-                line_end,
-                parameters: bases,
-                is_async: false,
-                is_method: false,
-                is_class: true,
-                docstring: None,
-                decorators: vec![],
-                complexity: 1,
-            });
-        }
+        traverse(tree.root_node(), content, &lines, &mut functions, false, Vec::new());
 
         functions.sort_by_key(|f| f.line_start);
         functions
     }
 }
 
-fn find_python_end(lines: &[&str], start_line: usize, base_indent: usize) -> usize {
-    for (i, line) in lines[start_line..].iter().enumerate() {
-        if line.trim().is_empty() || line.trim_start().starts_with('#') {
-            continue;
+fn traverse(
+    node: Node,
+    content: &str,
+    lines: &[&str],
+    functions: &mut Vec<FunctionInfo>,
+    in_class: bool,
+    mut pending_decorators: Vec<String>,
+) {
+    let kind = node.kind();
+    
+    if kind == "decorator" {
+        // Just extract the decorator text, e.g., "@staticmethod"
+        let dec_text = node.utf8_text(content.as_bytes()).unwrap_or("");
+        pending_decorators.push(dec_text.trim_start_matches('@').to_string());
+        return; // we don't need to traverse inside decorator
+    } else if kind == "decorated_definition" {
+        // Collect decorators and pass them to children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            traverse(child, content, lines, functions, in_class, pending_decorators.clone());
         }
-        let indent = line.len() - line.trim_start().len();
-        if indent <= base_indent {
-            return start_line + i;
-        }
+        return;
     }
-    lines.len()
+
+    if kind == "function_definition" {
+        functions.push(parse_function(node, content, lines, in_class, pending_decorators.clone()));
+        pending_decorators.clear();
+    } else if kind == "class_definition" {
+        functions.push(parse_class(node, content, lines, pending_decorators.clone()));
+        pending_decorators.clear();
+    }
+
+    let is_class_body = kind == "class_definition";
+    
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        // Only pass decorators down if we're in a decorated_definition (handled above)
+        // If we hit a normal statement, clear pending decorators (though they shouldn't leak)
+        traverse(child, content, lines, functions, in_class || is_class_body, Vec::new());
+    }
 }
 
-fn collect_python_decorators(content: &str, fn_start: usize) -> Vec<String> {
-    let before = &content[..fn_start];
-    let last_blank = before.rfind("\n\n").unwrap_or(0);
-    let segment = &before[last_blank..];
-    RE_PY_DECORATOR
-        .captures_iter(segment)
-        .map(|c| c.get(1).unwrap().as_str().to_string())
-        .collect()
-}
+fn parse_function(
+    node: Node,
+    content: &str,
+    lines: &[&str],
+    is_method: bool,
+    decorators: Vec<String>,
+) -> FunctionInfo {
+    let mut name = String::new();
+    let mut is_async = false;
+    let mut params_str = String::new();
+    let mut docstring = None;
 
-fn extract_py_docstring(block: &[&str]) -> Option<String> {
-    for line in block.iter().skip(1).take(5) {
-        let t = line.trim();
-        if t.starts_with("\"\"\"") || t.starts_with("'''") {
-            let quote = if t.starts_with("\"\"\"") {
-                "\"\"\""
-            } else {
-                "'''"
-            };
-            let inner = &t[3..];
-            if let Some(end) = inner.find(quote) {
-                return Some(inner[..end].trim().to_string());
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        let kind = child.kind();
+        if kind == "identifier" && name.is_empty() {
+            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        } else if kind == "async" {
+            is_async = true;
+        } else if kind == "parameters" {
+            params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        } else if kind == "block" {
+            // Find docstring
+            if child.child_count() > 0 {
+                let first_stmt = child.child(0).unwrap();
+                if first_stmt.kind() == "expression_statement" {
+                    if first_stmt.child_count() > 0 {
+                        let expr = first_stmt.child(0).unwrap();
+                        if expr.kind() == "string" {
+                            let doc = expr.utf8_text(content.as_bytes()).unwrap_or("");
+                            docstring = Some(clean_docstring(doc));
+                        }
+                    }
+                }
             }
-            return Some(inner.trim().to_string());
         }
     }
-    None
+
+    if name.is_empty() {
+        name = "?".to_string();
+    }
+
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    let block = &lines[start_line.saturating_sub(1)..end_line.min(lines.len())];
+    let complexity = estimate_complexity(block);
+
+    // Parse parameters
+    let mut parameters = Vec::new();
+    let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');
+    if !trimmed_params.is_empty() {
+        for p in trimmed_params.split(',') {
+            let p_trim = p.trim();
+            // simple split might fail on default args with commas (like tuples), 
+            // but for simple cases it's identical to the regex logic.
+            if !p_trim.is_empty() {
+                parameters.push(p_trim.to_string());
+            }
+        }
+    }
+
+    // Heuristic: If first param is self or cls, it's definitely a method
+    let actual_is_method = is_method || parameters.first().map(|p| p.starts_with("self") || p.starts_with("cls")).unwrap_or(false);
+
+    FunctionInfo {
+        name,
+        line_start: start_line,
+        line_end: end_line,
+        parameters,
+        is_async,
+        is_method: actual_is_method,
+        is_class: false,
+        docstring,
+        decorators,
+        complexity,
+    }
+}
+
+fn parse_class(
+    node: Node,
+    content: &str,
+    _lines: &[&str],
+    decorators: Vec<String>,
+) -> FunctionInfo {
+    let mut name = String::new();
+    let mut params_str = String::new();
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        let kind = child.kind();
+        if kind == "identifier" && name.is_empty() {
+            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        } else if kind == "argument_list" {
+            params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        }
+    }
+
+    if name.is_empty() {
+        name = "?".to_string();
+    }
+
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    let mut parameters = Vec::new();
+    let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');
+    if !trimmed_params.is_empty() {
+        for p in trimmed_params.split(',') {
+            let p_trim = p.trim();
+            if !p_trim.is_empty() {
+                parameters.push(p_trim.to_string());
+            }
+        }
+    }
+
+    FunctionInfo {
+        name,
+        line_start: start_line,
+        line_end: end_line,
+        parameters, // Used for bases in class
+        is_async: false,
+        is_method: false,
+        is_class: true,
+        docstring: None,
+        decorators,
+        complexity: 1,
+    }
+}
+
+fn clean_docstring(doc: &str) -> String {
+    let s = doc.trim();
+    if (s.starts_with("\"\"\"") && s.ends_with("\"\"\"") && s.len() >= 6) ||
+       (s.starts_with("'''") && s.ends_with("'''") && s.len() >= 6) {
+        s[3..s.len() - 3].trim().to_string()
+    } else if (s.starts_with('"') && s.ends_with('"') && s.len() >= 2) ||
+              (s.starts_with('\'') && s.ends_with('\'') && s.len() >= 2) {
+        s[1..s.len() - 1].trim().to_string()
+    } else {
+        s.to_string()
+    }
 }

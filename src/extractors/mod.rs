@@ -11,32 +11,10 @@ pub mod python;
 pub mod ruby;
 pub mod rust;
 pub mod swift;
+pub mod tree_sitter;
 
 use crate::models::FunctionInfo;
 use std::path::Path;
-
-pub struct LineMap {
-    offsets: Vec<usize>,
-}
-
-impl LineMap {
-    pub fn new(content: &str) -> Self {
-        let mut offsets = vec![0];
-        for (i, b) in content.bytes().enumerate() {
-            if b == b'\n' {
-                offsets.push(i + 1);
-            }
-        }
-        Self { offsets }
-    }
-
-    pub fn offset_to_line(&self, offset: usize) -> usize {
-        match self.offsets.binary_search(&offset) {
-            Ok(idx) => idx + 1,
-            Err(idx) => idx,
-        }
-    }
-}
 
 pub trait Extractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo>;
@@ -52,8 +30,14 @@ pub fn get_extractor(path: &Path) -> Option<Box<dyn Extractor>> {
     match ext.as_str() {
         ".rs" => Some(Box::new(rust::RustExtractor)),
         ".py" | ".pyw" | ".pyi" => Some(Box::new(python::PythonExtractor)),
-        ".js" | ".mjs" | ".cjs" | ".ts" | ".tsx" | ".jsx" => {
-            Some(Box::new(javascript::JavascriptExtractor))
+        ".js" | ".mjs" | ".cjs" | ".jsx" => {
+            Some(Box::new(javascript::JavascriptExtractor::new(tree_sitter_javascript::LANGUAGE.into())))
+        }
+        ".ts" | ".mts" => {
+            Some(Box::new(javascript::JavascriptExtractor::new(tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())))
+        }
+        ".tsx" => {
+            Some(Box::new(javascript::JavascriptExtractor::new(tree_sitter_typescript::LANGUAGE_TSX.into())))
         }
         ".go" => Some(Box::new(go::GoExtractor)),
         ".c" | ".h" | ".cpp" | ".cc" | ".cxx" | ".hpp" | ".hxx" => {
@@ -66,102 +50,6 @@ pub fn get_extractor(path: &Path) -> Option<Box<dyn Extractor>> {
         ".nim" | ".nims" => Some(Box::new(nim::NimExtractor)),
         _ => None,
     }
-}
-
-pub fn find_closing_brace(lines: &[&str], start_line: usize) -> usize {
-    let mut depth: i32 = 0;
-    let mut started = false;
-    let mut in_string = false;
-    let mut string_char = ' ';
-
-    for (i, line) in lines[start_line.saturating_sub(1)..].iter().enumerate() {
-        let mut chars = line.chars().peekable();
-        let mut escaped_eol = false;
-        while let Some(ch) = chars.next() {
-            if in_string {
-                if ch == '\\' {
-                    if chars.next().is_none() {
-                        escaped_eol = true;
-                    }
-                } else if ch == string_char {
-                    in_string = false;
-                }
-                continue;
-            }
-
-            match ch {
-                '"' | '`' => {
-                    in_string = true;
-                    string_char = ch;
-                }
-                '\'' => {
-                    let mut dist = 0;
-                    let mut found = false;
-                    for c in chars.clone() {
-                        dist += 1;
-                        if c == '\'' {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if found && dist < 12 {
-                        in_string = true;
-                        string_char = ch;
-                    }
-                }
-                '/' if chars.peek() == Some(&'/') => break, // Line comment
-                '{' => {
-                    depth += 1;
-                    started = true;
-                }
-                '}' => {
-                    depth -= 1;
-                    if started && depth <= 0 {
-                        return start_line + i;
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        // Reset string state if not explicitly continued or a backtick string
-        if in_string && !escaped_eol && string_char != '`' {
-            in_string = false;
-        }
-    }
-    (start_line + 80).min(lines.len())
-}
-
-pub fn parse_params(raw: &str) -> Vec<String> {
-    let mut params = Vec::new();
-    let mut current = String::new();
-    let mut depth = 0i32;
-
-    for ch in raw.chars() {
-        match ch {
-            '<' | '[' | '(' => {
-                depth += 1;
-                current.push(ch);
-            }
-            '>' | ']' | ')' => {
-                depth -= 1;
-                current.push(ch);
-            }
-            ',' if depth == 0 => {
-                let trimmed = current.trim().to_string();
-                if !trimmed.is_empty() && trimmed != "void" {
-                    params.push(trimmed);
-                }
-                current.clear();
-            }
-            _ => current.push(ch),
-        }
-    }
-    let trimmed = current.trim().to_string();
-    if !trimmed.is_empty() && trimmed != "void" {
-        params.push(trimmed);
-    }
-    params
 }
 
 pub fn estimate_complexity(block: &[&str]) -> u32 {
@@ -194,28 +82,5 @@ mod tests {
         ];
         // 1 (base) + 1 (if) + 1 (for) + 1 (if) + 1 (&&) + 2 (else if & if ) = 7
         assert_eq!(estimate_complexity(&block), 7);
-    }
-
-    #[test]
-    fn test_find_closing_brace_robust() {
-        let lines = vec![
-            "fn hello() {",
-            "  let x = \"}\"; // false brace",
-            "  if true {",
-            "    println!(\"{}\", x);",
-            "  }",
-            "}",
-        ];
-        // Should end at line 6
-        assert_eq!(find_closing_brace(&lines, 1), 6);
-    }
-
-    #[test]
-    fn test_line_map() {
-        let content = "line1\nline2\nline3";
-        let map = LineMap::new(content);
-        assert_eq!(map.offset_to_line(0), 1);
-        assert_eq!(map.offset_to_line(6), 2);
-        assert_eq!(map.offset_to_line(12), 3);
     }
 }

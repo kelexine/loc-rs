@@ -1,75 +1,153 @@
 // Author: kelexine (https://github.com/kelexine)
-// extractors/nim.rs — Nim function extraction
+// extractors/nim.rs — Nim function/class extraction via Tree-sitter
 
-use super::{Extractor, LineMap, estimate_complexity, parse_params};
+use super::{Extractor, estimate_complexity};
 use crate::models::FunctionInfo;
-use once_cell::sync::Lazy;
-use regex::Regex;
-
-static RE_NIM_FN: Lazy<Regex> = Lazy::new(|| {
-    // Matches: proc name*(args) or func name[T](args)
-    Regex::new(r"(?m)^(?P<indent>[ \t]*)(?:proc|func|method|iterator|macro|template)\s+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\*)?\s*(?:\[[^\]]*\])?\s*\((?P<params>[^)]*)\)").unwrap()
-});
+use tree_sitter::{Node, Parser};
 
 pub struct NimExtractor;
 
 impl Extractor for NimExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
-        let lines: Vec<&str> = content.lines().collect();
-        let line_map = LineMap::new(content);
-        let mut functions = Vec::new();
-
-        for cap in RE_NIM_FN.captures_iter(content) {
-            let m = cap.get(0).unwrap();
-            let line_start = line_map.offset_to_line(m.start());
-            let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
-            let params = parse_params(cap.name("params").map_or("", |p| p.as_str()));
-
-            let indent = cap.name("indent").map_or(0, |i| i.as_str().len());
-            let is_method = content[m.start()..m.end()].starts_with("method");
-
-            let line_end = find_indentation_end(&lines, line_start, indent);
-            let block = &lines[line_start.saturating_sub(1)..line_end.min(lines.len())];
-            let complexity = estimate_complexity(block);
-
-            // Nim's `*` indicates public export, treated as a decorator here
-            let is_exported = content[m.start()..m.end()].contains('*');
-            let decorators = if is_exported {
-                vec!["public(*)".into()]
-            } else {
-                vec![]
-            };
-
-            functions.push(FunctionInfo {
-                name,
-                line_start,
-                line_end,
-                parameters: params,
-                is_async: false,
-                is_method,
-                is_class: false,
-                docstring: None,
-                decorators,
-                complexity,
-            });
+        let mut parser = Parser::new();
+        if parser.set_language(&tree_sitter_nim::language()).is_err() {
+            return vec![];
         }
 
+        let tree = match parser.parse(content, None) {
+            Some(tree) => tree,
+            None => return vec![],
+        };
+
+        let lines: Vec<&str> = content.lines().collect();
+        let mut functions = Vec::new();
+
+        traverse(tree.root_node(), content, &lines, &mut functions);
+
+        functions.sort_by_key(|f| f.line_start);
         functions
     }
 }
 
-/// Tracks indentation changes to resolve block endings (Python/Nim style)
-fn find_indentation_end(lines: &[&str], start_line: usize, base_indent: usize) -> usize {
-    for (i, line) in lines[start_line..].iter().enumerate() {
-        if line.trim().is_empty() || line.trim_start().starts_with('#') {
-            continue;
+fn traverse(
+    node: Node,
+    content: &str,
+    lines: &[&str],
+    functions: &mut Vec<FunctionInfo>,
+) {
+    let kind = node.kind();
+
+    if kind == "proc_declaration" || kind == "func_declaration" || kind == "method_declaration" || kind == "iterator_declaration" || kind == "macro_declaration" || kind == "template_declaration" {
+        if let Some(info) = parse_function(node, content, lines, kind == "method_declaration") {
+            functions.push(info);
         }
-        let indent = line.len() - line.trim_start().len();
-        if indent <= base_indent {
-            return start_line + i;
+    } else if kind == "type_declaration" {
+        // Find object or ref object
+        let mut is_class = false;
+        let mut name = String::new();
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "type_symbol_declaration" && name.is_empty() {
+                name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            } else if child.kind() == "object_declaration" || child.kind() == "ref_object_declaration" {
+                is_class = true;
+            }
+        }
+
+        if is_class && !name.is_empty() {
+            let start_line = node.start_position().row + 1;
+            let end_line = node.end_position().row + 1;
+            
+            functions.push(FunctionInfo {
+                name,
+                line_start: start_line,
+                line_end: end_line,
+                parameters: vec![],
+                is_async: false,
+                is_method: false,
+                is_class: true,
+                docstring: None,
+                decorators: vec![],
+                complexity: 1,
+            });
         }
     }
-    lines.len()
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        traverse(child, content, lines, functions);
+    }
+}
+
+fn parse_function(
+    node: Node,
+    content: &str,
+    lines: &[&str],
+    is_method: bool,
+) -> Option<FunctionInfo> {
+    let mut name = String::new();
+    let mut params_str = String::new();
+    let mut is_exported = false;
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        let kind = child.kind();
+        if kind == "identifier" && name.is_empty() {
+            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        } else if kind == "exported_symbol" && name.is_empty() {
+            is_exported = true;
+            let mut inner_cursor = child.walk();
+            for inner_child in child.children(&mut inner_cursor) {
+                if inner_child.kind() == "identifier" {
+                    name = inner_child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+                    break;
+                }
+            }
+        } else if kind == "parameter_declaration_list" {
+            params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        }
+    }
+
+    if name.is_empty() {
+        return None;
+    }
+
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    let block = &lines[start_line.saturating_sub(1)..end_line.min(lines.len())];
+    let complexity = estimate_complexity(block);
+
+    let mut parameters = Vec::new();
+    let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');
+    if !trimmed_params.is_empty() {
+        for p in trimmed_params.split(';') {
+            let p_trim = p.trim();
+            if !p_trim.is_empty() {
+                parameters.push(p_trim.to_string());
+            }
+        }
+    }
+
+    let decorators = if is_exported {
+        vec!["public(*)".into()]
+    } else {
+        vec![]
+    };
+
+    Some(FunctionInfo {
+        name,
+        line_start: start_line,
+        line_end: end_line,
+        parameters,
+        is_async: false,
+        is_method,
+        is_class: false,
+        docstring: None,
+        decorators,
+        complexity,
+    })
 }
 
 #[cfg(test)]
@@ -89,12 +167,18 @@ method draw(s: Shape) =
   discard
 ";
         let extractor = NimExtractor;
-        let fns = extractor.extract(content);
+        let mut fns = extractor.extract(content);
+        fns.sort_by(|a, b| a.name.cmp(&b.name));
+        
         assert_eq!(fns.len(), 3);
-        assert_eq!(fns[0].name, "hello");
-        assert!(fns[0].decorators.contains(&"public(*)".to_string()));
-        assert_eq!(fns[1].name, "add");
-        assert_eq!(fns[2].name, "draw");
-        assert!(fns[2].is_method);
+        
+        let a = fns.iter().find(|f| f.name == "add").unwrap();
+        assert!(!a.is_method);
+        
+        let d = fns.iter().find(|f| f.name == "draw").unwrap();
+        assert!(d.is_method);
+        
+        let h = fns.iter().find(|f| f.name == "hello").unwrap();
+        assert!(h.decorators.contains(&"public(*)".to_string()));
     }
 }

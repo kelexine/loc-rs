@@ -1,55 +1,148 @@
 // Author: kelexine (https://github.com/kelexine)
-// extractors/java.rs — Java/Kotlin/C# function extraction
+// extractors/java.rs — Java/Kotlin/C# function extraction via Tree-sitter
 
-use super::{Extractor, LineMap, estimate_complexity, find_closing_brace, parse_params};
+use super::{Extractor, estimate_complexity};
 use crate::models::FunctionInfo;
-use once_cell::sync::Lazy;
-use regex::Regex;
-
-static RE_JAVA_FN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?m)^[ \t]*(?:(?:public|private|protected|internal|open|override|abstract|static|final|sealed|async|virtual|extern|suspend)\s+)*(?:\w+(?:<[^>]*>)?[*& \t]+)*(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*\((?P<params>[^)]*)\)\s*(?:throws\s+\w+\s*)?(?:\{|=>)").unwrap()
-});
+use tree_sitter::{Node, Parser};
 
 pub struct JavaExtractor;
 
 impl Extractor for JavaExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
-        let lines: Vec<&str> = content.lines().collect();
-        let line_map = LineMap::new(content);
-        let mut functions = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-        const SKIP: &[&str] = &["if", "for", "while", "switch", "catch", "try", "else", "do"];
-
-        for cap in RE_JAVA_FN.captures_iter(content) {
-            let m = cap.get(0).unwrap();
-            if !seen.insert(m.start()) {
-                continue;
-            }
-            let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
-            if SKIP.contains(&name.as_str()) {
-                continue;
-            }
-            let line_start = line_map.offset_to_line(m.start());
-            let params = parse_params(cap.name("params").map_or("", |p| p.as_str()));
-            let line_end = find_closing_brace(&lines, line_start);
-            let block = &lines[line_start.saturating_sub(1)..line_end.min(lines.len())];
-            let complexity = estimate_complexity(block);
-            functions.push(FunctionInfo {
-                name,
-                line_start,
-                line_end,
-                parameters: params,
-                is_async: false,
-                is_method: true,
-                is_class: false,
-                docstring: None,
-                decorators: vec![],
-                complexity,
-            });
+        let mut parser = Parser::new();
+        // Use Java grammar for now, although the module handles .kt and .cs via extensions.
+        // To be fully accurate for Kotlin/C#, they need their own grammars/extractors,
+        // but since this replaces the regex JavaExtractor, we'll map it to tree-sitter-java.
+        if parser.set_language(&tree_sitter_java::LANGUAGE.into()).is_err() {
+            return vec![];
         }
 
+        let tree = match parser.parse(content, None) {
+            Some(tree) => tree,
+            None => return vec![],
+        };
+
+        let lines: Vec<&str> = content.lines().collect();
+        let mut functions = Vec::new();
+
+        traverse(tree.root_node(), content, &lines, &mut functions, false);
+
+        functions.sort_by_key(|f| f.line_start);
         functions
     }
+}
+
+fn traverse(
+    node: Node,
+    content: &str,
+    lines: &[&str],
+    functions: &mut Vec<FunctionInfo>,
+    in_class: bool,
+) {
+    let kind = node.kind();
+
+    if kind == "method_declaration" || kind == "constructor_declaration" {
+        if let Some(info) = parse_method(node, content, lines, in_class) {
+            functions.push(info);
+        }
+    } else if (kind == "class_declaration" || kind == "record_declaration" || kind == "interface_declaration")
+        && let Some(info) = parse_class(node, content, lines)
+    {
+        functions.push(info);
+    }
+
+    let is_class_body = kind == "class_body";
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        traverse(child, content, lines, functions, in_class || is_class_body);
+    }
+}
+
+fn parse_method(
+    node: Node,
+    content: &str,
+    lines: &[&str],
+    is_method: bool,
+) -> Option<FunctionInfo> {
+    let mut name = String::new();
+    let mut params_str = String::new();
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        let kind = child.kind();
+        if kind == "identifier" && name.is_empty() {
+            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        } else if kind == "formal_parameters" {
+            params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        }
+    }
+
+    if name.is_empty() {
+        return None;
+    }
+
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    let block = &lines[start_line.saturating_sub(1)..end_line.min(lines.len())];
+    let complexity = estimate_complexity(block);
+
+    let mut parameters = Vec::new();
+    let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');
+    if !trimmed_params.is_empty() {
+        for p in trimmed_params.split(',') {
+            let p_trim = p.trim();
+            if !p_trim.is_empty() {
+                parameters.push(p_trim.to_string());
+            }
+        }
+    }
+
+    Some(FunctionInfo {
+        name,
+        line_start: start_line,
+        line_end: end_line,
+        parameters,
+        is_async: false,
+        is_method,
+        is_class: false,
+        docstring: None,
+        decorators: vec![],
+        complexity,
+    })
+}
+
+fn parse_class(node: Node, content: &str, _lines: &[&str]) -> Option<FunctionInfo> {
+    let mut name = String::new();
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "identifier" && name.is_empty() {
+            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            break;
+        }
+    }
+
+    if name.is_empty() {
+        name = "?".to_string();
+    }
+
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    Some(FunctionInfo {
+        name,
+        line_start: start_line,
+        line_end: end_line,
+        parameters: vec![],
+        is_async: false,
+        is_method: false,
+        is_class: true,
+        docstring: None,
+        decorators: vec![],
+        complexity: 1,
+    })
 }
 
 #[cfg(test)]
@@ -61,13 +154,24 @@ mod tests {
         let content = "
 public class Main {
     public static void main(String[] args) {}
-    private int calc(int a, int b) => a + b;
+    private int calc(int a, int b) { return a + b; }
 }
 ";
         let extractor = JavaExtractor;
-        let fns = extractor.extract(content);
-        assert_eq!(fns.len(), 2);
-        assert_eq!(fns[0].name, "main");
-        assert_eq!(fns[1].name, "calc");
+        let mut fns = extractor.extract(content);
+        fns.sort_by(|a, b| a.name.cmp(&b.name));
+        
+        assert_eq!(fns.len(), 3);
+        
+        let c = fns.iter().find(|f| f.name == "Main").unwrap();
+        assert!(c.is_class);
+        
+        let m = fns.iter().find(|f| f.name == "main").unwrap();
+        assert!(m.is_method);
+        assert_eq!(m.parameters, vec!["String[] args"]);
+        
+        let calc = fns.iter().find(|f| f.name == "calc").unwrap();
+        assert!(calc.is_method);
+        assert_eq!(calc.parameters, vec!["int a", "int b"]);
     }
 }

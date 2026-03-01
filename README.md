@@ -7,11 +7,12 @@
 
 ## Features
 
+- 
 - **Minimalist Dashboard**: Clean, borderless summary of all project metrics
 - **Code/Comment/Blank split**: Distinguishes between actual code, comments, and blank lines across dozens of languages
 - **Optional Tree view**: Recursive directory tree with per-file metrics (now opt-in via `--tree`)
 - **Parallel scanning** via [Rayon](https://docs.rs/rayon) — uses all CPU cores
-- **Function extraction** for 10 languages including Rust, Python, JS, Go, PHP, Swift, Ruby, and Nim
+- **Function extraction** (⚠️ Beta) Uses **Tree-sitter** for robust AST parsing across 10 languages (Rust, Python, JS/TS, Go, C/C++, Java/C#, PHP, Swift, Ruby, and Nim)
 - **Cyclomatic complexity** estimates per function
 - **Git integration** — respects `.gitignore` and `.locignore`, optional `git log` dates
 - **Interactive HTML Dashboard** — beautiful visual reports (`loc -e report.html`)
@@ -27,12 +28,12 @@
 ## Installation
 
 
-### From cargo
+### From [crates.io](https://crates.io/)
 
 ```bash
 cargo install loc-rs
 ```
-### From source (requires Rust ≥ 1.9.0)
+### From source (requires Rust ≥ 1.87.0)
 
 ```bash
 git clone https://github.com/kelexine/loc-rs
@@ -155,7 +156,11 @@ Language aliases are supported: `py`, `js`, `ts`, `rs`, `rb`, `sh`, `md`, `yml`,
 
 ---
 
-## Function Extraction Support
+## Function Extraction Support (Now using Tree-sitter) ⚠️ Beta
+
+> **Note:** The Tree-sitter powered function extraction is currently in **Beta (WIP)**. While it provides extreme accuracy, some language edge cases may still be actively refined.
+
+Function, method, and class extraction is fully powered by robust [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) AST parsing for extreme accuracy across complex codebases.
 
 | Language | Functions | Methods | Classes/Structs | Async | Decorators | Docstrings |
 |---|---|---|---|---|---|---|
@@ -163,12 +168,12 @@ Language aliases are supported: `py`, `js`, `ts`, `rs`, `rb`, `sh`, `md`, `yml`,
 | Python | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | JavaScript/TS | ✓ | ✓ | ✓ | ✓ | — | — |
 | Go | ✓ | ✓ | — | — | — | — |
-| C/C++ | ✓ | — | — | — | — | — |
-| Java/Kotlin/C# | ✓ | ✓ | — | — | — | — |
+| C/C++ | ✓ | ✓ | ✓ | — | — | — |
+| Java/Kotlin/C# | ✓ | ✓ | ✓ | — | — | — |
 | PHP | ✓ | ✓ | ✓ | — | — | — |
 | Swift | ✓ | ✓ | ✓ | ✓ | — | — |
 | Ruby | ✓ | ✓ | ✓ | — | — | — |
-| Nim | ✓ | ✓ | — | — | public(*) flag | — |
+| Nim | ✓ | ✓ | ✓ | — | public(*) flag | — |
 
 ---
 

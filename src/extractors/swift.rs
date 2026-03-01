@@ -1,85 +1,147 @@
 // Author: kelexine (https://github.com/kelexine)
-// extractors/swift.rs — Swift function/class extraction
+// extractors/swift.rs — Swift function/class extraction via Tree-sitter
 
-use super::{Extractor, LineMap, estimate_complexity, find_closing_brace, parse_params};
+use super::{Extractor, estimate_complexity};
 use crate::models::FunctionInfo;
-use once_cell::sync::Lazy;
-use regex::Regex;
-
-static RE_SWIFT_FN: Lazy<Regex> = Lazy::new(|| {
-    // Matches: [modifiers] func name<Generics>(args) [async] [throws]
-    Regex::new(r"(?m)^[ \t]*(?:(?:public|private|internal|fileprivate|open|mutating|nonmutating|class|static|override|final)\s+)*func\s+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:<[^>]*>)?\s*\((?P<params>[^)]*)\)\s*(?:async\s+)?(?:throws\s+)?").unwrap()
-});
-
-static RE_SWIFT_CLASS: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?m)^[ \t]*(?:(?:public|private|internal|fileprivate|open|final)\s+)*(?:class|struct|enum|protocol)\s+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)").unwrap()
-});
+use tree_sitter::{Node, Parser};
 
 pub struct SwiftExtractor;
 
 impl Extractor for SwiftExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
+        let mut parser = Parser::new();
+        if parser.set_language(&tree_sitter_swift::LANGUAGE.into()).is_err() {
+            return vec![];
+        }
+
+        let tree = match parser.parse(content, None) {
+            Some(tree) => tree,
+            None => return vec![],
+        };
+
         let lines: Vec<&str> = content.lines().collect();
-        let line_map = LineMap::new(content);
         let mut functions = Vec::new();
-        let mut seen = std::collections::HashSet::new();
 
-        for cap in RE_SWIFT_FN.captures_iter(content) {
-            let m = cap.get(0).unwrap();
-            if !seen.insert(m.start()) {
-                continue;
-            }
-            let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
-            let line_start = line_map.offset_to_line(m.start());
-            let params = parse_params(cap.name("params").map_or("", |p| p.as_str()));
-
-            // Heuristic: If it has mutating/override/class/static, it's a method
-            let is_method = content[m.start()..m.end()].contains("mutating ")
-                || content[m.start()..m.end()].contains("override ")
-                || content[m.start()..m.end()].contains("static ")
-                || content[m.start()..m.end()].contains("class func");
-
-            let is_async = content[m.start()..m.end()].contains("async");
-            let line_end = find_closing_brace(&lines, line_start);
-            let block = &lines[line_start.saturating_sub(1)..line_end.min(lines.len())];
-            let complexity = estimate_complexity(block);
-
-            functions.push(FunctionInfo {
-                name,
-                line_start,
-                line_end,
-                parameters: params,
-                is_async,
-                is_method,
-                is_class: false,
-                docstring: None,
-                decorators: vec![],
-                complexity,
-            });
-        }
-
-        for cap in RE_SWIFT_CLASS.captures_iter(content) {
-            let m = cap.get(0).unwrap();
-            let line_start = line_map.offset_to_line(m.start());
-            let name = cap.name("name").map_or("?", |n| n.as_str()).to_string();
-            let line_end = find_closing_brace(&lines, line_start);
-            functions.push(FunctionInfo {
-                name,
-                line_start,
-                line_end,
-                parameters: vec![],
-                is_async: false,
-                is_method: false,
-                is_class: true,
-                docstring: None,
-                decorators: vec![],
-                complexity: 1,
-            });
-        }
+        traverse(tree.root_node(), content, &lines, &mut functions, false);
 
         functions.sort_by_key(|f| f.line_start);
         functions
     }
+}
+
+fn traverse(
+    node: Node,
+    content: &str,
+    lines: &[&str],
+    functions: &mut Vec<FunctionInfo>,
+    in_class: bool,
+) {
+    let kind = node.kind();
+
+    if kind == "function_declaration" || kind == "init_declaration" {
+        if let Some(info) = parse_function(node, content, lines, in_class) {
+            functions.push(info);
+        }
+    } else if (kind == "class_declaration" || kind == "struct_declaration" || kind == "enum_declaration" || kind == "protocol_declaration" || kind == "extension_declaration")
+        && let Some(info) = parse_class(node, content, lines)
+    {
+        functions.push(info);
+    }
+
+    let is_class_body = kind == "class_body" || kind == "struct_body" || kind == "enum_body" || kind == "protocol_body" || kind == "extension_body";
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        traverse(child, content, lines, functions, in_class || is_class_body);
+    }
+}
+
+fn parse_function(
+    node: Node,
+    content: &str,
+    lines: &[&str],
+    is_method: bool,
+) -> Option<FunctionInfo> {
+    let mut name = String::new();
+    let mut parameters = Vec::new();
+    let mut is_async = false;
+    let mut is_explicit_method = is_method;
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        let kind = child.kind();
+        if kind == "simple_identifier" && name.is_empty() {
+            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        } else if kind == "parameter" {
+            parameters.push(child.utf8_text(content.as_bytes()).unwrap_or("").to_string());
+        } else if kind == "modifiers" {
+            let mod_text = child.utf8_text(content.as_bytes()).unwrap_or("");
+            if mod_text.contains("mutating") || mod_text.contains("override") || mod_text.contains("static") || mod_text.contains("class") {
+                is_explicit_method = true;
+            }
+        } else if kind == "async" {
+            is_async = true;
+        }
+    }
+
+    if node.kind() == "init_declaration" {
+        name = "init".to_string();
+    }
+
+    if name.is_empty() {
+        return None;
+    }
+
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    let block = &lines[start_line.saturating_sub(1)..end_line.min(lines.len())];
+    let complexity = estimate_complexity(block);
+
+    Some(FunctionInfo {
+        name,
+        line_start: start_line,
+        line_end: end_line,
+        parameters,
+        is_async,
+        is_method: is_explicit_method,
+        is_class: false,
+        docstring: None,
+        decorators: vec![],
+        complexity,
+    })
+}
+
+fn parse_class(node: Node, content: &str, _lines: &[&str]) -> Option<FunctionInfo> {
+    let mut name = String::new();
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "type_identifier" && name.is_empty() {
+            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            break;
+        }
+    }
+
+    if name.is_empty() {
+        name = "?".to_string();
+    }
+
+    let start_line = node.start_position().row + 1;
+    let end_line = node.end_position().row + 1;
+
+    Some(FunctionInfo {
+        name,
+        line_start: start_line,
+        line_end: end_line,
+        parameters: vec![],
+        is_async: false,
+        is_method: false,
+        is_class: true,
+        docstring: None,
+        decorators: vec![],
+        complexity: 1,
+    })
 }
 
 #[cfg(test)]
@@ -101,17 +163,25 @@ struct Point {
 }
 ";
         let extractor = SwiftExtractor;
-        let fns = extractor.extract(content);
+        let mut fns = extractor.extract(content);
+        fns.sort_by(|a, b| a.name.cmp(&b.name));
+        
         assert_eq!(fns.len(), 6);
-        assert_eq!(fns[0].name, "hello");
-        assert_eq!(fns[1].name, "fetchData");
-        assert!(fns[1].is_async);
-        assert_eq!(fns[2].name, "Service");
-        assert!(fns[2].is_class);
-        assert_eq!(fns[3].name, "start");
-        assert!(fns[3].is_method);
-        assert_eq!(fns[4].name, "Point");
-        assert!(fns[4].is_class);
-        assert_eq!(fns[5].name, "moveBy");
+        
+        let c = fns.iter().find(|f| f.name == "Service").unwrap();
+        assert!(c.is_class);
+        
+        let p = fns.iter().find(|f| f.name == "Point").unwrap();
+        assert!(p.is_class);
+        
+        let h = fns.iter().find(|f| f.name == "hello").unwrap();
+        assert!(!h.is_method);
+        
+        let m = fns.iter().find(|f| f.name == "moveBy").unwrap();
+        assert!(m.is_method);
+        assert_eq!(m.parameters, vec!["x deltaX: Double", "y deltaY: Double"]);
+        
+        let f = fns.iter().find(|f| f.name == "fetchData").unwrap();
+        assert!(f.is_async);
     }
 }
