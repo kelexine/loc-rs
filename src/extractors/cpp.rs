@@ -1,31 +1,22 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/cpp.rs — C/C++ function extraction via Tree-sitter
 
-use super::{Extractor, estimate_complexity};
+use super::{estimate_complexity, Extractor};
 use crate::models::FunctionInfo;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 pub struct CppExtractor;
 
 impl Extractor for CppExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
-        let mut parser = Parser::new();
-        if parser.set_language(&tree_sitter_cpp::LANGUAGE.into()).is_err() {
-            return vec![];
-        }
-
-        let tree = match parser.parse(content, None) {
-            Some(tree) => tree,
-            None => return vec![],
-        };
-
-        let lines: Vec<&str> = content.lines().collect();
-        let mut functions = Vec::new();
-
-        traverse(tree.root_node(), content, &lines, &mut functions, false);
-
-        functions.sort_by_key(|f| f.line_start);
-        functions
+        super::with_parsed_tree(tree_sitter_cpp::LANGUAGE.into(), content, |tree| {
+            let lines: Vec<&str> = content.lines().collect();
+            let mut functions = Vec::new();
+            traverse(tree.root_node(), content, &lines, &mut functions, false);
+            functions.sort_by_key(|f| f.line_start);
+            functions
+        })
+        .unwrap_or_default()
     }
 }
 
@@ -65,35 +56,51 @@ fn parse_function(
     let mut name = String::new();
     let mut params_str = String::new();
 
-    // In tree-sitter-cpp, the function_definition has a declarator child.
-    // That declarator might be a function_declarator, which in turn has an identifier (name)
-    // and a parameter_list.
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "function_declarator" {
             let mut inner_cursor = child.walk();
             for inner_child in child.children(&mut inner_cursor) {
                 let ikind = inner_child.kind();
-                if ikind == "identifier" || ikind == "field_identifier" || ikind == "destructor_name" {
-                    name = inner_child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+                if ikind == "identifier"
+                    || ikind == "field_identifier"
+                    || ikind == "destructor_name"
+                {
+                    name = inner_child
+                        .utf8_text(content.as_bytes())
+                        .unwrap_or("")
+                        .to_string();
                 } else if ikind == "parameter_list" {
-                    params_str = inner_child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+                    params_str = inner_child
+                        .utf8_text(content.as_bytes())
+                        .unwrap_or("")
+                        .to_string();
                 }
             }
         }
     }
 
-    // fallback if not found in immediate children (e.g. nested declarators)
-    if name.is_empty()
-        && let Some(decl) = find_descendant(node, "function_declarator")
-    {
-        let mut inner_cursor = decl.walk();
-        for inner_child in decl.children(&mut inner_cursor) {
-            let ikind = inner_child.kind();
-            if (ikind == "identifier" || ikind == "field_identifier" || ikind == "destructor_name") && name.is_empty() {
-                name = inner_child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
-            } else if ikind == "parameter_list" && params_str.is_empty() {
-                params_str = inner_child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+    // Fallback: search deeper for function_declarator
+    if name.is_empty() {
+        if let Some(decl) = find_descendant(node, "function_declarator") {
+            let mut inner_cursor = decl.walk();
+            for inner_child in decl.children(&mut inner_cursor) {
+                let ikind = inner_child.kind();
+                if (ikind == "identifier"
+                    || ikind == "field_identifier"
+                    || ikind == "destructor_name")
+                    && name.is_empty()
+                {
+                    name = inner_child
+                        .utf8_text(content.as_bytes())
+                        .unwrap_or("")
+                        .to_string();
+                } else if ikind == "parameter_list" && params_str.is_empty() {
+                    params_str = inner_child
+                        .utf8_text(content.as_bytes())
+                        .unwrap_or("")
+                        .to_string();
+                }
             }
         }
     }
@@ -184,30 +191,30 @@ mod tests {
 
     #[test]
     fn test_extract_cpp_functions() {
-        let content = "
+        let content = r#"
 void Hello() {}
 int main(int argc, char** argv) { return 0; }
 class Box {
 public:
     void SetWidth(double wid) {}
 };
-";
+"#;
         let extractor = CppExtractor;
         let mut fns = extractor.extract(content);
         fns.sort_by(|a, b| a.name.cmp(&b.name));
-        
+
         assert_eq!(fns.len(), 4);
-        
+
         let c = fns.iter().find(|f| f.name == "Box").unwrap();
         assert!(c.is_class);
-        
+
         let h = fns.iter().find(|f| f.name == "Hello").unwrap();
         assert!(!h.is_method);
-        
+
         let m = fns.iter().find(|f| f.name == "main").unwrap();
         assert!(!m.is_method);
         assert_eq!(m.parameters, vec!["int argc", "char** argv"]);
-        
+
         let s = fns.iter().find(|f| f.name == "SetWidth").unwrap();
         assert!(s.is_method);
         assert_eq!(s.parameters, vec!["double wid"]);

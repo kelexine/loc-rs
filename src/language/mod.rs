@@ -100,7 +100,6 @@ pub static BINARY_EXTENSIONS: Lazy<std::collections::HashSet<&'static str>> = La
         ".xz", ".rar", ".7z", ".exe", ".dll", ".so", ".dylib", ".bin", ".wasm", ".mp3", ".mp4",
         ".avi", ".mov", ".wav", ".flac", ".ogg", ".ttf", ".otf", ".woff", ".woff2", ".eot", ".pyc",
         ".pyo", ".class", ".o", ".a", ".lib", ".db", ".sqlite", ".sqlite3",
-        ".lock", // Cargo.lock, package-lock.json — useful but not always wanted
     ]
     .iter()
     .copied()

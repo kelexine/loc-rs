@@ -1,31 +1,22 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/swift.rs — Swift function/class extraction via Tree-sitter
 
-use super::{Extractor, estimate_complexity};
+use super::{estimate_complexity, Extractor};
 use crate::models::FunctionInfo;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 pub struct SwiftExtractor;
 
 impl Extractor for SwiftExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
-        let mut parser = Parser::new();
-        if parser.set_language(&tree_sitter_swift::LANGUAGE.into()).is_err() {
-            return vec![];
-        }
-
-        let tree = match parser.parse(content, None) {
-            Some(tree) => tree,
-            None => return vec![],
-        };
-
-        let lines: Vec<&str> = content.lines().collect();
-        let mut functions = Vec::new();
-
-        traverse(tree.root_node(), content, &lines, &mut functions, false);
-
-        functions.sort_by_key(|f| f.line_start);
-        functions
+        super::with_parsed_tree(tree_sitter_swift::LANGUAGE.into(), content, |tree| {
+            let lines: Vec<&str> = content.lines().collect();
+            let mut functions = Vec::new();
+            traverse(tree.root_node(), content, &lines, &mut functions, false);
+            functions.sort_by_key(|f| f.line_start);
+            functions
+        })
+        .unwrap_or_default()
     }
 }
 
@@ -42,13 +33,20 @@ fn traverse(
         if let Some(info) = parse_function(node, content, lines, in_class) {
             functions.push(info);
         }
-    } else if (kind == "class_declaration" || kind == "struct_declaration" || kind == "enum_declaration" || kind == "protocol_declaration" || kind == "extension_declaration")
+    } else if (kind == "class_declaration"
+        || kind == "struct_declaration"
+        || kind == "enum_declaration"
+        || kind == "protocol_declaration"
+        || kind == "extension_declaration")
         && let Some(info) = parse_class(node, content, lines)
     {
         functions.push(info);
     }
 
-    let is_class_body = kind == "class_body" || kind == "struct_body" || kind == "enum_body" || kind == "protocol_body" || kind == "extension_body";
+    let is_class_body = matches!(
+        kind,
+        "class_body" | "struct_body" | "enum_body" | "protocol_body" | "extension_body"
+    );
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
@@ -76,7 +74,11 @@ fn parse_function(
             parameters.push(child.utf8_text(content.as_bytes()).unwrap_or("").to_string());
         } else if kind == "modifiers" {
             let mod_text = child.utf8_text(content.as_bytes()).unwrap_or("");
-            if mod_text.contains("mutating") || mod_text.contains("override") || mod_text.contains("static") || mod_text.contains("class") {
+            if mod_text.contains("mutating")
+                || mod_text.contains("override")
+                || mod_text.contains("static")
+                || mod_text.contains("class")
+            {
                 is_explicit_method = true;
             }
         } else if kind == "async" {
@@ -150,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_extract_swift_functions() {
-        let content = "
+        let content = r#"
 import Foundation
 func hello() {}
 public func fetchData() async -> Data? { return nil }
@@ -161,26 +163,26 @@ struct Point {
     var x, y: Double
     mutating func moveBy(x deltaX: Double, y deltaY: Double) {}
 }
-";
+"#;
         let extractor = SwiftExtractor;
         let mut fns = extractor.extract(content);
         fns.sort_by(|a, b| a.name.cmp(&b.name));
-        
+
         assert_eq!(fns.len(), 6);
-        
+
         let c = fns.iter().find(|f| f.name == "Service").unwrap();
         assert!(c.is_class);
-        
+
         let p = fns.iter().find(|f| f.name == "Point").unwrap();
         assert!(p.is_class);
-        
+
         let h = fns.iter().find(|f| f.name == "hello").unwrap();
         assert!(!h.is_method);
-        
+
         let m = fns.iter().find(|f| f.name == "moveBy").unwrap();
         assert!(m.is_method);
         assert_eq!(m.parameters, vec!["x deltaX: Double", "y deltaY: Double"]);
-        
+
         let f = fns.iter().find(|f| f.name == "fetchData").unwrap();
         assert!(f.is_async);
     }

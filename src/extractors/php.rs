@@ -1,31 +1,22 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/php.rs — PHP function/class extraction via Tree-sitter
 
-use super::{Extractor, estimate_complexity};
+use super::{estimate_complexity, Extractor};
 use crate::models::FunctionInfo;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 pub struct PhpExtractor;
 
 impl Extractor for PhpExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
-        let mut parser = Parser::new();
-        if parser.set_language(&tree_sitter_php::LANGUAGE_PHP.into()).is_err() {
-            return vec![];
-        }
-
-        let tree = match parser.parse(content, None) {
-            Some(tree) => tree,
-            None => return vec![],
-        };
-
-        let lines: Vec<&str> = content.lines().collect();
-        let mut functions = Vec::new();
-
-        traverse(tree.root_node(), content, &lines, &mut functions, false);
-
-        functions.sort_by_key(|f| f.line_start);
-        functions
+        super::with_parsed_tree(tree_sitter_php::LANGUAGE_PHP.into(), content, |tree| {
+            let lines: Vec<&str> = content.lines().collect();
+            let mut functions = Vec::new();
+            traverse(tree.root_node(), content, &lines, &mut functions, false);
+            functions.sort_by_key(|f| f.line_start);
+            functions
+        })
+        .unwrap_or_default()
     }
 }
 
@@ -34,7 +25,7 @@ fn traverse(
     content: &str,
     lines: &[&str],
     functions: &mut Vec<FunctionInfo>,
-    _in_class: bool,
+    in_class: bool,
 ) {
     let kind = node.kind();
 
@@ -42,7 +33,9 @@ fn traverse(
         if let Some(info) = parse_function(node, content, lines, kind == "method_declaration") {
             functions.push(info);
         }
-    } else if (kind == "class_declaration" || kind == "interface_declaration" || kind == "trait_declaration")
+    } else if (kind == "class_declaration"
+        || kind == "interface_declaration"
+        || kind == "trait_declaration")
         && let Some(info) = parse_class(node, content, lines)
     {
         functions.push(info);
@@ -52,7 +45,7 @@ fn traverse(
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        traverse(child, content, lines, functions, _in_class || is_class_body);
+        traverse(child, content, lines, functions, in_class || is_class_body);
     }
 }
 
@@ -76,11 +69,9 @@ fn parse_function(
     }
 
     if name.is_empty() {
-        // Fallback for getting name in PHP tree-sitter
         if let Some(name_node) = node.child_by_field_name("name") {
             name = name_node.utf8_text(content.as_bytes()).unwrap_or("").to_string();
         } else {
-            // Some nodes might have identifier children directly
             let mut c2 = node.walk();
             for child in node.children(&mut c2) {
                 if child.kind() == "name" || child.kind() == "identifier" {
@@ -168,7 +159,7 @@ mod tests {
 
     #[test]
     fn test_extract_php() {
-        let content = "
+        let content = r#"
 <?php
 class User {
     public function getName($id) {
@@ -176,11 +167,11 @@ class User {
     }
 }
 function helper() {}
-";
+"#;
         let extractor = PhpExtractor;
         let mut fns = extractor.extract(content);
         fns.sort_by(|a, b| a.name.cmp(&b.name));
-        
+
         assert_eq!(fns.len(), 3);
         assert!(fns.iter().any(|f| f.name == "User" && f.is_class));
         assert!(fns.iter().any(|f| f.name == "getName" && f.is_method));

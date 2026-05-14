@@ -1,31 +1,22 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/rust.rs — Rust function/struct extraction via Tree-sitter
 
-use super::{Extractor, estimate_complexity};
+use super::{estimate_complexity, Extractor};
 use crate::models::FunctionInfo;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 pub struct RustExtractor;
 
 impl Extractor for RustExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
-        let mut parser = Parser::new();
-        if parser.set_language(&tree_sitter_rust::LANGUAGE.into()).is_err() {
-            return vec![];
-        }
-
-        let tree = match parser.parse(content, None) {
-            Some(tree) => tree,
-            None => return vec![],
-        };
-
-        let lines: Vec<&str> = content.lines().collect();
-        let mut functions = Vec::new();
-
-        traverse(tree.root_node(), content, &lines, &mut functions, false);
-
-        functions.sort_by_key(|f| f.line_start);
-        functions
+        super::with_parsed_tree(tree_sitter_rust::LANGUAGE.into(), content, |tree| {
+            let lines: Vec<&str> = content.lines().collect();
+            let mut functions = Vec::new();
+            traverse(tree.root_node(), content, &lines, &mut functions, false);
+            functions.sort_by_key(|f| f.line_start);
+            functions
+        })
+        .unwrap_or_default()
     }
 }
 
@@ -38,6 +29,42 @@ fn traverse(
 ) {
     let kind = node.kind();
     let is_impl = kind == "impl_item";
+
+    // Collect outer attributes that precede a function/struct item.
+    // In tree-sitter-rust outer attribute_item nodes are siblings, not children.
+    // We walk children of the current node and carry pending attributes forward.
+    if kind == "source_file" || kind == "impl_item" || kind == "block" {
+        let mut pending_attrs: Vec<String> = Vec::new();
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let ckind = child.kind();
+            if ckind == "attribute_item" {
+                let text = child.utf8_text(content.as_bytes()).unwrap_or("");
+                pending_attrs.push(text.to_string());
+            } else if ckind == "function_item" {
+                let is_test = pending_attrs.iter().any(|a| a.contains("test"));
+                pending_attrs.clear();
+                if !is_test {
+                    if let Some(info) = parse_function(child, content, lines, in_impl || is_impl) {
+                        functions.push(info);
+                    }
+                }
+            } else if ckind == "struct_item" {
+                pending_attrs.clear();
+                if let Some(info) = parse_struct(child, content) {
+                    functions.push(info);
+                }
+            } else if ckind == "impl_item" {
+                pending_attrs.clear();
+                // Recurse into impl blocks with in_impl=true
+                traverse(child, content, lines, functions, true);
+            } else {
+                pending_attrs.clear();
+                traverse(child, content, lines, functions, in_impl || is_impl);
+            }
+        }
+        return;
+    }
 
     if kind == "function_item" {
         if let Some(info) = parse_function(node, content, lines, in_impl) {
@@ -55,11 +82,15 @@ fn traverse(
     }
 }
 
-fn parse_function(node: Node, content: &str, lines: &[&str], is_method: bool) -> Option<FunctionInfo> {
+fn parse_function(
+    node: Node,
+    content: &str,
+    lines: &[&str],
+    is_method: bool,
+) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut is_async = false;
     let mut is_pub = false;
-    let mut has_test_attr = false;
     let mut params_str = String::new();
 
     let mut cursor = node.walk();
@@ -67,22 +98,17 @@ fn parse_function(node: Node, content: &str, lines: &[&str], is_method: bool) ->
         let kind = child.kind();
         if kind == "identifier" && name.is_empty() {
             name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
-        } else if kind == "async" {
-            is_async = true;
+        } else if kind == "function_modifiers" {
+            // In tree-sitter-rust, `async` lives inside function_modifiers
+            let mod_text = child.utf8_text(content.as_bytes()).unwrap_or("");
+            if mod_text.contains("async") {
+                is_async = true;
+            }
         } else if kind == "visibility_modifier" {
             is_pub = true;
         } else if kind == "parameters" {
             params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
-        } else if kind == "attribute_item" {
-            let attr_text = child.utf8_text(content.as_bytes()).unwrap_or("");
-            if attr_text.contains("test") {
-                has_test_attr = true;
-            }
         }
-    }
-
-    if has_test_attr {
-        return None;
     }
 
     if name.is_empty() {
@@ -95,7 +121,6 @@ fn parse_function(node: Node, content: &str, lines: &[&str], is_method: bool) ->
     let block = &lines[start_line.saturating_sub(1)..end_line.min(lines.len())];
     let complexity = estimate_complexity(block);
 
-    // Extract parameters
     let mut parameters = Vec::new();
     let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');
     if !trimmed_params.is_empty() {
@@ -151,4 +176,57 @@ fn parse_struct(node: Node, content: &str) -> Option<FunctionInfo> {
         decorators: vec![],
         complexity: 1,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_rust_functions() {
+        let content = r#"
+pub fn add(a: i32, b: i32) -> i32 { a + b }
+
+async fn fetch() {}
+
+struct Point { x: f64, y: f64 }
+
+impl Point {
+    pub fn new(x: f64, y: f64) -> Self { Point { x, y } }
+}
+"#;
+        let extractor = RustExtractor;
+        let mut fns = extractor.extract(content);
+        fns.sort_by(|a, b| a.name.cmp(&b.name));
+
+        // add, fetch, new, Point (struct)
+        assert_eq!(fns.len(), 4);
+
+        let add = fns.iter().find(|f| f.name == "add").unwrap();
+        assert!(!add.is_async);
+        assert!(add.decorators.contains(&"pub".to_string()));
+
+        let fetch = fns.iter().find(|f| f.name == "fetch").unwrap();
+        assert!(fetch.is_async);
+
+        let point = fns.iter().find(|f| f.name == "Point").unwrap();
+        assert!(point.is_class);
+
+        let new = fns.iter().find(|f| f.name == "new").unwrap();
+        assert!(new.is_method);
+    }
+
+    #[test]
+    fn test_rust_test_functions_excluded() {
+        let content = r#"
+#[test]
+fn my_test() {}
+
+fn real_fn() {}
+"#;
+        let extractor = RustExtractor;
+        let fns = extractor.extract(content);
+        assert_eq!(fns.len(), 1);
+        assert_eq!(fns[0].name, "real_fn");
+    }
 }

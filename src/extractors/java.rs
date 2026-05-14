@@ -1,34 +1,22 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/java.rs — Java/Kotlin/C# function extraction via Tree-sitter
 
-use super::{Extractor, estimate_complexity};
+use super::{estimate_complexity, Extractor};
 use crate::models::FunctionInfo;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 pub struct JavaExtractor;
 
 impl Extractor for JavaExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
-        let mut parser = Parser::new();
-        // Use Java grammar for now, although the module handles .kt and .cs via extensions.
-        // To be fully accurate for Kotlin/C#, they need their own grammars/extractors,
-        // but since this replaces the regex JavaExtractor, we'll map it to tree-sitter-java.
-        if parser.set_language(&tree_sitter_java::LANGUAGE.into()).is_err() {
-            return vec![];
-        }
-
-        let tree = match parser.parse(content, None) {
-            Some(tree) => tree,
-            None => return vec![],
-        };
-
-        let lines: Vec<&str> = content.lines().collect();
-        let mut functions = Vec::new();
-
-        traverse(tree.root_node(), content, &lines, &mut functions, false);
-
-        functions.sort_by_key(|f| f.line_start);
-        functions
+        super::with_parsed_tree(tree_sitter_java::LANGUAGE.into(), content, |tree| {
+            let lines: Vec<&str> = content.lines().collect();
+            let mut functions = Vec::new();
+            traverse(tree.root_node(), content, &lines, &mut functions, false);
+            functions.sort_by_key(|f| f.line_start);
+            functions
+        })
+        .unwrap_or_default()
     }
 }
 
@@ -45,7 +33,9 @@ fn traverse(
         if let Some(info) = parse_method(node, content, lines, in_class) {
             functions.push(info);
         }
-    } else if (kind == "class_declaration" || kind == "record_declaration" || kind == "interface_declaration")
+    } else if (kind == "class_declaration"
+        || kind == "record_declaration"
+        || kind == "interface_declaration")
         && let Some(info) = parse_class(node, content, lines)
     {
         functions.push(info);
@@ -151,25 +141,25 @@ mod tests {
 
     #[test]
     fn test_extract_java_functions() {
-        let content = "
+        let content = r#"
 public class Main {
     public static void main(String[] args) {}
     private int calc(int a, int b) { return a + b; }
 }
-";
+"#;
         let extractor = JavaExtractor;
         let mut fns = extractor.extract(content);
         fns.sort_by(|a, b| a.name.cmp(&b.name));
-        
+
         assert_eq!(fns.len(), 3);
-        
+
         let c = fns.iter().find(|f| f.name == "Main").unwrap();
         assert!(c.is_class);
-        
+
         let m = fns.iter().find(|f| f.name == "main").unwrap();
         assert!(m.is_method);
         assert_eq!(m.parameters, vec!["String[] args"]);
-        
+
         let calc = fns.iter().find(|f| f.name == "calc").unwrap();
         assert!(calc.is_method);
         assert_eq!(calc.parameters, vec!["int a", "int b"]);

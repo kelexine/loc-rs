@@ -51,6 +51,9 @@ pub fn file_to_value(fi: &FileInfo, include_functions: bool) -> serde_json::Valu
     let mut obj = json!({
         "path": fi.path.to_string_lossy(),
         "lines": fi.lines,
+        "code": fi.code,
+        "comment": fi.comment,
+        "blank": fi.blank,
         "is_binary": fi.is_binary,
         "extension": fi.extension(),
         "last_modified": fi.last_modified.map(|d| d.to_rfc3339()),

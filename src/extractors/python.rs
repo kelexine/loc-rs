@@ -1,31 +1,22 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/python.rs — Python function/class extraction via Tree-sitter
 
-use super::{Extractor, estimate_complexity};
+use super::{estimate_complexity, Extractor};
 use crate::models::FunctionInfo;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 pub struct PythonExtractor;
 
 impl Extractor for PythonExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
-        let mut parser = Parser::new();
-        if parser.set_language(&tree_sitter_python::LANGUAGE.into()).is_err() {
-            return vec![];
-        }
-
-        let tree = match parser.parse(content, None) {
-            Some(tree) => tree,
-            None => return vec![],
-        };
-
-        let lines: Vec<&str> = content.lines().collect();
-        let mut functions = Vec::new();
-
-        traverse(tree.root_node(), content, &lines, &mut functions, false, Vec::new());
-
-        functions.sort_by_key(|f| f.line_start);
-        functions
+        super::with_parsed_tree(tree_sitter_python::LANGUAGE.into(), content, |tree| {
+            let lines: Vec<&str> = content.lines().collect();
+            let mut functions = Vec::new();
+            traverse(tree.root_node(), content, &lines, &mut functions, false, Vec::new());
+            functions.sort_by_key(|f| f.line_start);
+            functions
+        })
+        .unwrap_or_default()
     }
 }
 
@@ -38,17 +29,38 @@ fn traverse(
     mut pending_decorators: Vec<String>,
 ) {
     let kind = node.kind();
-    
+
     if kind == "decorator" {
-        // Just extract the decorator text, e.g., "@staticmethod"
         let dec_text = node.utf8_text(content.as_bytes()).unwrap_or("");
         pending_decorators.push(dec_text.trim_start_matches('@').to_string());
-        return; // we don't need to traverse inside decorator
+        return;
     } else if kind == "decorated_definition" {
-        // Collect decorators and pass them to children
+        // Collect all decorator children, then parse the function/class child
+        // with those decorators.  We cannot use the sibling-based pending_decorators
+        // mechanism here because siblings have independent call frames.
+        let mut decorators: Vec<String> = Vec::new();
+        let mut def_node = None;
+
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            traverse(child, content, lines, functions, in_class, pending_decorators.clone());
+            match child.kind() {
+                "decorator" => {
+                    let dec_text = child.utf8_text(content.as_bytes()).unwrap_or("");
+                    decorators.push(dec_text.trim_start_matches('@').to_string());
+                }
+                "function_definition" | "class_definition" => {
+                    def_node = Some(child);
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(def) = def_node {
+            if def.kind() == "function_definition" {
+                functions.push(parse_function(def, content, lines, in_class, decorators));
+            } else {
+                functions.push(parse_class(def, content, lines, decorators));
+            }
         }
         return;
     }
@@ -62,11 +74,9 @@ fn traverse(
     }
 
     let is_class_body = kind == "class_definition";
-    
+
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        // Only pass decorators down if we're in a decorated_definition (handled above)
-        // If we hit a normal statement, clear pending decorators (though they shouldn't leak)
         traverse(child, content, lines, functions, in_class || is_class_body, Vec::new());
     }
 }
@@ -92,18 +102,13 @@ fn parse_function(
             is_async = true;
         } else if kind == "parameters" {
             params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
-        } else if kind == "block" {
-            // Find docstring
-            if child.child_count() > 0 {
-                let first_stmt = child.child(0).unwrap();
-                if first_stmt.kind() == "expression_statement" {
-                    if first_stmt.child_count() > 0 {
-                        let expr = first_stmt.child(0).unwrap();
-                        if expr.kind() == "string" {
-                            let doc = expr.utf8_text(content.as_bytes()).unwrap_or("");
-                            docstring = Some(clean_docstring(doc));
-                        }
-                    }
+        } else if kind == "block" && child.child_count() > 0 {
+            let first_stmt = child.child(0).unwrap();
+            if first_stmt.kind() == "expression_statement" && first_stmt.child_count() > 0 {
+                let expr = first_stmt.child(0).unwrap();
+                if expr.kind() == "string" {
+                    let doc = expr.utf8_text(content.as_bytes()).unwrap_or("");
+                    docstring = Some(clean_docstring(doc));
                 }
             }
         }
@@ -119,22 +124,22 @@ fn parse_function(
     let block = &lines[start_line.saturating_sub(1)..end_line.min(lines.len())];
     let complexity = estimate_complexity(block);
 
-    // Parse parameters
     let mut parameters = Vec::new();
     let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');
     if !trimmed_params.is_empty() {
         for p in trimmed_params.split(',') {
             let p_trim = p.trim();
-            // simple split might fail on default args with commas (like tuples), 
-            // but for simple cases it's identical to the regex logic.
             if !p_trim.is_empty() {
                 parameters.push(p_trim.to_string());
             }
         }
     }
 
-    // Heuristic: If first param is self or cls, it's definitely a method
-    let actual_is_method = is_method || parameters.first().map(|p| p.starts_with("self") || p.starts_with("cls")).unwrap_or(false);
+    let actual_is_method = is_method
+        || parameters
+            .first()
+            .map(|p| p.starts_with("self") || p.starts_with("cls"))
+            .unwrap_or(false);
 
     FunctionInfo {
         name,
@@ -191,7 +196,7 @@ fn parse_class(
         name,
         line_start: start_line,
         line_end: end_line,
-        parameters, // Used for bases in class
+        parameters,
         is_async: false,
         is_method: false,
         is_class: true,
@@ -203,13 +208,70 @@ fn parse_class(
 
 fn clean_docstring(doc: &str) -> String {
     let s = doc.trim();
-    if (s.starts_with("\"\"\"") && s.ends_with("\"\"\"") && s.len() >= 6) ||
-       (s.starts_with("'''") && s.ends_with("'''") && s.len() >= 6) {
+    if (s.starts_with("\"\"\"") && s.ends_with("\"\"\"") && s.len() >= 6)
+        || (s.starts_with("'''") && s.ends_with("'''") && s.len() >= 6)
+    {
         s[3..s.len() - 3].trim().to_string()
-    } else if (s.starts_with('"') && s.ends_with('"') && s.len() >= 2) ||
-              (s.starts_with('\'') && s.ends_with('\'') && s.len() >= 2) {
+    } else if (s.starts_with('"') && s.ends_with('"') && s.len() >= 2)
+        || (s.starts_with('\'') && s.ends_with('\'') && s.len() >= 2)
+    {
         s[1..s.len() - 1].trim().to_string()
     } else {
         s.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_python_functions() {
+        let content = r#"
+def plain(x, y):
+    pass
+
+async def fetch(url):
+    pass
+
+@staticmethod
+def decorated():
+    pass
+
+class MyClass:
+    def method(self):
+        pass
+"#;
+        let extractor = PythonExtractor;
+        let mut fns = extractor.extract(content);
+        fns.sort_by(|a, b| a.name.cmp(&b.name));
+
+        // decorated, fetch, method, MyClass, plain
+        assert_eq!(fns.len(), 5);
+
+        let fetch = fns.iter().find(|f| f.name == "fetch").unwrap();
+        assert!(fetch.is_async);
+
+        let dec = fns.iter().find(|f| f.name == "decorated").unwrap();
+        assert!(dec.decorators.contains(&"staticmethod".to_string()));
+
+        let cls = fns.iter().find(|f| f.name == "MyClass").unwrap();
+        assert!(cls.is_class);
+
+        let meth = fns.iter().find(|f| f.name == "method").unwrap();
+        assert!(meth.is_method);
+    }
+
+    #[test]
+    fn test_python_docstring_extraction() {
+        let content = r#"
+def greet(name):
+    """Say hello."""
+    return f"hello {name}"
+"#;
+        let extractor = PythonExtractor;
+        let fns = extractor.extract(content);
+        assert_eq!(fns.len(), 1);
+        assert_eq!(fns[0].docstring.as_deref(), Some("Say hello."));
     }
 }
