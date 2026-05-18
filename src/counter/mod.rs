@@ -22,19 +22,30 @@ use crate::models::{Breakdown, FileInfo, ScanResult};
 /// of how many files are tracked — the heavy HashMap is shared, not copied.
 #[derive(Clone)]
 pub struct ScanConfig {
+    /// Canonicalized target directory to scan.
     pub target_dir: PathBuf,
+    /// Optional extension allowlist (for `-t/--type` filters), including leading dots.
     pub allowed_extensions: Option<HashSet<String>>,
+    /// Optional line threshold for "large file" warnings.
     pub warn_size: Option<usize>,
+    /// Whether git commit dates should be resolved for each file.
     pub use_git_dates: bool,
+    /// Whether parallel file processing is enabled.
     pub parallel: bool,
+    /// Whether function extraction is enabled.
     pub extract_functions: bool,
+    /// Whether the target directory is inside a git work tree.
     pub is_git_repo: bool,
+    /// Patterns loaded from `.locignore`.
     pub custom_ignore: HashSet<String>,
+    /// Whether hidden files/directories should be included.
     pub include_hidden: bool,
+    /// Optional precomputed git date map for fast file timestamp lookups.
     pub git_dates_cache: Option<Arc<HashMap<PathBuf, DateTime<Utc>>>>,
 }
 
 impl ScanConfig {
+    /// Build a scan configuration from parsed CLI arguments and global config.
     pub fn from_args(args: &Args) -> Result<Self> {
         let target_dir = Path::new(&args.directory)
             .canonicalize()

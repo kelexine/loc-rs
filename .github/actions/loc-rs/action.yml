@@ -27,17 +27,38 @@ runs:
     
     - name: Run loc-rs Scan
       shell: bash
+      env:
+        TARGET_DIR: ${{ inputs.target_dir }}
+        WARN_SIZE: ${{ inputs.warn_size }}
+        ENABLE_FUNCTIONS: ${{ inputs.functions }}
+        EXTRA_ARGS: ${{ inputs.args }}
       run: |
-        OPTIONS=""
-        if [ -n "${{ inputs.warn_size }}" ]; then
-          OPTIONS="$OPTIONS --warn-size ${{ inputs.warn_size }}"
+        set -euo pipefail
+
+        if [[ -z "${TARGET_DIR}" ]]; then
+          echo "ERROR: target_dir cannot be empty" >&2
+          exit 1
         fi
-        if [ "${{ inputs.functions }}" == "true" ]; then
-          OPTIONS="$OPTIONS -f --func-analysis"
+
+        if [[ -n "${WARN_SIZE}" ]] && ! [[ "${WARN_SIZE}" =~ ^[0-9]+$ ]]; then
+          echo "ERROR: warn_size must be an integer" >&2
+          exit 1
         fi
-        if [ -n "${{ inputs.args }}" ]; then
-          OPTIONS="$OPTIONS ${{ inputs.args }}"
+
+        cmd=(loc "${TARGET_DIR}")
+
+        if [[ -n "${WARN_SIZE}" ]]; then
+          cmd+=(--warn-size "${WARN_SIZE}")
         fi
-        
-        echo "Running: loc ${{ inputs.target_dir }} $OPTIONS"
-        loc ${{ inputs.target_dir }} $OPTIONS
+
+        if [[ "${ENABLE_FUNCTIONS}" == "true" ]]; then
+          cmd+=(-f --func-analysis)
+        fi
+
+        if [[ -n "${EXTRA_ARGS}" ]]; then
+          read -r -a extra <<< "${EXTRA_ARGS}"
+          cmd+=("${extra[@]}")
+        fi
+
+        echo "Running:" "${cmd[@]}"
+        "${cmd[@]}"

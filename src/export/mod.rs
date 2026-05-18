@@ -9,14 +9,20 @@ use crate::models::ScanResult;
 use anyhow::Result;
 use std::path::Path;
 
+/// Supported export formats resolved from output filename extension.
 pub enum ExportFormat {
+    /// Pretty JSON document with metadata, breakdown, and file records.
     Json,
+    /// One JSON object per line (file-level records).
     Jsonl,
+    /// CSV file with file-level metrics.
     Csv,
+    /// Standalone HTML dashboard report.
     Html,
 }
 
 impl ExportFormat {
+    /// Resolve export format from a path extension.
     pub fn from_path(path: &Path) -> Option<Self> {
         let ext = path.extension()?.to_str()?.to_lowercase();
         match ext.as_str() {
@@ -29,6 +35,9 @@ impl ExportFormat {
     }
 }
 
+/// Export scan results to the file indicated by `output_path`.
+///
+/// The format is inferred from file extension (`.json`, `.jsonl`, `.csv`, `.html`/`.htm`).
 pub fn export(result: &ScanResult, output_path: &str, extract_functions: bool) -> Result<()> {
     let path = Path::new(output_path);
 

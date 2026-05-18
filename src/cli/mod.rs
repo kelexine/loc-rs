@@ -8,7 +8,7 @@ use clap::Parser;
 /// A fast, feature-rich LOC tool with function extraction, git integration,
 /// parallel processing, and multi-format export.
 ///
-/// Author: kelexine (https://github.com/kelexine)
+/// Author: kelexine (<https://github.com/kelexine>)
 #[derive(Parser, Debug)]
 #[command(
     name = "loc",

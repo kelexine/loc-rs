@@ -58,6 +58,29 @@ loc -e report.html -f
 
 ---
 
+## Documentation
+
+- [CONTRIBUTING](CONTRIBUTING.md): Local setup, test commands, and release workflow.
+- [Architecture Guide](docs/ARCHITECTURE.md): Module layout and runtime flow.
+- [Release Guide](docs/RELEASE.md): Step-by-step `cargo release` sequence.
+- [Security Notes](docs/SECURITY.md): Threat model and CI safety guidance.
+- [FAQ](docs/FAQ.md): Quick answers for common usage questions.
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md): Common failure modes and fixes.
+
+Generate Rust API docs locally:
+
+```bash
+cargo doc --no-deps
+```
+
+Open docs in your browser:
+
+```bash
+cargo doc --no-deps --open
+```
+
+---
+
 ## Usage
 
 ```text
@@ -118,6 +141,14 @@ You can persist defaults in `~/.config/loc-rs/config.toml` on Linux, or the equi
 warn_size = 500
 default_types = ["rust", "python"]
 always_extract_functions = true
+```
+
+`.locignore` (project root) is also supported for custom file and directory ignores:
+
+```text
+# Ignore generated snapshots
+snapshots
+*.min.js
 ```
 
 ---
@@ -206,6 +237,18 @@ Function extraction is available when `-f` or `--func-analysis` is enabled. The 
 | JSON Lines | `.jsonl` | One file record per line |
 | CSV | `.csv` | File-level metrics, with optional function columns |
 | HTML | `.html`, `.htm` | Standalone visual report with charts and searchable file table |
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Functions: 0` in summary | Function extraction not enabled | Run with `-f` or `--func-analysis` |
+| Unknown language warning (for example `dart`) | Language not in resolver map | Use a supported language or direct extension via `-t .ext` |
+| Missing untracked files in output | Running inside a git repo with default git-based discovery | Check `.gitignore`, or run with `--include-hidden` / adjust ignore rules |
+| `--git-dates` appears slow | Uses `git log` history traversal | Omit `--git-dates` for faster scans |
+| HTML report not opening as expected | Output path/extension mismatch | Export with `.html` or `.htm` extension |
 
 ---
 

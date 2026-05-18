@@ -178,6 +178,7 @@ fn print_tree_node(
 // Public display functions
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Render summary output, optional tree view, and optional detailed breakdown.
 pub fn display_results(
     result: &ScanResult,
     root: &Path,
@@ -331,6 +332,7 @@ fn display_breakdown(breakdown: &Breakdown, total_lines: usize, has_functions: b
     println!();
 }
 
+/// Render the function-analysis report for extracted functions and classes.
 pub fn display_function_analysis(result: &ScanResult, root: &Path) {
     let files_with_fns: Vec<_> = result
         .files
