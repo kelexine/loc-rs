@@ -60,6 +60,7 @@ fn main() {
         args.binary,
         args.tree,
         config.warn_size,
+        config.extract_functions,
     );
 
     // Optional function analysis

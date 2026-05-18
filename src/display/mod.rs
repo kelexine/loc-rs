@@ -185,6 +185,7 @@ pub fn display_results(
     show_binary: bool,
     show_tree: bool,
     warn_size: Option<usize>,
+    show_functions: bool,
 ) {
     let total_lines: usize = result.files.iter().map(|f| f.lines).sum();
     let text_files = result.text_file_count();
@@ -222,15 +223,20 @@ pub fn display_results(
         fmt_num(result.total_blank()).dimmed()
     );
 
-    if bin_files > 0 || total_fns > 0 {
+    if show_functions {
         println!(
             "  Functions        : {:<16}   Binary Files       : {:<16}",
             fmt_num(total_fns).magenta(),
             fmt_num(bin_files).yellow()
         );
+    } else if bin_files > 0 {
+        println!(
+            "  Binary Files       : {:<16}",
+            fmt_num(bin_files).yellow()
+        );
     }
 
-    if total_cls > 0 {
+    if show_functions && total_cls > 0 {
         println!(
             "  Classes/Structs  : {:<16}   ",
             fmt_num(total_cls).magenta()
@@ -257,7 +263,7 @@ pub fn display_results(
     println!();
 
     if show_details {
-        display_breakdown(&result.breakdown, total_lines, total_fns > 0);
+        display_breakdown(&result.breakdown, total_lines, show_functions);
     }
 }
 
