@@ -1,4 +1,4 @@
-# loc — Advanced Lines of Code Counter
+# loc - Advanced Lines of Code Counter
 
 > A fast, feature-rich LOC tool written in Rust.  
 > **Author:** [kelexine](https://github.com/kelexine)
@@ -7,21 +7,16 @@
 
 ## Features
 
-- 
-- **Minimalist Dashboard**: Clean, borderless summary of all project metrics
-- **Code/Comment/Blank split**: Distinguishes between actual code, comments, and blank lines across dozens of languages
-- **Optional Tree view**: Recursive directory tree with per-file metrics (now opt-in via `--tree`)
-- **Parallel scanning** via [Rayon](https://docs.rs/rayon) — uses all CPU cores
-- **Function extraction** (⚠️ Beta) Uses **Tree-sitter** for robust AST parsing across 10 languages (Rust, Python, JS/TS, Go, C/C++, Java/C#, PHP, Swift, Ruby, and Nim)
-- **Cyclomatic complexity** estimates per function
-- **Git integration** — respects `.gitignore` and `.locignore`, optional `git log` dates
-- **Interactive HTML Dashboard** — beautiful visual reports (`loc -e report.html`)
-- **Multi-format export** — JSON, JSONL, CSV, HTML
-- **Global Configuration** via `~/.config/loc-rs/config.toml`
-- **GitHub Action** wrapper included for CI/CD integration
-- **35+ languages** supported with aliases
-- **Size warnings** for oversized files
-- **BOM-aware binary detection** for UTF-16/32 text files
+- **Fast project scanning**: Counts text files across a target directory with optional Rayon-powered parallel processing.
+- **Code/comment/blank split**: Classifies source lines using language-aware single-line and block-comment rules.
+- **Tree view**: Renders a recursive project tree when `--tree` is enabled, with optional binary-file display.
+- **Function extraction**: Uses Tree-sitter-backed extractors for Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#/Scala, PHP, Swift, Ruby, and Nim.
+- **Complexity analysis**: Reports function length and a branch-count cyclomatic complexity estimate.
+- **Git-aware discovery**: Uses `git ls-files` in repositories and can attach last-modified dates from `git log`.
+- **Multi-format export**: Writes JSON, JSONL, CSV, and HTML reports.
+- **Global configuration**: Reads defaults from `~/.config/loc-rs/config.toml` through the platform config directory.
+- **Size warnings**: Flags files above a configured line threshold.
+- **BOM-aware binary detection**: Treats UTF-16/UTF-32 files as text instead of false-positive binary files.
 
 ---
 
@@ -33,42 +28,68 @@
 ```bash
 cargo install loc-rs
 ```
-### From source (requires Rust ≥ 1.87.0)
+
+### From source
+
+Requires Rust 1.92.0 or newer.
 
 ```bash
 git clone https://github.com/kelexine/loc-rs
 cd loc-rs
 cargo build --release
-# Binary at: ./target/release/loc
-
-# Install globally
 cargo install --path .
+```
+
+The release binary is built at `./target/release/loc`.
+
+---
+
+## Quick Start
+
+```bash
+loc
+loc src/
+loc -d
+loc --tree
+loc -f --func-analysis
+loc -t rust python typescript
+loc -e report.html -f
 ```
 
 ---
 
 ## Usage
 
-```
+```text
 loc [OPTIONS] [DIRECTORY]
 ```
 
-### Examples
+`DIRECTORY` defaults to the current directory.
+
+### Common workflows
+
+| Goal | Command |
+|---|---|
+| Scan the current directory | `loc` |
+| Scan a specific directory | `loc src/` |
+| Show per-extension metrics | `loc -d` |
+| Show a recursive tree | `loc --tree` |
+| Include binary files in the tree | `loc --tree -b` |
+| Extract functions and methods | `loc -f` |
+| Show function complexity analysis | `loc --func-analysis` |
+| Scan only selected languages | `loc -t rust python typescript` |
+| Warn for files above 500 lines | `loc --warn-size 500` |
+| Use Git commit dates | `loc --git-dates` |
+| Include hidden files and directories | `loc --include-hidden` |
+| Disable parallel processing | `loc --no-parallel` |
+
+### Export examples
 
 ```bash
-loc                            # Scan current directory (summary only)
-loc --tree                     # Show recursive project structure
-loc -d                         # Breakdown by extension (Code/Comment/Blank)
-loc -f                         # Extract functions/methods
-loc -f --func-analysis         # Full complexity report
-loc -t rust python             # Filter to Rust + Python only
-loc -e results.json            # Export to JSON
-loc -e stats.csv -f            # CSV with function data
-loc -e report.html             # Generate interactive HTML dashboard
-loc --warn-size 500            # Warn on files > 500 lines
-loc --git-dates                # Use git log for last-modified
-loc --no-parallel              # Disable parallel processing
-loc --include-hidden           # Include hidden files and directories
+loc -e results.json
+loc -e results.jsonl
+loc -e stats.csv -f
+loc -e report.html -f
 ```
 
 ### All Flags
@@ -81,7 +102,7 @@ loc --include-hidden           # Include hidden files and directories
 | `--functions` | `-f` | Extract functions, methods, classes |
 | `--func-analysis` | | Full analysis report (auto-enables `-f`) |
 | `--type LANG...` | `-t` | Filter by language(s) |
-| `--export FILE` | `-e` | Export results (`.json` / `.jsonl` / `.csv` / `.html`) |
+| `--export FILE` | `-e` | Export results to `.json`, `.jsonl`, `.csv`, or `.html` |
 | `--warn-size N` | | Warn for files exceeding N lines |
 | `--git-dates` | | Use `git log` for last-modified dates |
 | `--include-hidden` | `-H` | Include hidden files and directories |
@@ -91,7 +112,7 @@ loc --include-hidden           # Include hidden files and directories
 
 ## Configuration
 
-You can persist your default arguments globally in `~/.config/loc-rs/config.toml` (or your OS's equivalent standard config directory).
+You can persist defaults in `~/.config/loc-rs/config.toml` on Linux, or the equivalent platform config directory returned by the OS.
 
 ```toml
 warn_size = 500
@@ -103,7 +124,7 @@ always_extract_functions = true
 
 ## GitHub Action Integration
 
-Drop `loc-rs` into your CI/CD pipelines to monitor complexity and line counts.
+The repository includes a composite GitHub Action for CI line-count and complexity checks.
 
 ```yaml
 steps:
@@ -115,65 +136,77 @@ steps:
       functions: true
 ```
 
+Use static workflow values for `target_dir`, `warn_size`, and `args`; do not pass untrusted pull request, issue, or comment text into shell-backed action inputs.
+
 ---
 
 ## Supported Languages
 
 | Name | Extensions |
 |---|---|
-| `rust` | `.rs` |
-| `python` | `.py` `.pyw` `.pyi` |
-| `javascript` | `.js` `.mjs` `.cjs` |
-| `typescript` | `.ts` `.tsx` `.mts` |
-| `go` | `.go` |
-| `java` | `.java` |
-| `kotlin` | `.kt` `.kts` |
 | `c` | `.c` `.h` |
-| `cpp` | `.cpp` `.cc` `.cxx` `.hpp` |
 | `csharp` | `.cs` |
-| `swift` | `.swift` |
-| `ruby` | `.rb` |
-| `php` | `.php` |
-| `html` | `.html` `.htm` |
+| `cpp` | `.cpp` `.cc` `.cxx` `.hpp` `.hxx` `.h++` |
 | `css` | `.css` `.scss` `.sass` `.less` |
-| `shell` | `.sh` `.bash` `.zsh` `.fish` |
-| `markdown` | `.md` `.markdown` `.mdx` |
-| `json` | `.json` `.jsonl` |
-| `yaml` | `.yml` `.yaml` |
-| `toml` | `.toml` |
-| `xml` | `.xml` |
-| `vue` | `.vue` |
-| `svelte` | `.svelte` |
-| `scala` | `.scala` `.sc` |
-| `haskell` | `.hs` `.lhs` |
 | `elixir` | `.ex` `.exs` |
+| `go` | `.go` |
+| `haskell` | `.hs` `.lhs` |
+| `html` | `.html` `.htm` |
+| `java` | `.java` |
+| `javascript` | `.js` `.mjs` `.cjs` |
+| `json` | `.json` `.jsonl` `.json5` |
+| `jsx` | `.jsx` |
+| `kotlin` | `.kt` `.kts` |
 | `lua` | `.lua` |
-| `dart` | `.dart` |
-| `zig` | `.zig` |
+| `markdown` | `.md` `.markdown` `.mdx` |
 | `nim` | `.nim` `.nims` |
+| `php` | `.php` `.php3` `.php4` `.php5` `.phtml` |
+| `python` | `.py` `.pyw` `.pyi` |
+| `ruby` | `.rb` `.rake` `.gemspec` |
+| `rust` | `.rs` |
+| `scala` | `.scala` `.sc` |
+| `shell` | `.sh` `.bash` `.zsh` `.fish` |
+| `sql` | `.sql` |
+| `svelte` | `.svelte` |
+| `swift` | `.swift` |
+| `toml` | `.toml` |
+| `typescript` | `.ts` `.tsx` `.mts` |
+| `vue` | `.vue` |
+| `xml` | `.xml` `.xsl` `.xslt` |
+| `yaml` | `.yml` `.yaml` |
+| `zig` | `.zig` |
 
-Language aliases are supported: `py`, `js`, `ts`, `rs`, `rb`, `sh`, `md`, `yml`, `c++`, etc.
+Language aliases are supported for common names such as `py`, `js`, `ts`, `tsx`, `rs`, `rb`, `sh`, `bash`, `zsh`, `md`, `yml`, `kt`, `hs`, `c++`, `cxx`, `cc`, and `cs`.
 
 ---
 
-## Function Extraction Support (Now using Tree-sitter) ⚠️ Beta
+## Function Extraction Support
 
-> **Note:** The Tree-sitter powered function extraction is currently in **Beta (WIP)**. While it provides extreme accuracy, some language edge cases may still be actively refined.
-
-Function, method, and class extraction is fully powered by robust [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) AST parsing for extreme accuracy across complex codebases.
+Function extraction is available when `-f` or `--func-analysis` is enabled. The extractors return function names, line ranges, parameters where supported, async markers where supported, class/struct markers, docstrings where supported, decorators where supported, and a complexity estimate.
 
 | Language | Functions | Methods | Classes/Structs | Async | Decorators | Docstrings |
 |---|---|---|---|---|---|---|
 | Rust | ✓ | ✓ | ✓ (struct/impl) | ✓ | pub flag | — |
 | Python | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| JavaScript/TS | ✓ | ✓ | ✓ | ✓ | — | — |
+| JavaScript/TypeScript | ✓ | ✓ | ✓ | ✓ | — | — |
 | Go | ✓ | ✓ | — | — | — | — |
 | C/C++ | ✓ | ✓ | ✓ | — | — | — |
-| Java/Kotlin/C# | ✓ | ✓ | ✓ | — | — | — |
+| Java/Kotlin/C#/Scala | ✓ | ✓ | ✓ | — | — | — |
 | PHP | ✓ | ✓ | ✓ | — | — | — |
 | Swift | ✓ | ✓ | ✓ | ✓ | — | — |
 | Ruby | ✓ | ✓ | ✓ | — | — | — |
 | Nim | ✓ | ✓ | ✓ | — | public(*) flag | — |
+
+---
+
+## Export Formats
+
+| Format | Extension | Contents |
+|---|---|---|
+| JSON | `.json` | Metadata, extension breakdown, files, and optional function data |
+| JSON Lines | `.jsonl` | One file record per line |
+| CSV | `.csv` | File-level metrics, with optional function columns |
+| HTML | `.html`, `.htm` | Standalone visual report with charts and searchable file table |
 
 ---
 
