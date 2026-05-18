@@ -5,7 +5,6 @@ pub mod cpp;
 pub mod go;
 pub mod java;
 pub mod javascript;
-pub mod nim;
 pub mod php;
 pub mod python;
 pub mod ruby;
@@ -48,7 +47,6 @@ pub fn get_extractor(path: &Path) -> Option<Box<dyn Extractor>> {
         ".php" | ".php3" | ".php4" | ".php5" | ".phtml" => Some(Box::new(php::PhpExtractor)),
         ".swift" => Some(Box::new(swift::SwiftExtractor)),
         ".rb" | ".rake" | ".gemspec" => Some(Box::new(ruby::RubyExtractor)),
-        ".nim" | ".nims" => Some(Box::new(nim::NimExtractor)),
         _ => None,
     }
 }

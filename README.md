@@ -10,7 +10,7 @@
 - **Fast project scanning**: Counts text files across a target directory with optional Rayon-powered parallel processing.
 - **Code/comment/blank split**: Classifies source lines using language-aware single-line and block-comment rules.
 - **Tree view**: Renders a recursive project tree when `--tree` is enabled, with optional binary-file display.
-- **Function extraction**: Uses Tree-sitter-backed extractors for Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#/Scala, PHP, Swift, Ruby, and Nim.
+- **Function extraction**: Uses Tree-sitter-backed extractors for Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#/Scala, PHP, Swift, and Ruby.
 - **Complexity analysis**: Reports function length and a branch-count cyclomatic complexity estimate.
 - **Git-aware discovery**: Uses `git ls-files` in repositories and can attach last-modified dates from `git log`.
 - **Multi-format export**: Writes JSON, JSONL, CSV, and HTML reports.
@@ -195,7 +195,6 @@ Function extraction is available when `-f` or `--func-analysis` is enabled. The 
 | PHP | ✓ | ✓ | ✓ | — | — | — |
 | Swift | ✓ | ✓ | ✓ | ✓ | — | — |
 | Ruby | ✓ | ✓ | ✓ | — | — | — |
-| Nim | ✓ | ✓ | ✓ | — | public(*) flag | — |
 
 ---
 

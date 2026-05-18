@@ -42,7 +42,6 @@ tree-sitter-c = "0.24.1"
 tree-sitter-php = "0.24.2"
 tree-sitter-ruby = "0.23.1"
 tree-sitter-swift = "0.7.1"
-tree-sitter-nim = { git = "https://github.com/alaviss/tree-sitter-nim", version = "0.6.2" }
 
 [dev-dependencies]
 tempfile   = "3"
