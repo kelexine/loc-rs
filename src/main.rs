@@ -54,6 +54,16 @@ fn main() {
 
     // --json: emit machine-readable summary to stdout, skip coloured display
     if args.json {
+        // --func-analysis produces a terminal report incompatible with --json.
+        // Warn the user instead of silently dropping it; -f still populates
+        // per-file function data inside the JSON output.
+        if args.func_analysis {
+            eprintln!(
+                "{} --func-analysis is not supported with --json; \
+                 use -f to embed function data in JSON output",
+                "[WARN]".yellow().bold()
+            );
+        }
         if let Err(e) = export::json::print_json_stats(&result, config.extract_functions) {
             eprintln!("{} {}", "[ERROR]".red().bold(), e);
             process::exit(1);

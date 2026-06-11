@@ -15,7 +15,11 @@ use std::path::Path;
 /// either source interchangeably.  The `--json` flag routes here instead of
 /// the coloured terminal display.
 pub fn print_json_stats(result: &ScanResult, extract_functions: bool) -> Result<()> {
-    let text_files: Vec<_> = result.files.iter().filter(|f| !f.is_binary).collect();
+    let text_files: Vec<_> = result
+        .files
+        .iter()
+        .filter(|f| !f.is_binary && !f.is_lockfile)
+        .collect();
     let data = json!({
         "metadata": {
             "total_lines":    result.total_lines(),
@@ -44,14 +48,24 @@ pub fn print_json_stats(result: &ScanResult, extract_functions: bool) -> Result<
 }
 
 pub fn export_json(result: &ScanResult, path: &Path, extract_functions: bool) -> Result<()> {
-    let text_files: Vec<_> = result.files.iter().filter(|f| !f.is_binary).collect();
+    // Exclude both binary files and lockfiles — identical policy to print_json_stats.
+    let text_files: Vec<_> = result
+        .files
+        .iter()
+        .filter(|f| !f.is_binary && !f.is_lockfile)
+        .collect();
     let data = json!({
         "metadata": {
-            "total_lines": result.total_lines(),
-            "total_files": result.text_file_count(),
+            "total_lines":    result.total_lines(),
+            "total_code":     result.total_code(),
+            "total_comment":  result.total_comment(),
+            "total_blank":    result.total_blank(),
+            "total_files":    result.text_file_count(),
+            "binary_files":   result.binary_file_count(),
+            "lockfiles":      result.lockfile_count(),
             "total_functions": result.total_functions(),
-            "total_classes": result.total_classes(),
-            "timestamp": Utc::now().to_rfc3339(),
+            "total_classes":  result.total_classes(),
+            "timestamp":      Utc::now().to_rfc3339(),
             "function_extraction_enabled": extract_functions,
             "generator": concat!("loc v", env!("CARGO_PKG_VERSION"), " by kelexine (https://github.com/kelexine)"),
         },
@@ -71,7 +85,7 @@ pub fn export_jsonl(result: &ScanResult, path: &Path) -> Result<()> {
     let f = File::create(path).with_context(|| format!("Cannot create {}", path.display()))?;
     let mut writer = BufWriter::new(f);
 
-    for fi in result.files.iter().filter(|f| !f.is_binary) {
+    for fi in result.files.iter().filter(|f| !f.is_binary && !f.is_lockfile) {
         let line = serde_json::to_string(&file_to_value(fi, true))
             .with_context(|| "Failed to serialize JSONL record")?;
         writeln!(writer, "{}", line)?;
@@ -89,6 +103,7 @@ pub fn file_to_value(fi: &FileInfo, include_functions: bool) -> serde_json::Valu
         "comment": fi.comment,
         "blank": fi.blank,
         "is_binary": fi.is_binary,
+        "is_lockfile": fi.is_lockfile,
         "extension": fi.extension(),
         "last_modified": fi.last_modified.map(|d| d.to_rfc3339()),
     });

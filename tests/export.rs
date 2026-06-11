@@ -1,4 +1,5 @@
 // tests/export.rs — Testing exporting to CSV, JSON, HTML
+// Author: kelexine (https://github.com/kelexine)
 
 mod common;
 use common::{make_fixture, run_loc};
@@ -86,4 +87,308 @@ fn test_export_html() {
         "HTML missing injected JSON data"
     );
     assert!(content.contains("main.rs"), "HTML missing file data");
+}
+
+// ── Lockfile exclusion in JSON export ────────────────────────────────────────
+
+#[test]
+fn test_export_json_excludes_lockfiles_from_files_array() {
+    let fixture = make_fixture(&[
+        ("main.rs", "fn main() {}\n"),
+        ("Cargo.lock", "version = 3\n[[package]]\n"),
+    ]);
+    let out_json = fixture.path().join("out.json");
+
+    let out = run_loc(&[
+        fixture.path().to_str().unwrap(),
+        "-e",
+        out_json.to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+
+    let content = fs::read_to_string(&out_json).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+
+    let files = parsed["files"].as_array().expect("files must be array");
+    // Cargo.lock must not appear in the files array
+    assert!(
+        !files
+            .iter()
+            .any(|f| f["path"].as_str().unwrap_or("").contains("Cargo.lock")),
+        "Cargo.lock must not appear in export JSON files array: {content}"
+    );
+}
+
+#[test]
+fn test_export_json_metadata_has_lockfile_count() {
+    let fixture = make_fixture(&[
+        ("main.rs", "fn main() {}\n"),
+        ("Cargo.lock", "version = 3\n"),
+        ("yarn.lock", "# yarn lockfile v1\n"),
+    ]);
+    let out_json = fixture.path().join("out.json");
+
+    let out = run_loc(&[
+        fixture.path().to_str().unwrap(),
+        "-e",
+        out_json.to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+
+    let content = fs::read_to_string(&out_json).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+
+    let meta = &parsed["metadata"];
+    assert!(
+        meta.get("lockfiles").is_some(),
+        "metadata must include 'lockfiles' key"
+    );
+    assert_eq!(
+        meta["lockfiles"].as_u64().unwrap(),
+        2,
+        "lockfile count must be 2"
+    );
+    // Alignment check: all stat keys present (matches print_json_stats shape)
+    for key in &[
+        "total_lines",
+        "total_code",
+        "total_comment",
+        "total_blank",
+        "total_files",
+        "binary_files",
+        "lockfiles",
+    ] {
+        assert!(
+            meta.get(key).is_some(),
+            "metadata missing key '{key}'"
+        );
+    }
+}
+
+#[test]
+fn test_export_json_file_objects_include_is_lockfile_field() {
+    // Even though lockfiles are excluded from the files array, regular source
+    // files must carry the is_lockfile field (false) so consumers can rely on
+    // a stable schema.
+    let fixture = make_fixture(&[("app.py", "print('hi')\n")]);
+    let out_json = fixture.path().join("out.json");
+
+    let out = run_loc(&[
+        fixture.path().to_str().unwrap(),
+        "-e",
+        out_json.to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+
+    let content = fs::read_to_string(&out_json).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+    let files = parsed["files"].as_array().unwrap();
+    assert!(!files.is_empty(), "expected at least one file entry");
+    for f in files {
+        assert!(
+            f.get("is_lockfile").is_some(),
+            "file object missing 'is_lockfile' field: {f}"
+        );
+    }
+}
+
+#[test]
+fn test_jsonl_excludes_lockfiles() {
+    let fixture = make_fixture(&[
+        ("a.rs", "fn a() {}\n"),
+        ("Cargo.lock", "version = 3\n"),
+    ]);
+    let out_jsonl = fixture.path().join("out.jsonl");
+
+    let out = run_loc(&[
+        fixture.path().to_str().unwrap(),
+        "-e",
+        out_jsonl.to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+
+    let content = fs::read_to_string(&out_jsonl).unwrap();
+    let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
+    // Only a.rs should appear — Cargo.lock is excluded
+    assert_eq!(lines.len(), 1, "JSONL must contain exactly 1 record (lockfile excluded)");
+    let record: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    assert!(
+        record["path"].as_str().unwrap_or("").contains("a.rs"),
+        "JSONL record must be a.rs"
+    );
+}
+
+#[test]
+fn test_stdout_json_excludes_lockfiles_from_files_array() {
+    let fixture = make_fixture(&[
+        ("main.rs", "fn main() {}\n"),
+        ("Cargo.lock", "version = 3\n"),
+    ]);
+
+    let out = run_loc(&["--json", fixture.path().to_str().unwrap()]);
+    assert!(out.status.success());
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("--json stdout must be valid JSON");
+
+    let files = parsed["files"].as_array().expect("files must be array");
+    assert!(
+        !files
+            .iter()
+            .any(|f| f["path"].as_str().unwrap_or("").contains("Cargo.lock")),
+        "Cargo.lock must not appear in --json files array"
+    );
+}
+
+// ── Lockfile exclusion in JSON export ────────────────────────────────────────
+
+#[test]
+fn test_export_json_excludes_lockfiles_from_files_array() {
+    let fixture = make_fixture(&[
+        ("main.rs", "fn main() {}\n"),
+        ("Cargo.lock", "version = 3\n[[package]]\n"),
+    ]);
+    let out_json = fixture.path().join("out.json");
+
+    let out = run_loc(&[
+        fixture.path().to_str().unwrap(),
+        "-e",
+        out_json.to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+
+    let content = fs::read_to_string(&out_json).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+
+    let files = parsed["files"].as_array().expect("files must be array");
+    // Cargo.lock must not appear in the files array
+    assert!(
+        !files
+            .iter()
+            .any(|f| f["path"].as_str().unwrap_or("").contains("Cargo.lock")),
+        "Cargo.lock must not appear in export JSON files array: {content}"
+    );
+}
+
+#[test]
+fn test_export_json_metadata_has_lockfile_count() {
+    let fixture = make_fixture(&[
+        ("main.rs", "fn main() {}\n"),
+        ("Cargo.lock", "version = 3\n"),
+        ("yarn.lock", "# yarn lockfile v1\n"),
+    ]);
+    let out_json = fixture.path().join("out.json");
+
+    let out = run_loc(&[
+        fixture.path().to_str().unwrap(),
+        "-e",
+        out_json.to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+
+    let content = fs::read_to_string(&out_json).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+
+    let meta = &parsed["metadata"];
+    assert!(
+        meta.get("lockfiles").is_some(),
+        "metadata must include 'lockfiles' key"
+    );
+    assert_eq!(
+        meta["lockfiles"].as_u64().unwrap(),
+        2,
+        "lockfile count must be 2"
+    );
+    // Alignment check: all stat keys present (matches print_json_stats shape)
+    for key in &[
+        "total_lines",
+        "total_code",
+        "total_comment",
+        "total_blank",
+        "total_files",
+        "binary_files",
+        "lockfiles",
+    ] {
+        assert!(
+            meta.get(key).is_some(),
+            "metadata missing key '{key}'"
+        );
+    }
+}
+
+#[test]
+fn test_export_json_file_objects_include_is_lockfile_field() {
+    // Even though lockfiles are excluded from the files array, regular source
+    // files must carry the is_lockfile field (false) so consumers can rely on
+    // a stable schema.
+    let fixture = make_fixture(&[("app.py", "print('hi')\n")]);
+    let out_json = fixture.path().join("out.json");
+
+    let out = run_loc(&[
+        fixture.path().to_str().unwrap(),
+        "-e",
+        out_json.to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+
+    let content = fs::read_to_string(&out_json).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+    let files = parsed["files"].as_array().unwrap();
+    assert!(!files.is_empty(), "expected at least one file entry");
+    for f in files {
+        assert!(
+            f.get("is_lockfile").is_some(),
+            "file object missing 'is_lockfile' field: {f}"
+        );
+    }
+}
+
+#[test]
+fn test_jsonl_excludes_lockfiles() {
+    let fixture = make_fixture(&[
+        ("a.rs", "fn a() {}\n"),
+        ("Cargo.lock", "version = 3\n"),
+    ]);
+    let out_jsonl = fixture.path().join("out.jsonl");
+
+    let out = run_loc(&[
+        fixture.path().to_str().unwrap(),
+        "-e",
+        out_jsonl.to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+
+    let content = fs::read_to_string(&out_jsonl).unwrap();
+    let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
+    // Only a.rs should appear — Cargo.lock is excluded
+    assert_eq!(lines.len(), 1, "JSONL must contain exactly 1 record (lockfile excluded)");
+    let record: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    assert!(
+        record["path"].as_str().unwrap_or("").contains("a.rs"),
+        "JSONL record must be a.rs"
+    );
+}
+
+#[test]
+fn test_stdout_json_excludes_lockfiles_from_files_array() {
+    let fixture = make_fixture(&[
+        ("main.rs", "fn main() {}\n"),
+        ("Cargo.lock", "version = 3\n"),
+    ]);
+
+    let out = run_loc(&["--json", fixture.path().to_str().unwrap()]);
+    assert!(out.status.success());
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("--json stdout must be valid JSON");
+
+    let files = parsed["files"].as_array().expect("files must be array");
+    assert!(
+        !files
+            .iter()
+            .any(|f| f["path"].as_str().unwrap_or("").contains("Cargo.lock")),
+        "Cargo.lock must not appear in --json files array"
+    );
 }
