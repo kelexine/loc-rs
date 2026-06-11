@@ -86,4 +86,8 @@ pub struct Args {
     /// Show recursive directory tree (off by default)
     #[arg(long = "tree")]
     pub tree: bool,
+
+    /// Print scan summary as JSON to stdout (suppresses coloured output)
+    #[arg(long = "json")]
+    pub json: bool,
 }

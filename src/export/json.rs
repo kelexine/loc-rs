@@ -9,6 +9,40 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+/// Print a compact JSON summary of the scan to stdout.
+///
+/// The output shape mirrors the file-export format so scripts can consume
+/// either source interchangeably.  The `--json` flag routes here instead of
+/// the coloured terminal display.
+pub fn print_json_stats(result: &ScanResult, extract_functions: bool) -> Result<()> {
+    let text_files: Vec<_> = result.files.iter().filter(|f| !f.is_binary).collect();
+    let data = json!({
+        "metadata": {
+            "total_lines":    result.total_lines(),
+            "total_code":     result.total_code(),
+            "total_comment":  result.total_comment(),
+            "total_blank":    result.total_blank(),
+            "total_files":    result.text_file_count(),
+            "binary_files":   result.binary_file_count(),
+            "lockfiles":      result.lockfile_count(),
+            "total_functions": result.total_functions(),
+            "total_classes":  result.total_classes(),
+            "timestamp":      Utc::now().to_rfc3339(),
+            "function_extraction_enabled": extract_functions,
+            "generator": concat!("loc v", env!("CARGO_PKG_VERSION"), " by kelexine (https://github.com/kelexine)"),
+        },
+        "breakdown": result.breakdown,
+        "files": text_files.iter().map(|f| file_to_value(f, extract_functions)).collect::<Vec<_>>(),
+    });
+
+    let stdout = std::io::stdout();
+    serde_json::to_writer(stdout.lock(), &data)
+        .with_context(|| "Failed to serialize JSON stats to stdout")?;
+    // Trailing newline for clean shell output
+    println!();
+    Ok(())
+}
+
 pub fn export_json(result: &ScanResult, path: &Path, extract_functions: bool) -> Result<()> {
     let text_files: Vec<_> = result.files.iter().filter(|f| !f.is_binary).collect();
     let data = json!({

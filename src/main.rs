@@ -52,23 +52,31 @@ fn main() {
         }
     };
 
-    // Display tree + summary
-    display::display_results(
-        &result,
-        &config.target_dir,
-        args.detailed,
-        args.binary,
-        args.tree,
-        config.warn_size,
-        config.extract_functions,
-    );
+    // --json: emit machine-readable summary to stdout, skip coloured display
+    if args.json {
+        if let Err(e) = export::json::print_json_stats(&result, config.extract_functions) {
+            eprintln!("{} {}", "[ERROR]".red().bold(), e);
+            process::exit(1);
+        }
+    } else {
+        // Display tree + summary
+        display::display_results(
+            &result,
+            &config.target_dir,
+            args.detailed,
+            args.binary,
+            args.tree,
+            config.warn_size,
+            config.extract_functions,
+        );
 
-    // Optional function analysis
-    if args.func_analysis {
-        display::display_function_analysis(&result, &config.target_dir);
+        // Optional function analysis
+        if args.func_analysis {
+            display::display_function_analysis(&result, &config.target_dir);
+        }
     }
 
-    // Optional export
+    // Optional export (always honoured, even alongside --json)
     if let Some(ref output_file) = args.export
         && let Err(e) = export::export(&result, output_file, config.extract_functions)
     {
