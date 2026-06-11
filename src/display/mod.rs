@@ -106,6 +106,8 @@ fn print_tree_node(
 
             let name_colored = if fi.is_binary {
                 name.yellow().to_string()
+            } else if fi.is_lockfile {
+                name.bright_black().to_string()
             } else if fi.lines == 0 {
                 name.cyan().to_string()
             } else {
@@ -114,6 +116,12 @@ fn print_tree_node(
 
             let binary_tag = if fi.is_binary {
                 format!(" {}", "[binary]".yellow())
+            } else {
+                String::new()
+            };
+
+            let lockfile_tag = if fi.is_lockfile {
+                format!(" {}", "[lockfile]".bright_black())
             } else {
                 String::new()
             };
@@ -135,24 +143,29 @@ fn print_tree_node(
                 .map(|d| format!(" {}", format!("[{}]", d.format("%Y-%m-%d")).dimmed()))
                 .unwrap_or_default();
 
-            let lines_tag = if fi.is_binary {
+            // Lockfiles show no line count — their lines are not tracked.
+            let lines_tag = if fi.is_binary || fi.is_lockfile {
                 String::new()
             } else {
                 format!(" {}", format!("({})", fmt_num(fi.lines)).bright_black())
             };
 
             println!(
-                "{}{}{}{}{}{}{}{}",
+                "{}{}{}{}{}{}{}{}{}",
                 prefix,
                 connector,
                 name_colored,
                 lines_tag,
+                lockfile_tag,
                 func_tag,
                 date_tag,
                 binary_tag,
                 warn_tag
             );
-            total += fi.lines;
+            // Lockfiles do not contribute to the running directory total.
+            if !fi.is_lockfile {
+                total += fi.lines;
+            }
         }
         TreeNode::Dir(children) => {
             println!("{}{}{}", prefix, connector, name.blue().bold());
@@ -191,6 +204,7 @@ pub fn display_results(
     let total_lines: usize = result.files.iter().map(|f| f.lines).sum();
     let text_files = result.text_file_count();
     let bin_files = result.binary_file_count();
+    let lockfile_count = result.lockfile_count();
     let total_fns = result.total_functions();
     let total_cls = result.total_classes();
 
@@ -223,6 +237,13 @@ pub fn display_results(
         fmt_num(result.total_comment()).magenta(),
         fmt_num(result.total_blank()).dimmed()
     );
+
+    if lockfile_count > 0 {
+        println!(
+            "  Lockfiles              : {:<16}",
+            fmt_num(lockfile_count).bright_black()
+        );
+    }
 
     if show_functions {
         println!(

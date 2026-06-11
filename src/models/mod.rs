@@ -50,6 +50,12 @@ pub struct FileInfo {
     pub comment: usize,
     pub blank: usize,
     pub is_binary: bool,
+    /// True when this file is a recognised dependency lockfile.
+    ///
+    /// Lockfiles are shown in the tree with a `[lockfile]` tag but are
+    /// excluded from all line-count totals and the extension breakdown.
+    #[serde(default)]
+    pub is_lockfile: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_modified: Option<DateTime<Utc>>,
     pub functions: Vec<FunctionInfo>,
@@ -72,9 +78,19 @@ impl FileInfo {
             comment,
             blank,
             is_binary,
+            is_lockfile: false,
             last_modified,
             functions: Vec::new(),
         }
+    }
+
+    /// Mark this file as a dependency lockfile.
+    ///
+    /// Lockfiles are displayed in the tree with a `[lockfile]` tag but
+    /// contribute nothing to line-count statistics.
+    pub fn mark_as_lockfile(mut self) -> Self {
+        self.is_lockfile = true;
+        self
     }
 
     pub fn with_functions(mut self, functions: Vec<FunctionInfo>) -> Self {
@@ -132,7 +148,7 @@ impl ScanResult {
     pub fn total_lines(&self) -> usize {
         self.files
             .iter()
-            .filter(|f| !f.is_binary)
+            .filter(|f| !f.is_binary && !f.is_lockfile)
             .map(|f| f.lines)
             .sum()
     }
@@ -140,7 +156,7 @@ impl ScanResult {
     pub fn total_code(&self) -> usize {
         self.files
             .iter()
-            .filter(|f| !f.is_binary)
+            .filter(|f| !f.is_binary && !f.is_lockfile)
             .map(|f| f.code)
             .sum()
     }
@@ -148,7 +164,7 @@ impl ScanResult {
     pub fn total_comment(&self) -> usize {
         self.files
             .iter()
-            .filter(|f| !f.is_binary)
+            .filter(|f| !f.is_binary && !f.is_lockfile)
             .map(|f| f.comment)
             .sum()
     }
@@ -156,17 +172,25 @@ impl ScanResult {
     pub fn total_blank(&self) -> usize {
         self.files
             .iter()
-            .filter(|f| !f.is_binary)
+            .filter(|f| !f.is_binary && !f.is_lockfile)
             .map(|f| f.blank)
             .sum()
     }
 
     pub fn text_file_count(&self) -> usize {
-        self.files.iter().filter(|f| !f.is_binary).count()
+        self.files
+            .iter()
+            .filter(|f| !f.is_binary && !f.is_lockfile)
+            .count()
     }
 
     pub fn binary_file_count(&self) -> usize {
         self.files.iter().filter(|f| f.is_binary).count()
+    }
+
+    /// Number of recognised dependency lockfiles in the scan.
+    pub fn lockfile_count(&self) -> usize {
+        self.files.iter().filter(|f| f.is_lockfile).count()
     }
 
     pub fn total_functions(&self) -> usize {

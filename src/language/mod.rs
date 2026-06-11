@@ -93,6 +93,69 @@ pub fn resolve_extensions(input: &str) -> Vec<String> {
     vec![format!(".{}", lower)]
 }
 
+/// Known lockfile filenames matched case-sensitively by exact file name.
+///
+/// Lockfiles are surfaced in the tree view with a `[lockfile]` tag but are
+/// excluded from all line-count statistics.  If a lockfile is already
+/// covered by any ignore file (`.locignore`, `.gitignore`, etc.) it is
+/// excluded entirely from the scan — the ignore rule takes precedence.
+pub static LOCKFILE_NAMES: Lazy<std::collections::HashSet<&'static str>> = Lazy::new(|| {
+    [
+        // Rust / Cargo
+        "Cargo.lock",
+        // Node / JavaScript ecosystem
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "npm-shrinkwrap.json",
+        "bun.lockb",
+        // Ruby / Bundler
+        "Gemfile.lock",
+        // Python
+        "poetry.lock",
+        "Pipfile.lock",
+        "uv.lock",
+        "pdm.lock",
+        "pixi.lock",
+        "conda-lock.yml",
+        // PHP / Composer
+        "composer.lock",
+        // Go modules
+        "go.sum",
+        "go.work.sum",
+        // Elixir / Mix
+        "mix.lock",
+        // iOS / macOS
+        "Podfile.lock",
+        "Cartfile.resolved",
+        "Package.resolved",
+        // Nix
+        "flake.lock",
+        // Dart / Flutter
+        "pubspec.lock",
+        // Deno
+        "deno.lock",
+        // Gradle
+        "gradle.lockfile",
+        // .NET / NuGet
+        "packages.lock.json",
+        "paket.lock",
+    ]
+    .iter()
+    .copied()
+    .collect()
+});
+
+/// Returns `true` when the file name of `path` exactly matches a known
+/// dependency lockfile name.  The check is case-sensitive to match the
+/// conventions of the respective package managers.
+pub fn is_lockfile(path: &std::path::Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| LOCKFILE_NAMES.contains(n))
+        .unwrap_or(false)
+}
+
 /// Binary extensions — files with these extensions are skipped for line counting.
 pub static BINARY_EXTENSIONS: Lazy<std::collections::HashSet<&'static str>> = Lazy::new(|| {
     [
@@ -289,5 +352,70 @@ mod tests {
         assert!(langs.contains(&"rust"));
         assert!(langs.contains(&"python"));
         assert!(langs.is_sorted());
+    }
+
+    #[test]
+    fn test_lockfile_detection_known_names() {
+        use std::path::Path;
+        // Positive: all major ecosystems
+        for name in [
+            "Cargo.lock",
+            "package-lock.json",
+            "yarn.lock",
+            "pnpm-lock.yaml",
+            "npm-shrinkwrap.json",
+            "bun.lockb",
+            "Gemfile.lock",
+            "poetry.lock",
+            "Pipfile.lock",
+            "uv.lock",
+            "pdm.lock",
+            "composer.lock",
+            "go.sum",
+            "go.work.sum",
+            "mix.lock",
+            "Podfile.lock",
+            "Package.resolved",
+            "flake.lock",
+            "pubspec.lock",
+            "deno.lock",
+            "packages.lock.json",
+            "paket.lock",
+        ] {
+            assert!(
+                is_lockfile(Path::new(name)),
+                "{} should be recognised as a lockfile",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn test_lockfile_detection_negative() {
+        use std::path::Path;
+        // Not lockfiles
+        assert!(!is_lockfile(Path::new("Cargo.toml")));
+        assert!(!is_lockfile(Path::new("main.rs")));
+        assert!(!is_lockfile(Path::new("lockfile.txt")));
+        assert!(!is_lockfile(Path::new("go.mod")));
+        assert!(!is_lockfile(Path::new("package.json")));
+    }
+
+    #[test]
+    fn test_lockfile_detection_case_sensitive() {
+        use std::path::Path;
+        // Lockfile names are case-sensitive — package managers generate exact names.
+        assert!(!is_lockfile(Path::new("cargo.lock")));
+        assert!(!is_lockfile(Path::new("CARGO.LOCK")));
+        assert!(!is_lockfile(Path::new("Yarn.lock")));
+    }
+
+    #[test]
+    fn test_lockfile_detection_with_parent_dirs() {
+        use std::path::Path;
+        // Only the filename matters, not the directory prefix.
+        assert!(is_lockfile(Path::new("project/Cargo.lock")));
+        assert!(is_lockfile(Path::new("/home/user/app/yarn.lock")));
+        assert!(!is_lockfile(Path::new("deep/src/main.rs")));
     }
 }

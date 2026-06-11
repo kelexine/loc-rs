@@ -159,7 +159,7 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
     // Build breakdown
     let mut breakdown: Breakdown = std::collections::HashMap::new();
     for fi in &file_infos {
-        if fi.is_binary {
+        if fi.is_binary || fi.is_lockfile {
             continue;
         }
         let ext = if fi.extension().is_empty() {
@@ -193,6 +193,27 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
 fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>> {
     if !path.is_file() {
         return Ok(None);
+    }
+
+    // ── Lockfile fast-path ────────────────────────────────────────────────────
+    // Recognised lockfiles are shown in the tree but never line-counted.
+    // We resolve last-modified when --git-dates is active, then return without
+    // reading any file content.  This also bypasses the extension filter so
+    // that lockfiles always show up in the tree even when -t is specified.
+    if crate::language::is_lockfile(path) {
+        let last_modified = if config.use_git_dates {
+            if let Some(ref cache) = config.git_dates_cache {
+                cache.get(path).copied()
+            } else {
+                get_fs_last_modified(path)
+            }
+        } else {
+            None
+        };
+        return Ok(Some(
+            FileInfo::new(path.to_path_buf(), 0, 0, 0, 0, false, last_modified)
+                .mark_as_lockfile(),
+        ));
     }
 
     // Extension filter
