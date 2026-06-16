@@ -17,21 +17,97 @@ inputs:
     description: "Additional arguments to pass to loc-rs (e.g. --include-hidden, --git-dates)"
     required: false
     default: ""
+  fail_on_warn:
+    description: "Fail the build if any files exceed the warn_size limit"
+    required: false
+    default: "false"
+  export_html:
+    description: "Export and upload an HTML report as a workflow artifact"
+    required: false
+    default: "false"
+  export_json:
+    description: "Export and upload a JSON report as a workflow artifact"
+    required: false
+    default: "false"
+  version:
+    description: "Version of loc-rs to use (e.g., 'latest', 'v0.2.6', or 'source')"
+    required: false
+    default: "latest"
 runs:
   using: "composite"
   steps:
     - name: Install loc-rs
       shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
       run: |
-        cargo install loc-rs
-    
+        set -euo pipefail
+
+        if [[ "$VERSION" == "source" ]]; then
+          echo "Compiling loc-rs from source..."
+          cargo install loc-rs
+          exit 0
+        fi
+
+        OS="$(uname -s)"
+        ARCH="$(uname -m)"
+        
+        ASSET_NAME=""
+        if [[ "$OS" == "Linux" && "$ARCH" == "x86_64" ]]; then
+          if ldd --version 2>&1 | grep -qi 'musl'; then
+            ASSET_NAME="loc-linux-amd64-musl"
+          else
+            ASSET_NAME="loc-linux-amd64"
+          fi
+        elif [[ "$OS" == "Darwin" && "$ARCH" == "x86_64" ]]; then
+          ASSET_NAME="loc-macos-amd64"
+        elif [[ "$OS" == "Darwin" && "$ARCH" == "arm64" ]]; then
+          ASSET_NAME="loc-macos-arm64"
+        elif [[ "$OS" == *"MINGW"* || "$OS" == *"MSYS"* || "$OS" == *"CYGWIN"* ]] && [[ "$ARCH" == "x86_64" ]]; then
+          ASSET_NAME="loc-windows-amd64.exe"
+        fi
+
+        if [[ -z "$ASSET_NAME" ]]; then
+          echo "No pre-built binary mapped for OS: $OS Arch: $ARCH. Falling back to source build..."
+          cargo install loc-rs
+          exit 0
+        fi
+
+        DOWNLOAD_URL=""
+        if [[ "$VERSION" == "latest" ]]; then
+          DOWNLOAD_URL="https://github.com/kelexine/loc-rs/releases/latest/download/$ASSET_NAME"
+        else
+          DOWNLOAD_URL="https://github.com/kelexine/loc-rs/releases/download/$VERSION/$ASSET_NAME"
+        fi
+
+        TARGET_BIN="$RUNNER_TEMP/loc-bin/loc"
+        if [[ "$ASSET_NAME" == *".exe" ]]; then
+          TARGET_BIN="$RUNNER_TEMP/loc-bin/loc.exe"
+        fi
+
+        mkdir -p "$RUNNER_TEMP/loc-bin"
+        echo "Attempting to download $DOWNLOAD_URL..."
+        
+        if curl -sSLf "$DOWNLOAD_URL" -o "$TARGET_BIN"; then
+          chmod +x "$TARGET_BIN" || true
+          echo "$RUNNER_TEMP/loc-bin" >> $GITHUB_PATH
+          echo "Successfully installed pre-built binary to $TARGET_BIN"
+        else
+          echo "Failed to download $DOWNLOAD_URL. Falling back to cargo install..."
+          cargo install loc-rs
+        fi
+
     - name: Run loc-rs Scan
+      id: scan
       shell: bash
       env:
         TARGET_DIR: ${{ inputs.target_dir }}
         WARN_SIZE: ${{ inputs.warn_size }}
         ENABLE_FUNCTIONS: ${{ inputs.functions }}
         EXTRA_ARGS: ${{ inputs.args }}
+        EXPORT_HTML: ${{ inputs.export_html }}
+        EXPORT_JSON: ${{ inputs.export_json }}
+        FAIL_ON_WARN: ${{ inputs.fail_on_warn }}
       run: |
         set -euo pipefail
 
@@ -55,10 +131,46 @@ runs:
           cmd+=(-f --func-analysis)
         fi
 
+        if [[ "${EXPORT_HTML}" == "true" ]]; then
+          cmd+=(-e "loc-report.html")
+        fi
+
+        if [[ "${EXPORT_JSON}" == "true" ]]; then
+          cmd+=(-e "loc-report.json")
+        fi
+
         if [[ -n "${EXTRA_ARGS}" ]]; then
           read -r -a extra <<< "${EXTRA_ARGS}"
           cmd+=("${extra[@]}")
         fi
 
-        echo "Running:" "${cmd[@]}"
-        "${cmd[@]}"
+        echo "Running: ${cmd[@]}"
+        
+        # NO_COLOR=1 ensures ANSI escape codes are stripped for clean markdown
+        NO_COLOR=1 "${cmd[@]}" | tee loc-output.txt
+
+        echo "### loc-rs Analysis Summary" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+        cat loc-output.txt >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+        if [[ "${FAIL_ON_WARN}" == "true" ]] && grep -q "⚠ LARGE" loc-output.txt; then
+           echo "::error::File(s) exceeded the warn_size limit."
+           exit 1
+        fi
+
+    - name: Upload HTML Artifact
+      if: ${{ inputs.export_html == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: loc-report-html
+        path: loc-report.html
+        if-no-files-found: warn
+
+    - name: Upload JSON Artifact
+      if: ${{ inputs.export_json == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: loc-report-json
+        path: loc-report.json
+        if-no-files-found: warn
