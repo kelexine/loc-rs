@@ -1,7 +1,8 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/rust.rs — Rust function/struct extraction via Tree-sitter
 
-use super::{estimate_complexity, Extractor};
+use super::Extractor;
+use super::tree_sitter::ast_complexity;
 use crate::models::FunctionInfo;
 use tree_sitter::Node;
 
@@ -10,9 +11,8 @@ pub struct RustExtractor;
 impl Extractor for RustExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
         super::with_parsed_tree(tree_sitter_rust::LANGUAGE.into(), content, |tree| {
-            let lines: Vec<&str> = content.lines().collect();
             let mut functions = Vec::new();
-            traverse(tree.root_node(), content, &lines, &mut functions, false);
+            traverse(tree.root_node(), content, &mut functions, false);
             functions.sort_by_key(|f| f.line_start);
             functions
         })
@@ -23,7 +23,6 @@ impl Extractor for RustExtractor {
 fn traverse(
     node: Node,
     content: &str,
-    lines: &[&str],
     functions: &mut Vec<FunctionInfo>,
     in_impl: bool,
 ) {
@@ -45,7 +44,7 @@ fn traverse(
                 let is_test = pending_attrs.iter().any(|a| a.contains("test"));
                 pending_attrs.clear();
                 if !is_test {
-                    if let Some(info) = parse_function(child, content, lines, in_impl || is_impl) {
+                    if let Some(info) = parse_function(child, content, in_impl || is_impl) {
                         functions.push(info);
                     }
                 }
@@ -57,17 +56,17 @@ fn traverse(
             } else if ckind == "impl_item" {
                 pending_attrs.clear();
                 // Recurse into impl blocks with in_impl=true
-                traverse(child, content, lines, functions, true);
+                traverse(child, content, functions, true);
             } else {
                 pending_attrs.clear();
-                traverse(child, content, lines, functions, in_impl || is_impl);
+                traverse(child, content, functions, in_impl || is_impl);
             }
         }
         return;
     }
 
     if kind == "function_item" {
-        if let Some(info) = parse_function(node, content, lines, in_impl) {
+        if let Some(info) = parse_function(node, content, in_impl) {
             functions.push(info);
         }
     } else if kind == "struct_item" {
@@ -78,14 +77,13 @@ fn traverse(
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        traverse(child, content, lines, functions, in_impl || is_impl);
+        traverse(child, content, functions, in_impl || is_impl);
     }
 }
 
 fn parse_function(
     node: Node,
     content: &str,
-    lines: &[&str],
     is_method: bool,
 ) -> Option<FunctionInfo> {
     let mut name = String::new();
@@ -118,8 +116,7 @@ fn parse_function(
     let start_line = node.start_position().row + 1;
     let end_line = node.end_position().row + 1;
 
-    let block = &lines[start_line.saturating_sub(1)..end_line.min(lines.len())];
-    let complexity = estimate_complexity(block);
+    let complexity = ast_complexity(node, content.as_bytes());
 
     let mut parameters = Vec::new();
     let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');

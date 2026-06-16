@@ -1,7 +1,8 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/swift.rs — Swift function/class extraction via Tree-sitter
 
-use super::{estimate_complexity, Extractor};
+use super::Extractor;
+use super::tree_sitter::ast_complexity;
 use crate::models::FunctionInfo;
 use tree_sitter::Node;
 
@@ -10,9 +11,8 @@ pub struct SwiftExtractor;
 impl Extractor for SwiftExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
         super::with_parsed_tree(tree_sitter_swift::LANGUAGE.into(), content, |tree| {
-            let lines: Vec<&str> = content.lines().collect();
             let mut functions = Vec::new();
-            traverse(tree.root_node(), content, &lines, &mut functions, false);
+            traverse(tree.root_node(), content, &mut functions, false);
             functions.sort_by_key(|f| f.line_start);
             functions
         })
@@ -23,14 +23,13 @@ impl Extractor for SwiftExtractor {
 fn traverse(
     node: Node,
     content: &str,
-    lines: &[&str],
     functions: &mut Vec<FunctionInfo>,
     in_class: bool,
 ) {
     let kind = node.kind();
 
     if kind == "function_declaration" || kind == "init_declaration" {
-        if let Some(info) = parse_function(node, content, lines, in_class) {
+        if let Some(info) = parse_function(node, content, in_class) {
             functions.push(info);
         }
     } else if (kind == "class_declaration"
@@ -38,7 +37,7 @@ fn traverse(
         || kind == "enum_declaration"
         || kind == "protocol_declaration"
         || kind == "extension_declaration")
-        && let Some(info) = parse_class(node, content, lines)
+        && let Some(info) = parse_class(node, content)
     {
         functions.push(info);
     }
@@ -50,14 +49,13 @@ fn traverse(
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        traverse(child, content, lines, functions, in_class || is_class_body);
+        traverse(child, content, functions, in_class || is_class_body);
     }
 }
 
 fn parse_function(
     node: Node,
     content: &str,
-    lines: &[&str],
     is_method: bool,
 ) -> Option<FunctionInfo> {
     let mut name = String::new();
@@ -97,8 +95,7 @@ fn parse_function(
     let start_line = node.start_position().row + 1;
     let end_line = node.end_position().row + 1;
 
-    let block = &lines[start_line.saturating_sub(1)..end_line.min(lines.len())];
-    let complexity = estimate_complexity(block);
+    let complexity = ast_complexity(node, content.as_bytes());
 
     Some(FunctionInfo {
         name,
@@ -114,7 +111,7 @@ fn parse_function(
     })
 }
 
-fn parse_class(node: Node, content: &str, _lines: &[&str]) -> Option<FunctionInfo> {
+fn parse_class(node: Node, content: &str) -> Option<FunctionInfo> {
     let mut name = String::new();
 
     let mut cursor = node.walk();

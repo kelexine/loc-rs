@@ -1,7 +1,8 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/go.rs — Go function extraction via Tree-sitter
 
-use super::{estimate_complexity, Extractor};
+use super::Extractor;
+use super::tree_sitter::ast_complexity;
 use crate::models::FunctionInfo;
 use tree_sitter::Node;
 
@@ -10,9 +11,8 @@ pub struct GoExtractor;
 impl Extractor for GoExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
         super::with_parsed_tree(tree_sitter_go::LANGUAGE.into(), content, |tree| {
-            let lines: Vec<&str> = content.lines().collect();
             let mut functions = Vec::new();
-            traverse(tree.root_node(), content, &lines, &mut functions);
+            traverse(tree.root_node(), content, &mut functions);
             functions.sort_by_key(|f| f.line_start);
             functions
         })
@@ -20,29 +20,28 @@ impl Extractor for GoExtractor {
     }
 }
 
-fn traverse(node: Node, content: &str, lines: &[&str], functions: &mut Vec<FunctionInfo>) {
+fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>) {
     let kind = node.kind();
 
     if kind == "function_declaration" {
-        if let Some(info) = parse_function(node, content, lines, false) {
+        if let Some(info) = parse_function(node, content, false) {
             functions.push(info);
         }
     } else if kind == "method_declaration" {
-        if let Some(info) = parse_function(node, content, lines, true) {
+        if let Some(info) = parse_function(node, content, true) {
             functions.push(info);
         }
     }
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        traverse(child, content, lines, functions);
+        traverse(child, content, functions);
     }
 }
 
 fn parse_function(
     node: Node,
     content: &str,
-    lines: &[&str],
     is_method: bool,
 ) -> Option<FunctionInfo> {
     let mut name = String::new();
@@ -65,8 +64,7 @@ fn parse_function(
     let start_line = node.start_position().row + 1;
     let end_line = node.end_position().row + 1;
 
-    let block = &lines[start_line.saturating_sub(1)..end_line.min(lines.len())];
-    let complexity = estimate_complexity(block);
+    let complexity = ast_complexity(node, content.as_bytes());
 
     let mut parameters = Vec::new();
     let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');

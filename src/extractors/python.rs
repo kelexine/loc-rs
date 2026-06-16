@@ -1,7 +1,8 @@
 // Author: kelexine (https://github.com/kelexine)
 // extractors/python.rs — Python function/class extraction via Tree-sitter
 
-use super::{estimate_complexity, Extractor};
+use super::Extractor;
+use super::tree_sitter::ast_complexity;
 use crate::models::FunctionInfo;
 use tree_sitter::Node;
 
@@ -10,9 +11,8 @@ pub struct PythonExtractor;
 impl Extractor for PythonExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
         super::with_parsed_tree(tree_sitter_python::LANGUAGE.into(), content, |tree| {
-            let lines: Vec<&str> = content.lines().collect();
             let mut functions = Vec::new();
-            traverse(tree.root_node(), content, &lines, &mut functions, false, Vec::new());
+            traverse(tree.root_node(), content, &mut functions, false, Vec::new());
             functions.sort_by_key(|f| f.line_start);
             functions
         })
@@ -23,7 +23,6 @@ impl Extractor for PythonExtractor {
 fn traverse(
     node: Node,
     content: &str,
-    lines: &[&str],
     functions: &mut Vec<FunctionInfo>,
     in_class: bool,
     mut pending_decorators: Vec<String>,
@@ -57,19 +56,19 @@ fn traverse(
 
         if let Some(def) = def_node {
             if def.kind() == "function_definition" {
-                functions.push(parse_function(def, content, lines, in_class, decorators));
+                functions.push(parse_function(def, content, in_class, decorators));
             } else {
-                functions.push(parse_class(def, content, lines, decorators));
+                functions.push(parse_class(def, content, decorators));
             }
         }
         return;
     }
 
     if kind == "function_definition" {
-        functions.push(parse_function(node, content, lines, in_class, pending_decorators.clone()));
+        functions.push(parse_function(node, content, in_class, pending_decorators.clone()));
         pending_decorators.clear();
     } else if kind == "class_definition" {
-        functions.push(parse_class(node, content, lines, pending_decorators.clone()));
+        functions.push(parse_class(node, content, pending_decorators.clone()));
         pending_decorators.clear();
     }
 
@@ -77,14 +76,13 @@ fn traverse(
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        traverse(child, content, lines, functions, in_class || is_class_body, Vec::new());
+        traverse(child, content, functions, in_class || is_class_body, Vec::new());
     }
 }
 
 fn parse_function(
     node: Node,
     content: &str,
-    lines: &[&str],
     is_method: bool,
     decorators: Vec<String>,
 ) -> FunctionInfo {
@@ -121,8 +119,7 @@ fn parse_function(
     let start_line = node.start_position().row + 1;
     let end_line = node.end_position().row + 1;
 
-    let block = &lines[start_line.saturating_sub(1)..end_line.min(lines.len())];
-    let complexity = estimate_complexity(block);
+    let complexity = ast_complexity(node, content.as_bytes());
 
     let mut parameters = Vec::new();
     let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');
@@ -158,7 +155,6 @@ fn parse_function(
 fn parse_class(
     node: Node,
     content: &str,
-    _lines: &[&str],
     decorators: Vec<String>,
 ) -> FunctionInfo {
     let mut name = String::new();
