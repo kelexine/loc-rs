@@ -14,7 +14,10 @@
 //   • Filesystem mtime fallback when git is unavailable
 //   • walkdir traversal (faster than os.walk)
 //   • Typed errors via anyhow — no silent panics
+//   • Agent-aware output: auto-detects coding agents and switches to TSV
+//   • --format human|agent|json|quiet  +  legacy --json  +  -q
 
+mod agent;
 mod cli;
 mod config;
 mod counter;
@@ -24,6 +27,7 @@ mod extractors;
 mod language;
 mod models;
 
+use agent::OutputMode;
 use clap::Parser;
 use colored::Colorize;
 use std::process;
@@ -35,6 +39,10 @@ fn main() {
     if args.func_analysis {
         args.functions = true;
     }
+
+    // ── Resolve output mode ───────────────────────────────────────────────────
+    let (mode, detected_agent) =
+        agent::resolve_output_mode(args.format, args.json, args.quiet);
 
     let config = match counter::ScanConfig::from_args(&args) {
         Ok(c) => c,
@@ -52,45 +60,103 @@ fn main() {
         }
     };
 
-    // --json: emit machine-readable summary to stdout, skip coloured display
-    if args.json {
-        // --func-analysis produces a terminal report incompatible with --json.
-        // Warn the user instead of silently dropping it; -f still populates
-        // per-file function data inside the JSON output.
-        if args.func_analysis {
-            eprintln!(
-                "{} --func-analysis is not supported with --json; \
-                 use -f to embed function data in JSON output",
-                "[WARN]".yellow().bold()
+    // ── Dispatch by mode ──────────────────────────────────────────────────────
+    match mode {
+        // ── JSON (legacy --json or --format json) ─────────────────────────────
+        OutputMode::Json => {
+            if args.func_analysis {
+                eprintln!(
+                    "{} --func-analysis is not supported with JSON output; \
+                     use -f to embed function data in the JSON",
+                    "[WARN]".yellow().bold()
+                );
+            }
+            if let Err(e) =
+                export::json::print_json_stats(&result, config.extract_functions)
+            {
+                eprintln!("{} {}", "[ERROR]".red().bold(), e);
+                process::exit(1);
+            }
+            agent::print_hints(
+                mode,
+                args.detailed,
+                args.tree,
+                args.functions,
+                args.func_analysis,
+                args.export.is_some(),
+                detected_agent.as_deref(),
             );
         }
-        if let Err(e) = export::json::print_json_stats(&result, config.extract_functions) {
-            eprintln!("{} {}", "[ERROR]".red().bold(), e);
-            process::exit(1);
-        }
-    } else {
-        // Display tree + summary
-        display::display_results(
-            &result,
-            &config.target_dir,
-            args.detailed,
-            args.binary,
-            args.tree,
-            config.warn_size,
-            config.extract_functions,
-        );
 
-        // Optional function analysis
-        if args.func_analysis {
-            display::display_function_analysis(&result, &config.target_dir);
+        // ── Agent (TSV, no ANSI) ──────────────────────────────────────────────
+        OutputMode::Agent => {
+            display::display_agent_tsv(
+                &result,
+                &config.target_dir,
+                args.detailed,
+                args.tree,
+                config.extract_functions,
+                config.warn_size,
+            );
+            if args.func_analysis {
+                display::display_agent_function_analysis(&result, &config.target_dir);
+            }
+            agent::print_hints(
+                mode,
+                args.detailed,
+                args.tree,
+                args.functions,
+                args.func_analysis,
+                args.export.is_some(),
+                detected_agent.as_deref(),
+            );
+        }
+
+        // ── Quiet (one path per line) ─────────────────────────────────────────
+        OutputMode::Quiet => {
+            display::display_quiet(&result, &config.target_dir);
+            agent::print_hints(
+                mode,
+                args.detailed,
+                args.tree,
+                args.functions,
+                args.func_analysis,
+                args.export.is_some(),
+                detected_agent.as_deref(),
+            );
+        }
+
+        // ── Human (coloured terminal) ─────────────────────────────────────────
+        OutputMode::Human => {
+            display::display_results(
+                &result,
+                &config.target_dir,
+                args.detailed,
+                args.binary,
+                args.tree,
+                config.warn_size,
+                config.extract_functions,
+            );
+            if args.func_analysis {
+                display::display_function_analysis(&result, &config.target_dir);
+            }
+            agent::print_hints(
+                mode,
+                args.detailed,
+                args.tree,
+                args.functions,
+                args.func_analysis,
+                args.export.is_some(),
+                detected_agent.as_deref(),
+            );
         }
     }
 
-    // Optional export (always honoured, even alongside --json)
-    if let Some(ref output_file) = args.export
-        && let Err(e) = export::export(&result, output_file, config.extract_functions)
-    {
-        eprintln!("{} {}", "[ERROR]".red().bold(), e);
-        process::exit(1);
+    // ── Export (always honoured regardless of mode) ───────────────────────────
+    if let Some(ref output_file) = args.export {
+        if let Err(e) = export::export(&result, output_file, config.extract_functions) {
+            eprintln!("{} {}", "[ERROR]".red().bold(), e);
+            process::exit(1);
+        }
     }
 }

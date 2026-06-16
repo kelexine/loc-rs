@@ -4,6 +4,7 @@
 pub mod csv;
 pub mod html;
 pub mod json;
+pub mod tsv;
 
 use crate::models::ScanResult;
 use anyhow::Result;
@@ -17,6 +18,8 @@ pub enum ExportFormat {
     Jsonl,
     /// CSV file with file-level metrics.
     Csv,
+    /// TSV file — mirrors agent-mode stdout, section-delimited by `# HEADER` lines.
+    Tsv,
     /// Standalone HTML dashboard report.
     Html,
 }
@@ -26,9 +29,10 @@ impl ExportFormat {
     pub fn from_path(path: &Path) -> Option<Self> {
         let ext = path.extension()?.to_str()?.to_lowercase();
         match ext.as_str() {
-            "json" => Some(Self::Json),
-            "jsonl" => Some(Self::Jsonl),
-            "csv" => Some(Self::Csv),
+            "json"       => Some(Self::Json),
+            "jsonl"      => Some(Self::Jsonl),
+            "csv"        => Some(Self::Csv),
+            "tsv"        => Some(Self::Tsv),
             "html" | "htm" => Some(Self::Html),
             _ => None,
         }
@@ -37,17 +41,19 @@ impl ExportFormat {
 
 /// Export scan results to the file indicated by `output_path`.
 ///
-/// The format is inferred from file extension (`.json`, `.jsonl`, `.csv`, `.html`/`.htm`).
+/// Format is inferred from file extension:
+/// `.json`, `.jsonl`, `.csv`, `.tsv`, `.html` / `.htm`.
 pub fn export(result: &ScanResult, output_path: &str, extract_functions: bool) -> Result<()> {
     let path = Path::new(output_path);
 
     match ExportFormat::from_path(path) {
-        Some(ExportFormat::Json) => json::export_json(result, path, extract_functions),
+        Some(ExportFormat::Json)  => json::export_json(result, path, extract_functions),
         Some(ExportFormat::Jsonl) => json::export_jsonl(result, path),
-        Some(ExportFormat::Csv) => csv::export_csv(result, path, extract_functions),
-        Some(ExportFormat::Html) => html::export_html(result, path, extract_functions),
+        Some(ExportFormat::Csv)   => csv::export_csv(result, path, extract_functions),
+        Some(ExportFormat::Tsv)   => tsv::export_tsv(result, path, extract_functions),
+        Some(ExportFormat::Html)  => html::export_html(result, path, extract_functions),
         None => anyhow::bail!(
-            "Unsupported export format '{}'. Use .json, .jsonl, .csv, or .html",
+            "Unsupported export format '{}'. Use .json, .jsonl, .csv, .tsv, or .html",
             path.extension().and_then(|e| e.to_str()).unwrap_or("?")
         ),
     }

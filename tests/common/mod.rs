@@ -1,10 +1,12 @@
 // tests/common/mod.rs — Shared helpers for integration tests
+// Author: kelexine (https://github.com/kelexine)
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 pub use tempfile::TempDir;
 
-/// Resolve the compiled binary from the workspace target directory
+/// Resolve the compiled binary from the workspace target directory.
 pub fn loc_bin() -> PathBuf {
     let mut path = std::env::current_exe()
         .expect("current_exe")
@@ -18,12 +20,30 @@ pub fn loc_bin() -> PathBuf {
     path.join("loc")
 }
 
-/// Execute the loc binary with given arguments
+/// Execute the loc binary with given arguments.
 pub fn run_loc(args: &[&str]) -> std::process::Output {
     std::process::Command::new(loc_bin())
         .args(args)
         .output()
         .expect("Failed to execute loc binary")
+}
+
+/// Execute the loc binary with additional environment variables injected.
+///
+/// Used to test agent auto-detection without permanently mutating the test
+/// process environment.
+pub fn run_loc_with_env(args: &[&str], env: &HashMap<&str, &str>) -> std::process::Output {
+    let mut cmd = std::process::Command::new(loc_bin());
+    cmd.args(args);
+    // Ensure agent detection vars from the outer test env don't bleed in.
+    for key in &["AI_AGENT", "AGENT", "CLAUDECODE", "CLAUDE_CODE", "CODEX_SANDBOX",
+                  "CRUSH", "CURSOR_TRACE_ID", "GEMINI_CLI", "GOOSE_TERMINAL"] {
+        cmd.env_remove(key);
+    }
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    cmd.output().expect("Failed to execute loc binary")
 }
 
 /// Create a temporary directory with a set of named files and content.
