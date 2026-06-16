@@ -82,6 +82,16 @@ Fix:
 loc -e report.html
 ```
 
+## `stream did not contain valid UTF-8` warning
+
+Cause:
+- The file is encoded in UTF-16 or UTF-32.
+- While `loc-rs` correctly identifies these as non-binary files via BOM detection, the current file reader only supports UTF-8 encoded text.
+
+Fix:
+- Convert the file to UTF-8 if you need it included in line counts.
+- `loc-rs` will skip these files and emit a warning to ensure results for other files remain accurate.
+
 ## Command fails with directory error
 
 Cause:

@@ -39,11 +39,16 @@ It traverses commit history via `git log` for file timestamps. Omit `--git-dates
 
 Binary files are detected and excluded from line metrics. They can be shown in tree output with `--binary`.
 
+## Why are my lockfiles showing 0 lines?
+
+`loc-rs` automatically detects over 30 common dependency lockfiles (like `Cargo.lock`, `package-lock.json`, `go.sum`). These files are tagged as `[lockfile]` in the tree view but are explicitly excluded from all line-count statistics to prevent them from skewing your codebase metrics.
+
 ## Which formats can I export?
 
 - `.json`
 - `.jsonl`
 - `.csv`
+- `.tsv`
 - `.html` / `.htm`
 
 ## How do I generate API docs?

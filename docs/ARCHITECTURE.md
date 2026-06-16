@@ -21,6 +21,9 @@ This document explains how `loc-rs` is organized and how data flows through the 
   - Language-extension mapping, alias resolution, comment specs, default exclusions.
 - `src/counter/mod.rs`
   - File discovery, content analysis, binary detection, git integration, scan orchestration.
+- `src/agent/mod.rs`
+  - Environment-based auto-detection of AI coding agents (Claude Code, Gemini CLI, etc.).
+  - Orchestration of token-efficient "Agent Mode" (TSV) output.
 - `src/extractors/*`
   - Tree-sitter-backed per-language function extraction implementations.
 - `src/models/mod.rs`
@@ -36,6 +39,7 @@ This document explains how `loc-rs` is organized and how data flows through the 
 - Outside git: uses recursive filesystem walk with exclusion sets.
 - `.locignore` allows project-specific ignores.
 - Hidden files are skipped by default unless `--include-hidden` is used.
+- **Lockfile Fast-Path:** Known lockfiles are identified by name before their contents are read, bypassing disk I/O and explicitly excluding them from line metrics while preserving them for directory tree rendering.
 
 ## Function Extraction Model
 
@@ -44,11 +48,25 @@ This document explains how `loc-rs` is organized and how data flows through the 
 - Output includes name, line range, method/class flags, and complexity estimate.
 - Complexity is a keyword-based cyclomatic approximation used consistently across extractors.
 
-## Output Model
+## Output Model & Agent Integration
+
+The output system operates on a prioritized state machine resolving into four formatting modes:
+
+1. **Quiet (`-q` or `--quiet`)**: Emits a raw list of matching file paths, one per line (ideal for piping).
+2. **JSON (`--json` or `--format json`)**: Emits a machine-readable JSON representation of the entire `ScanResult` to `stdout`.
+3. **Agent (`--format agent` or auto-detected)**: Detailed below.
+4. **Human (default)**: The rich, ANSI-colored terminal display with padded tables.
 
 - Summary metrics always include total lines, text file count, and code/comment/blank splits.
 - Function/class lines appear only when extraction is enabled.
 - Detailed breakdown (`-d`) includes per-extension metrics, plus function counts when extraction is enabled.
+
+### Agent Mode
+
+`loc-rs` features a specialized **Agent Mode** designed for integration with AI coding tools.
+- **Auto-detection**: The tool inspects environment variables (e.g., `CLAUDECODE`, `GEMINI_CLI`) against a zero-allocation `const` registry of known AI coding harnesses.
+- **Token Efficiency**: When an agent is detected, output switches from ANSI-colored human-readable tables to a raw, section-delimited **TSV** format.
+- **Separation of Concerns**: Machine-readable data is sent to `stdout`, while human-oriented hints are sent to `stderr` to avoid polluting the agent's parsing pipeline.
 
 ## Testing Surface
 

@@ -13,7 +13,10 @@
 - **Function extraction**: Uses Tree-sitter-backed extractors for Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#/Scala, PHP, Swift, and Ruby.
 - **Complexity analysis**: Reports function length and a branch-count cyclomatic complexity estimate.
 - **Git-aware discovery**: Uses `git ls-files` in repositories and can attach last-modified dates from `git log`.
-- **Multi-format export**: Writes JSON, JSONL, CSV, and HTML reports.
+- **Agent mode auto-detection**: Switches to token-efficient TSV output when run inside AI coding agents (Claude Code, Gemini CLI, etc.).
+- **Lockfile awareness**: Automatically detects dependency lockfiles (Cargo.lock, package-lock.json, etc.), excluding them from line metrics to prevent skewed stats.
+- **Machine-readable outputs**: Supports direct-to-stdout JSON (`--json`), TSV (`--format agent`), and pipe-friendly raw path lists (`-q`).
+- **Multi-format export**: Writes JSON, JSONL, CSV, TSV, and HTML reports.
 - **Global configuration**: Reads defaults from `~/.config/loc-rs/config.toml` through the platform config directory.
 - **Size warnings**: Flags files above a configured line threshold.
 - **BOM-aware binary detection**: Treats UTF-16/UTF-32 files as text instead of false-positive binary files.
@@ -54,6 +57,9 @@ loc --tree
 loc -f --func-analysis
 loc -t rust python typescript
 loc -e report.html -f
+loc --json
+loc -q | head -20
+loc --format agent -e out.tsv
 ```
 
 ---
@@ -155,7 +161,7 @@ snapshots
 
 ## GitHub Action Integration
 
-The repository includes a composite GitHub Action for CI line-count and complexity checks.
+The repository includes a comprehensive composite GitHub Action for CI line-count and complexity checks. The action features sub-second installs via pre-built binaries, GitHub Step Summary integration, and automated artifact uploads.
 
 ```yaml
 steps:
@@ -165,6 +171,10 @@ steps:
       target_dir: .
       warn_size: 500
       functions: true
+      fail_on_warn: true     # Fails the build if any files exceed warn_size
+      export_html: true      # Automatically uploads HTML report to artifacts
+      export_json: true      # Automatically uploads JSON report to artifacts
+      version: latest        # Uses pre-built binaries for instant execution
 ```
 
 Use static workflow values for `target_dir`, `warn_size`, and `args`; do not pass untrusted pull request, issue, or comment text into shell-backed action inputs.
@@ -246,6 +256,7 @@ Function extraction is available when `-f` or `--func-analysis` is enabled. The 
 |---|---|---|
 | `Functions: 0` in summary | Function extraction not enabled | Run with `-f` or `--func-analysis` |
 | Unknown language warning (for example `dart`) | Language not in resolver map | Use a supported language or direct extension via `-t .ext` |
+| `stream did not contain valid UTF-8` warning | File is UTF-16/UTF-32 encoded | Convert to UTF-8; `loc-rs` current reader is UTF-8 only |
 | Missing untracked files in output | Running inside a git repo with default git-based discovery | Check `.gitignore`, or run with `--include-hidden` / adjust ignore rules |
 | `--git-dates` appears slow | Uses `git log` history traversal | Omit `--git-dates` for faster scans |
 | HTML report not opening as expected | Output path/extension mismatch | Export with `.html` or `.htm` extension |
