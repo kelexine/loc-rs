@@ -10,6 +10,11 @@
 //! # Author
 //! kelexine <https://github.com/kelexine>
 
+// This module is a public registry API.  Fields, methods, and variants that
+// are unused within loc-rs itself are intentionally exported for downstream
+// consumers (tooling, plugins, `--list-agents`, skill generators, etc.).
+#![allow(dead_code)]
+
 // ─── Env-var match pattern ────────────────────────────────────────────────────
 
 /// Compile-time pattern for matching an environment variable's value.

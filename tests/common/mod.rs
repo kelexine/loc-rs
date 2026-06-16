@@ -32,6 +32,12 @@ pub fn run_loc(args: &[&str]) -> std::process::Output {
 ///
 /// Used to test agent auto-detection without permanently mutating the test
 /// process environment.
+/// Execute the loc binary with given arguments and extra environment variables.
+///
+/// Used by agent-detection tests that need to inject harness env vars without
+/// polluting the ambient environment.  Marked `allow(dead_code)` because not
+/// every test binary uses it, but it is exercised by `tests/cli.rs`.
+#[allow(dead_code)]
 pub fn run_loc_with_env(args: &[&str], env: &HashMap<&str, &str>) -> std::process::Output {
     let mut cmd = std::process::Command::new(loc_bin());
     cmd.args(args);

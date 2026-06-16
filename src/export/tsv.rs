@@ -86,19 +86,25 @@ pub fn write_files_section<W: Write>(
     include_functions: bool,
 ) -> Result<()> {
     writeln!(w, "# FILES")?;
+    // Column layout mirrors display_agent_tsv so stdout and file output are
+    // structurally identical.  is_binary / is_lockfile are always present so
+    // consumers can filter without re-running the scan.
     if include_functions {
         writeln!(
             w,
-            "path\tlines\tcode\tcomment\tblank\textension\tfunctions\tclasses\tavg_fn_length\tlast_modified"
+            "path\tlines\tcode\tcomment\tblank\textension\tis_binary\tis_lockfile\tfunctions\tclasses\tavg_fn_length\tlast_modified"
         )?;
     } else {
         writeln!(
             w,
-            "path\tlines\tcode\tcomment\tblank\textension\tlast_modified"
+            "path\tlines\tcode\tcomment\tblank\textension\tis_binary\tis_lockfile\tlast_modified"
         )?;
     }
 
-    for fi in result.files.iter().filter(|f| !f.is_binary && !f.is_lockfile) {
+    // All files are emitted (binary and lockfiles included) so the file
+    // mirrors the stdout agent view exactly.  Callers can filter on
+    // is_binary / is_lockfile as needed.
+    for fi in &result.files {
         let modified = fi
             .last_modified
             .map(|d| d.to_rfc3339())
@@ -107,13 +113,15 @@ pub fn write_files_section<W: Write>(
         if include_functions {
             writeln!(
                 w,
-                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.2}\t{}",
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.2}\t{}",
                 fi.path.display(),
                 fi.lines,
                 fi.code,
                 fi.comment,
                 fi.blank,
                 fi.extension(),
+                fi.is_binary,
+                fi.is_lockfile,
                 fi.function_count(),
                 fi.class_count(),
                 fi.avg_function_length(),
@@ -122,13 +130,15 @@ pub fn write_files_section<W: Write>(
         } else {
             writeln!(
                 w,
-                "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                 fi.path.display(),
                 fi.lines,
                 fi.code,
                 fi.comment,
                 fi.blank,
                 fi.extension(),
+                fi.is_binary,
+                fi.is_lockfile,
                 modified,
             )?;
         }
@@ -208,24 +218,26 @@ mod tests {
     }
 
     #[test]
-    fn files_section_no_functions_has_7_columns() {
+    fn files_section_no_functions_has_9_columns() {
         let result = make_result();
         let mut buf = Vec::new();
         write_files_section(&mut buf, &result, false).unwrap();
         let out = String::from_utf8(buf).unwrap();
-        // Header line: path\tlines\tcode\tcomment\tblank\textension\tlast_modified
+        // Header: path\tlines\tcode\tcomment\tblank\textension\tis_binary\tis_lockfile\tlast_modified
         let header = out.lines().nth(1).unwrap();
-        assert_eq!(header.split('\t').count(), 7);
+        assert_eq!(header.split('\t').count(), 9);
     }
 
     #[test]
-    fn files_section_with_functions_has_10_columns() {
+    fn files_section_with_functions_has_12_columns() {
         let result = make_result();
         let mut buf = Vec::new();
         write_files_section(&mut buf, &result, true).unwrap();
         let out = String::from_utf8(buf).unwrap();
+        // Header: path\tlines\tcode\tcomment\tblank\textension\tis_binary\tis_lockfile\t
+        //         functions\tclasses\tavg_fn_length\tlast_modified
         let header = out.lines().nth(1).unwrap();
-        assert_eq!(header.split('\t').count(), 10);
+        assert_eq!(header.split('\t').count(), 12);
     }
 
     #[test]
