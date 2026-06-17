@@ -14,6 +14,7 @@ use rayon::prelude::*;
 use crate::cli::Args;
 use crate::extractors;
 use crate::language::{BINARY_EXTENSIONS, EXCLUDED_DIRS};
+use crate::locignore::LocIgnore;
 use crate::models::{Breakdown, FileInfo, ScanResult};
 
 /// Configuration for a scan run.
@@ -36,8 +37,9 @@ pub struct ScanConfig {
     pub extract_functions: bool,
     /// Whether the target directory is inside a git work tree.
     pub is_git_repo: bool,
-    /// Patterns loaded from `.locignore`.
-    pub custom_ignore: HashSet<String>,
+    /// Compiled `.locignore` ruleset — glob-capable, per-directory, with negation.
+    /// Takes precedence over `.gitignore` rules.
+    pub locignore: LocIgnore,
     /// Whether hidden files/directories should be included.
     pub include_hidden: bool,
     /// Optional precomputed git date map for fast file timestamp lookups.
@@ -82,7 +84,7 @@ impl ScanConfig {
             Some(exts)
         };
 
-        let custom_ignore = load_locignore(&target_dir);
+        let locignore = LocIgnore::build(&target_dir);
         let warn_size = args.warn_size.or(global_config.warn_size);
         let extract_functions = args.functions
             || args.func_analysis
@@ -96,7 +98,7 @@ impl ScanConfig {
             parallel: !args.no_parallel,
             extract_functions,
             is_git_repo,
-            custom_ignore,
+            locignore,
             include_hidden: args.include_hidden,
             git_dates_cache: None,
         })
@@ -106,11 +108,11 @@ impl ScanConfig {
 /// Run the full scan and return a ScanResult.
 pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
     let files = if config.is_git_repo && !config.include_hidden {
-        get_git_files(&config.target_dir)
+        get_git_files(&config.target_dir, &config.locignore)
     } else {
         get_manual_files(
             &config.target_dir,
-            &config.custom_ignore,
+            &config.locignore,
             config.include_hidden,
         )
     };
@@ -427,9 +429,44 @@ fn check_git_repo(dir: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn get_git_files(dir: &Path) -> Vec<PathBuf> {
+/// Enumerate all files that git knows about (tracked + untracked non-ignored),
+/// post-filtered by the `.locignore` ruleset.
+///
+/// When `.locignore` contains negation patterns (`!`), we also query the list
+/// of git-ignored files so that a negation can re-include them — giving
+/// `.locignore` full precedence over `.gitignore`.
+fn get_git_files(dir: &Path, locignore: &LocIgnore) -> Vec<PathBuf> {
+    // Base set: tracked + untracked files that git's own ignore rules would keep.
+    let mut files = git_ls_files(dir, &["--cached", "--others", "--exclude-standard"]);
+
+    if files.is_empty() {
+        // git unavailable or not a repo — fall back to manual walk.
+        return get_manual_files(dir, locignore, false);
+    }
+
+    // If .locignore has negation patterns, fetch git-ignored files too so that
+    // `!pattern` can override .gitignore and re-include them.
+    if locignore.has_negations() {
+        let git_ignored = git_ls_files(dir, &["--others", "--ignored", "--exclude-standard"]);
+        for path in git_ignored {
+            // Only re-include if .locignore explicitly negates the exclusion.
+            if !locignore.is_excluded(&path) {
+                files.push(path);
+            }
+        }
+    }
+
+    // Apply .locignore excludes to the full combined set.
+    files.retain(|p| !locignore.is_excluded(p));
+    files
+}
+
+/// Run `git ls-files -z` with the given extra arguments and return absolute paths.
+fn git_ls_files(dir: &Path, args: &[&str]) -> Vec<PathBuf> {
     let output = Command::new("git")
-        .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
+        .arg("ls-files")
+        .arg("-z")
+        .args(args)
         .current_dir(dir)
         .output();
 
@@ -442,30 +479,19 @@ fn get_git_files(dir: &Path) -> Vec<PathBuf> {
                 .map(|s| dir.join(s))
                 .collect()
         }
-        _ => get_manual_files(dir, &HashSet::new(), false),
+        _ => vec![],
     }
 }
 
-fn load_locignore(dir: &Path) -> HashSet<String> {
-    let path = dir.join(".locignore");
-    if let Ok(content) = std::fs::read_to_string(path) {
-        content
-            .lines()
-            .map(|l| l.trim())
-            .filter(|l| !l.is_empty() && !l.starts_with('#'))
-            .map(|l| l.to_string())
-            .collect()
-    } else {
-        HashSet::new()
-    }
-}
-
+/// Walk `dir` with WalkDir, applying `.locignore` rules at both the directory
+/// pruning and file inclusion stages.
 fn get_manual_files(
     dir: &Path,
-    custom_ignore: &HashSet<String>,
+    locignore: &LocIgnore,
     include_hidden: bool,
 ) -> Vec<PathBuf> {
     use walkdir::WalkDir;
+
     WalkDir::new(dir)
         .follow_links(false)
         .into_iter()
@@ -475,19 +501,29 @@ fn get_manual_files(
             }
             let name = e.file_name().to_string_lossy();
             if e.file_type().is_dir() {
-                if EXCLUDED_DIRS.contains(name.as_ref()) || custom_ignore.contains(name.as_ref()) {
+                // Always prune hard-excluded and hidden dirs.
+                if EXCLUDED_DIRS.contains(name.as_ref()) || name == ".git" {
                     return false;
                 }
-                if name == ".git" {
+                if !include_hidden && name != ".well-known" && name.starts_with('.') {
                     return false;
                 }
-                include_hidden || name == ".well-known" || !name.starts_with('.')
+                // Prune via locignore only when there are no negation patterns.
+                // If negations exist we must descend to check each file individually,
+                // because a !pattern inside an excluded dir should still take effect.
+                if !locignore.has_negations() && locignore.is_excluded(e.path()) {
+                    return false;
+                }
+                true
             } else {
-                !custom_ignore.contains(name.as_ref()) && (include_hidden || !name.starts_with('.'))
+                include_hidden || !name.starts_with('.')
             }
         })
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
+        // Final per-file locignore check (handles both the no-negation and
+        // the has-negation cases uniformly).
+        .filter(|e| !locignore.is_excluded(e.path()))
         .map(|e| e.path().to_path_buf())
         .collect()
 }
@@ -624,11 +660,10 @@ mod tests {
         fs::write(dir.path().join("node_modules/index.js"), "js").unwrap();
         fs::write(dir.path().join("keep.rs"), "rust").unwrap();
         fs::write(dir.path().join("ignore_me.txt"), "text").unwrap();
+        fs::write(dir.path().join(".locignore"), "ignore_me.txt\n").unwrap();
 
-        let mut custom_ignore = HashSet::new();
-        custom_ignore.insert("ignore_me.txt".to_string());
-
-        let files = get_manual_files(dir.path(), &custom_ignore, false);
+        let locignore = crate::locignore::LocIgnore::build(dir.path());
+        let files = get_manual_files(dir.path(), &locignore, false);
         let names: HashSet<_> = files
             .iter()
             .map(|f| f.file_name().unwrap().to_str().unwrap())

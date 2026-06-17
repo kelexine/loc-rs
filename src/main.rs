@@ -18,6 +18,7 @@
 //   • --format human|agent|json|quiet  +  legacy --json  +  -q
 
 mod agent;
+mod locignore;
 mod cli;
 mod config;
 mod counter;
