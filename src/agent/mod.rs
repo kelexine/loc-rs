@@ -80,8 +80,9 @@ pub fn hint(msg: &str) {
 
 /// Emit contextual next-step hints based on which flags were used.
 ///
-/// Called at the end of every run so both humans and agents always know
-/// what to try next.  All output goes to stderr.
+/// Human mode emits no hints — `--help` covers feature discovery.
+/// All other modes write to stderr so the stdout data stream is never
+/// polluted.
 pub fn print_hints(
     mode: OutputMode,
     used_detailed: bool,
@@ -92,48 +93,50 @@ pub fn print_hints(
     detected_agent: Option<&str>,
 ) {
     match mode {
+        // ── Human — no hints; --help covers discovery ─────────────────────
+        OutputMode::Human => {}
+
+        // ── Agent (TSV) ───────────────────────────────────────────────────
         OutputMode::Agent => {
+            // Banner: identifies which harness triggered auto-detection.
             if let Some(agent) = detected_agent {
-                eprintln!("# Agent mode auto-detected: {}", agent);
+                eprintln!("# Agent-Detected: {agent}");
             }
+
+            // Suggest flags that would add more data to the current output.
             if !used_detailed {
-                hint("Use -d for language breakdown table");
+                hint("Use -d to include a per-language breakdown (code / comment / blank)");
             }
             if !used_tree {
-                hint("Use --tree for a flat TSV file list");
+                hint("Use --tree to include a flat TSV file list with per-file metrics");
             }
-            if !used_functions {
-                hint("Use -f to embed function counts, --func-analysis for full complexity report");
+
+            // Escalate function hints: neither → combined hint; -f only → suggest --func-analysis.
+            // Note: --func-analysis auto-enables -f, so they are not independent flags.
+            if !used_functions && !used_func_analysis {
+                hint("Use --func-analysis for function counts + full cyclomatic-complexity report \
+                      (or just -f for counts only; --func-analysis implies -f)");
+            } else if used_functions && !used_func_analysis {
+                hint("Use --func-analysis for a full cyclomatic-complexity report (implies -f, already active)");
             }
+
             if !used_export {
-                hint("Use -e out.tsv to save results to file");
+                hint("Use -e <file>.tsv to write these results to disk");
             }
-            hint("Use --format human to switch to colored terminal output");
+            hint("Use --format human to switch to Coloured terminal output");
         }
-        OutputMode::Human => {
-            if !used_detailed && !used_tree && !used_functions {
-                hint(
-                    "Use -d for language breakdown, --tree for directory tree, \
-                     -f to extract functions",
-                );
-            } else if !used_detailed {
-                hint("Use -d for a per-language breakdown");
-            } else if !used_functions && !used_func_analysis {
-                hint("Use -f to extract functions, --func-analysis for complexity report");
-            }
-            if !used_export {
-                hint("Use -e out.json / out.csv / out.html to export");
-            }
-            hint("Use --format agent for machine-readable TSV (auto-detected when run inside a coding agent)");
-        }
+
+        // ── JSON ──────────────────────────────────────────────────────────
         OutputMode::Json => {
             if !used_export {
-                hint("Use -e out.json to persist the same data to a file");
+                hint("Use -e <file>.json to persist these results to disk");
             }
-            hint("Use --format agent for TSV output (lighter on tokens)");
+            hint("Use --format agent for compact TSV output (lower token cost)");
         }
+
+        // ── Quiet (one path per line) ─────────────────────────────────────
         OutputMode::Quiet => {
-            hint("Use -d for language breakdown, --json for full JSON summary");
+            hint("Use -d for a per-language summary or --json for the full structured report");
         }
     }
 }
