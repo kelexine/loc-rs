@@ -66,7 +66,7 @@ The output system operates on a prioritized state machine resolving into four fo
 `loc-rs` features a specialized **Agent Mode** designed for integration with AI coding tools.
 - **Auto-detection**: The tool inspects environment variables (e.g., `CLAUDECODE`, `GEMINI_CLI`) against a zero-allocation `const` registry of known AI coding harnesses.
 - **Token Efficiency**: When an agent is detected, output switches from ANSI-colored human-readable tables to a raw, section-delimited **TSV** format.
-- **Separation of Concerns**: Machine-readable data is sent to `stdout`, while human-oriented hints are sent to `stderr` to avoid polluting the agent's parsing pipeline.
+- **Separation of Concerns**: Machine-readable data is sent to `stdout`, while contextual hints are sent to `stderr` to avoid polluting the agent's parsing pipeline.
 
 ## Testing Surface
 
