@@ -612,242 +612,51 @@ mod tests {
 
 /// Render scan results as TSV to stdout for agent consumption.
 ///
+/// Delegates every section to [`crate::export::tsv`] so stdout output and
+/// `-e out.tsv` file export can never drift out of schema — same writer
+/// functions, same column layout, byte-identical given the same flags.
+///
 /// Layout:
-/// - `# SUMMARY` section — key/value pairs
+/// - `# SUMMARY` section — always written
 /// - `# BREAKDOWN` section — one row per extension (if `show_details`)
 /// - `# FILES` section — one row per text file (if `show_tree`)
+/// - `# FUNCTION_STATS` / `# LARGEST_FUNCTIONS` / `# HIGH_COMPLEXITY` /
+///   `# TOP_FILES` — if `show_func_analysis`
 ///
 /// All output is raw TSV — no ANSI codes, no truncation, nothing padded.
-/// Hints go to stderr via [`crate::agent::print_hints`].
+/// Hints go to stderr via [`crate::agent::print_hints`]. Write errors to
+/// stdout are ignored (mirroring the previous `.ok()` policy) since a
+/// broken stdout pipe isn't something agent-mode output can meaningfully
+/// recover from.
 pub fn display_agent_tsv(
     result: &ScanResult,
     root: &Path,
     show_details: bool,
     show_tree: bool,
     show_functions: bool,
+    show_func_analysis: bool,
     warn_size: Option<usize>,
 ) {
+    use crate::export::tsv;
+
     let stdout = std::io::stdout();
     let mut w = std::io::BufWriter::new(stdout.lock());
 
-    // ── SUMMARY ──────────────────────────────────────────────────────────────
-    writeln!(w, "# SUMMARY").ok();
-    writeln!(w, "metric\tvalue").ok();
-    writeln!(w, "total_lines\t{}", result.total_lines()).ok();
-    writeln!(w, "total_code\t{}", result.total_code()).ok();
-    writeln!(w, "total_comment\t{}", result.total_comment()).ok();
-    writeln!(w, "total_blank\t{}", result.total_blank()).ok();
-    writeln!(w, "text_files\t{}", result.text_file_count()).ok();
-    writeln!(w, "binary_files\t{}", result.binary_file_count()).ok();
-    writeln!(w, "lockfiles\t{}", result.lockfile_count()).ok();
-    writeln!(w, "total_functions\t{}", result.total_functions()).ok();
-    writeln!(w, "total_classes\t{}", result.total_classes()).ok();
-    writeln!(w, "scan_dir\t{}", root.display()).ok();
+    let _ = tsv::write_summary_section(&mut w, result, root, warn_size);
 
-    // Large-file count if warn_size is set
-    if let Some(ws) = warn_size {
-        let large = result.files.iter().filter(|f| f.lines > ws).count();
-        writeln!(w, "large_files_over_{}\t{}", ws, large).ok();
-    }
-
-    // ── BREAKDOWN ────────────────────────────────────────────────────────────
     if show_details {
-        writeln!(w).ok();
-        writeln!(w, "# BREAKDOWN").ok();
-        if show_functions {
-            writeln!(w, "extension\tfiles\tlines\tcode\tcomment\tblank\tfunctions\tpct_lines").ok();
-        } else {
-            writeln!(w, "extension\tfiles\tlines\tcode\tcomment\tblank\tpct_lines").ok();
-        }
-
-        let total_lines = result.total_lines();
-        let mut entries: Vec<_> = result.breakdown.iter().collect();
-        entries.sort_by(|a, b| b.1.lines.cmp(&a.1.lines));
-
-        for (ext, stats) in &entries {
-            let pct = if total_lines > 0 {
-                format!("{:.2}%", stats.lines as f64 / total_lines as f64 * 100.0)
-            } else {
-                "0.00%".to_string()
-            };
-            if show_functions {
-                writeln!(
-                    w,
-                    "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                    ext, stats.files, stats.lines, stats.code,
-                    stats.comment, stats.blank, stats.functions, pct
-                ).ok();
-            } else {
-                writeln!(
-                    w,
-                    "{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                    ext, stats.files, stats.lines, stats.code,
-                    stats.comment, stats.blank, pct
-                ).ok();
-            }
-        }
+        let _ = writeln!(w);
+        let _ = tsv::write_breakdown_section(&mut w, result, show_functions);
     }
 
-    // ── FILES (flat list replacing ASCII tree) ───────────────────────────────
     if show_tree {
-        writeln!(w).ok();
-        writeln!(w, "# FILES").ok();
-        if show_functions {
-            writeln!(
-                w,
-                "path\tlines\tcode\tcomment\tblank\textension\t\
-                 is_binary\tis_lockfile\tfunctions\tclasses\tavg_fn_length\tlast_modified"
-            ).ok();
-        } else {
-            writeln!(
-                w,
-                "path\tlines\tcode\tcomment\tblank\textension\t\
-                 is_binary\tis_lockfile\tlast_modified"
-            ).ok();
-        }
-
-        for fi in &result.files {
-            let rel = fi
-                .path
-                .strip_prefix(root)
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|_| fi.path.display().to_string());
-            let modified = fi.last_modified.map(|d| d.to_rfc3339()).unwrap_or_default();
-
-            if show_functions {
-                writeln!(
-                    w,
-                    "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.2}\t{}",
-                    rel, fi.lines, fi.code, fi.comment, fi.blank,
-                    fi.extension(), fi.is_binary, fi.is_lockfile,
-                    fi.function_count(), fi.class_count(),
-                    fi.avg_function_length(), modified,
-                ).ok();
-            } else {
-                writeln!(
-                    w,
-                    "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                    rel, fi.lines, fi.code, fi.comment, fi.blank,
-                    fi.extension(), fi.is_binary, fi.is_lockfile, modified,
-                ).ok();
-            }
-        }
-    }
-}
-
-/// Render the function-analysis report as TSV sections for agent consumption.
-///
-/// Sections: `# FUNCTION_STATS`, `# LARGEST_FUNCTIONS`, `# HIGH_COMPLEXITY`, `# TOP_FILES`.
-pub fn display_agent_function_analysis(result: &ScanResult, root: &Path) {
-    let stdout = std::io::stdout();
-    let mut w = std::io::BufWriter::new(stdout.lock());
-
-    let files_with_fns: Vec<_> = result
-        .files
-        .iter()
-        .filter(|f| f.function_count() > 0)
-        .collect();
-
-    // ── FUNCTION_STATS ───────────────────────────────────────────────────────
-    writeln!(w).ok();
-    writeln!(w, "# FUNCTION_STATS").ok();
-    writeln!(w, "metric\tvalue").ok();
-    writeln!(w, "total_functions\t{}", result.total_functions()).ok();
-    writeln!(w, "total_classes\t{}", result.total_classes()).ok();
-
-    let non_class_fns: Vec<_> = files_with_fns
-        .iter()
-        .flat_map(|f| f.functions.iter().filter(|fn_| !fn_.is_class))
-        .collect();
-    let avg_len = if non_class_fns.is_empty() {
-        0.0_f64
-    } else {
-        non_class_fns.iter().map(|f| f.line_count()).sum::<usize>() as f64
-            / non_class_fns.len() as f64
-    };
-    writeln!(w, "avg_function_length\t{:.2}", avg_len).ok();
-
-    if files_with_fns.is_empty() {
-        return;
+        let _ = writeln!(w);
+        let _ = tsv::write_files_section(&mut w, result, root, show_functions);
     }
 
-    // ── LARGEST_FUNCTIONS (top 10) ───────────────────────────────────────────
-    let mut all_fns: Vec<(&Path, &crate::models::FunctionInfo)> = files_with_fns
-        .iter()
-        .flat_map(|fi| {
-            fi.functions
-                .iter()
-                .filter(|f| !f.is_class)
-                .map(move |f| (fi.path.as_path(), f))
-        })
-        .collect();
-    all_fns.sort_by(|a, b| b.1.line_count().cmp(&a.1.line_count()));
-
-    writeln!(w).ok();
-    writeln!(w, "# LARGEST_FUNCTIONS").ok();
-    writeln!(w, "function\tfile\tlines\tcomplexity\tparams").ok();
-    for (path, func) in all_fns.iter().take(10) {
-        let rel = path
-            .strip_prefix(root)
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|_| path.display().to_string());
-        writeln!(
-            w,
-            "{}\t{}\t{}\t{}\t{}",
-            func.name,
-            rel,
-            func.line_count(),
-            func.complexity,
-            func.parameters.join(", "),
-        ).ok();
-    }
-
-    // ── HIGH_COMPLEXITY (cc > 10) ────────────────────────────────────────────
-    let mut complex: Vec<_> = files_with_fns
-        .iter()
-        .flat_map(|fi| {
-            fi.functions
-                .iter()
-                .filter(|f| !f.is_class && f.complexity > 10)
-                .map(move |f| (fi.path.as_path(), f))
-        })
-        .collect();
-
-    if !complex.is_empty() {
-        complex.sort_by(|a, b| b.1.complexity.cmp(&a.1.complexity));
-        writeln!(w).ok();
-        writeln!(w, "# HIGH_COMPLEXITY").ok();
-        writeln!(w, "function\tfile\tcomplexity").ok();
-        for (path, func) in complex.iter().take(15) {
-            let rel = path
-                .strip_prefix(root)
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|_| path.display().to_string());
-            writeln!(w, "{}\t{}\t{}", func.name, rel, func.complexity).ok();
-        }
-    }
-
-    // ── TOP_FILES ────────────────────────────────────────────────────────────
-    let mut sorted_files = files_with_fns.clone();
-    sorted_files.sort_by_key(|f| std::cmp::Reverse(f.function_count()));
-
-    writeln!(w).ok();
-    writeln!(w, "# TOP_FILES").ok();
-    writeln!(w, "file\tfunctions\tclasses\tavg_fn_length").ok();
-    for fi in sorted_files.iter().take(10) {
-        let rel = fi
-            .path
-            .strip_prefix(root)
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|_| fi.path.display().to_string());
-        writeln!(
-            w,
-            "{}\t{}\t{}\t{:.2}",
-            rel,
-            fi.function_count(),
-            fi.class_count(),
-            fi.avg_function_length(),
-        ).ok();
+    if show_func_analysis {
+        let _ = writeln!(w);
+        let _ = tsv::write_function_analysis_sections(&mut w, result, root);
     }
 }
 

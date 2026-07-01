@@ -97,11 +97,9 @@ fn main() {
                 args.detailed,
                 args.tree,
                 config.extract_functions,
+                args.func_analysis,
                 config.warn_size,
             );
-            if args.func_analysis {
-                display::display_agent_function_analysis(&result, &config.target_dir);
-            }
             agent::print_hints(
                 mode,
                 args.detailed,
@@ -155,7 +153,14 @@ fn main() {
 
     // ── Export (always honoured regardless of mode) ───────────────────────────
     if let Some(ref output_file) = args.export {
-        if let Err(e) = export::export(&result, output_file, config.extract_functions) {
+        if let Err(e) = export::export(
+            &result,
+            output_file,
+            &config.target_dir,
+            config.extract_functions,
+            args.func_analysis,
+            config.warn_size,
+        ) {
             eprintln!("{} {}", "[ERROR]".red().bold(), e);
             process::exit(1);
         }
