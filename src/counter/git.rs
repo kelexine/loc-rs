@@ -57,21 +57,39 @@ fn git_discover_files(
     target_dir: &Path,
     include_ignored: bool,
 ) -> Result<Vec<PathBuf>> {
-    let mut file_set = HashSet::new();
-
-    // 1. Tracked files from git index (equivalent to git ls-files --cached)
-    // Avoid redundant stat calls on thousands of known regular files (mode 0o100644 / 0o100755).
     let index = repo.index().context("Failed to open git index")?;
+    let mut file_set = HashSet::with_capacity(index.len());
+
+    let is_repo_root = target_dir == workdir;
+    let rel_target = if !is_repo_root {
+        target_dir.strip_prefix(workdir).ok()
+    } else {
+        None
+    };
+    let rel_target_bytes = rel_target.and_then(|p| p.to_str()).map(|s| s.as_bytes());
+
     for entry in index.iter() {
         // Skip git submodules (0o160000) or directory tree entries (0o040000)
         let file_type = entry.mode & 0o170000;
         if file_type == 0o160000 || file_type == 0o040000 {
             continue;
         }
+
+        // Fast-path: filter by directory before UTF-8 decoding and PathBuf allocation
+        if let Some(target_bytes) = rel_target_bytes {
+            if !entry.path.starts_with(target_bytes) {
+                continue;
+            }
+            let prefix_len = target_bytes.len();
+            if entry.path.len() > prefix_len && entry.path[prefix_len] != b'/' {
+                continue;
+            }
+        }
+
         if let Ok(rel_str) = std::str::from_utf8(&entry.path) {
             let full_path = workdir.join(rel_str);
-            if full_path.starts_with(target_dir) {
-                // If standard blob, it is already known as a file; only stat if unusual mode
+            if is_repo_root || full_path.starts_with(target_dir) {
+                // S_IFREG (0o100000): known regular file in git index, avoid stat
                 if file_type == 0o100000 || full_path.is_file() {
                     file_set.insert(full_path);
                 }

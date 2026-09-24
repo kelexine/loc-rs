@@ -2,6 +2,7 @@
 // counter/mod.rs — Scan configuration and parallel pipeline orchestrator
 
 pub mod discovery;
+pub mod embedded;
 pub mod git;
 pub mod lines;
 pub mod process;
@@ -161,7 +162,8 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
         if fi.is_binary || fi.is_lockfile {
             continue;
         }
-        let ext = if fi.extension().is_empty() {
+
+        let container_ext = if fi.extension().is_empty() {
             fi.path
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -170,13 +172,27 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
         } else {
             fi.extension().to_string()
         };
-        let stats = breakdown.entry(ext).or_default();
-        stats.lines += fi.lines;
-        stats.code += fi.code;
-        stats.comment += fi.comment;
-        stats.blank += fi.blank;
-        stats.files += 1;
-        stats.functions += fi.function_count();
+
+        if fi.embedded.is_empty() {
+            let stats = breakdown.entry(container_ext).or_default();
+            stats.lines += fi.lines;
+            stats.code += fi.code;
+            stats.comment += fi.comment;
+            stats.blank += fi.blank;
+            stats.files += 1;
+            stats.functions += fi.function_count();
+        } else {
+            // Container file count
+            breakdown.entry(container_ext).or_default().files += 1;
+
+            for chunk in &fi.embedded {
+                let stats = breakdown.entry(chunk.extension.clone()).or_default();
+                stats.lines += chunk.lines;
+                stats.code += chunk.code;
+                stats.comment += chunk.comment;
+                stats.blank += chunk.blank;
+            }
+        }
     }
 
     Ok(ScanResult {
@@ -428,5 +444,236 @@ fn main() {
         // 3. Git commit dates lookup
         let dates = get_all_git_dates(path);
         assert!(dates.contains_key(&tracked_file));
+    }
+
+    // ── Embedded Languages & Jupyter Notebooks ────────────────────────────────
+
+    #[test]
+    fn test_html_embedded_script_and_style() {
+        let dir = tempdir().unwrap();
+        let p = dir.path().join("index.html");
+        fs::write(
+            &p,
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { color: red; }
+        /* css comment */
+    </style>
+</head>
+<body>
+    <script>
+        // js comment
+        const greeting = "Hello";
+        console.log(greeting);
+    </script>
+</body>
+</html>
+"#,
+        )
+        .unwrap();
+
+        let config = super::ScanConfig {
+            target_dir: dir.path().to_path_buf(),
+            allowed_extensions: None,
+            warn_size: None,
+            use_git_dates: false,
+            parallel: false,
+            extract_functions: false,
+            is_git_repo: false,
+            locignore: crate::locignore::LocIgnore::build(dir.path()),
+            include_hidden: false,
+            git_dates_cache: None,
+        };
+
+        let result = super::run_scan(&config).unwrap();
+        assert!(result.breakdown.contains_key("html"));
+        assert!(result.breakdown.contains_key("js"));
+        assert!(result.breakdown.contains_key("css"));
+
+        let js_stats = &result.breakdown["js"];
+        assert_eq!(js_stats.code, 2);
+        assert_eq!(js_stats.comment, 1);
+
+        let css_stats = &result.breakdown["css"];
+        assert_eq!(css_stats.code, 1);
+        assert_eq!(css_stats.comment, 1);
+    }
+
+    #[test]
+    fn test_jupyter_notebook_parsing() {
+        let dir = tempdir().unwrap();
+        let p = dir.path().join("notebook.ipynb");
+        fs::write(
+            &p,
+            r##"{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Notebook Title\n",
+    "Description of notebook"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Python cell comment\n",
+    "def add(a, b):\n",
+    "    return a + b\n"
+   ]
+  }
+ ],
+ "metadata": {
+  "language_info": {
+   "name": "python"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}"##,
+        )
+        .unwrap();
+
+        let config = super::ScanConfig {
+            target_dir: dir.path().to_path_buf(),
+            allowed_extensions: None,
+            warn_size: None,
+            use_git_dates: false,
+            parallel: false,
+            extract_functions: false,
+            is_git_repo: false,
+            locignore: crate::locignore::LocIgnore::build(dir.path()),
+            include_hidden: false,
+            git_dates_cache: None,
+        };
+
+        let result = super::run_scan(&config).unwrap();
+        assert!(result.breakdown.contains_key("ipynb"));
+        assert!(result.breakdown.contains_key("py"));
+        assert!(result.breakdown.contains_key("md"));
+
+        let py_stats = &result.breakdown["py"];
+        assert_eq!(py_stats.code, 2);
+        assert_eq!(py_stats.comment, 1);
+
+        let md_stats = &result.breakdown["md"];
+        assert_eq!(md_stats.code, 2);
+    }
+
+    #[test]
+    fn test_utf_encodings_accurate_counting() {
+        use crate::counter::process::process_file;
+        let dir = tempdir().unwrap();
+
+        let source =
+            "// comment 1\n// comment 2\n/* comment 3 */\nlet code1 = 1;\nlet code2 = 2;\n\n";
+
+        let config = super::ScanConfig {
+            target_dir: dir.path().to_path_buf(),
+            allowed_extensions: None,
+            warn_size: None,
+            use_git_dates: false,
+            parallel: false,
+            extract_functions: false,
+            is_git_repo: false,
+            locignore: crate::locignore::LocIgnore::build(dir.path()),
+            include_hidden: false,
+            git_dates_cache: None,
+        };
+
+        // 1. UTF-8 with BOM
+        let p_utf8_bom = dir.path().join("test_bom.rs");
+        let mut utf8_bom_bytes = vec![0xEF, 0xBB, 0xBF];
+        utf8_bom_bytes.extend_from_slice(source.as_bytes());
+        fs::write(&p_utf8_bom, &utf8_bom_bytes).unwrap();
+        let fi = process_file(&p_utf8_bom, &config).unwrap().unwrap();
+        assert_eq!((fi.code, fi.comment, fi.blank), (2, 3, 1));
+
+        // 2. UTF-16LE with BOM
+        let p_utf16le = dir.path().join("test_le.rs");
+        let mut utf16le_bytes = vec![0xFF, 0xFE];
+        for c in source.encode_utf16() {
+            utf16le_bytes.extend_from_slice(&c.to_le_bytes());
+        }
+        fs::write(&p_utf16le, &utf16le_bytes).unwrap();
+        let fi = process_file(&p_utf16le, &config).unwrap().unwrap();
+        assert_eq!((fi.code, fi.comment, fi.blank), (2, 3, 1));
+
+        // 3. UTF-16BE with BOM
+        let p_utf16be = dir.path().join("test_be.rs");
+        let mut utf16be_bytes = vec![0xFE, 0xFF];
+        for c in source.encode_utf16() {
+            utf16be_bytes.extend_from_slice(&c.to_be_bytes());
+        }
+        fs::write(&p_utf16be, &utf16be_bytes).unwrap();
+        let fi = process_file(&p_utf16be, &config).unwrap().unwrap();
+        assert_eq!((fi.code, fi.comment, fi.blank), (2, 3, 1));
+
+        // 4. UTF-32LE with BOM
+        let p_utf32le = dir.path().join("test_32le.rs");
+        let mut utf32le_bytes = vec![0xFF, 0xFE, 0x00, 0x00];
+        for c in source.chars() {
+            utf32le_bytes.extend_from_slice(&(c as u32).to_le_bytes());
+        }
+        fs::write(&p_utf32le, &utf32le_bytes).unwrap();
+        let fi = process_file(&p_utf32le, &config).unwrap().unwrap();
+        assert_eq!((fi.code, fi.comment, fi.blank), (2, 3, 1));
+
+        // 5. UTF-32BE with BOM
+        let p_utf32be = dir.path().join("test_32be.rs");
+        let mut utf32be_bytes = vec![0x00, 0x00, 0xFE, 0xFF];
+        for c in source.chars() {
+            utf32be_bytes.extend_from_slice(&(c as u32).to_be_bytes());
+        }
+        fs::write(&p_utf32be, &utf32be_bytes).unwrap();
+        let fi = process_file(&p_utf32be, &config).unwrap().unwrap();
+        assert_eq!((fi.code, fi.comment, fi.blank), (2, 3, 1));
+
+        // 6. UTF-16LE without BOM (heuristic)
+        let p_utf16le_nobom = dir.path().join("test_nobom_le.rs");
+        let mut utf16le_nobom = Vec::new();
+        for c in source.encode_utf16() {
+            utf16le_nobom.extend_from_slice(&c.to_le_bytes());
+        }
+        fs::write(&p_utf16le_nobom, &utf16le_nobom).unwrap();
+        let fi = process_file(&p_utf16le_nobom, &config).unwrap().unwrap();
+        assert_eq!((fi.code, fi.comment, fi.blank), (2, 3, 1));
+    }
+
+    #[test]
+    fn test_remote_agent_accuracy_fixtures() {
+        use crate::counter::lines::analyze_content_with_spec;
+        use crate::language::COMMENT_REGISTRY;
+
+        let rs_spec = COMMENT_REGISTRY.get(".rs");
+
+        // Fixture: Code, then /* start on same line (Expected: 2 code, 2 comment, 0 blank)
+        let fixture_code_then_block = "let a = 1; /* start\ncontinue comment */\nlet b = 2; /* start 2\ncontinue comment 2 */";
+        let (total, code, comment, blank) =
+            analyze_content_with_spec(fixture_code_then_block, rs_spec);
+        assert_eq!((code, comment, blank, total), (2, 2, 0, 4));
+
+        // Fixture: /* c */ code on one line (Expected: 1 code, 0 comment, 0 blank)
+        let fixture_inline_block = "/* inline comment */ let x = 42;";
+        let (total, code, comment, blank) =
+            analyze_content_with_spec(fixture_inline_block, rs_spec);
+        assert_eq!((code, comment, blank, total), (1, 0, 0, 1));
+
+        // Fixture: /* at line start inside a string (Expected: 4 code, 0 comment, 0 blank)
+        let fixture_string_comment = "let s = \"\n/* not comment\nstill string\n\";";
+        let (total, code, comment, blank) =
+            analyze_content_with_spec(fixture_string_comment, rs_spec);
+        assert_eq!((code, comment, blank, total), (4, 0, 0, 4));
+
+        // Fixture: Nested block comments (Expected: 1 code, 4 comment, 0 blank)
+        let fixture_nested = "/* outer\n   /* nested */\n   still comment\n*/\nfn main() {}";
+        let (total, code, comment, blank) = analyze_content_with_spec(fixture_nested, rs_spec);
+        assert_eq!((code, comment, blank, total), (1, 4, 0, 5));
     }
 }

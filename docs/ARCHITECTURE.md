@@ -20,8 +20,9 @@ This document explains how `loc-rs` is organized and how data flows through the 
 - `src/language/mod.rs`
   - Language-extension mapping, alias resolution, comment specs, default exclusions.
 - `src/counter/mod.rs` & submodules
-  - `counter/process.rs`: File worker, single-read byte loading, lossy UTF-8 fallback, binary checks.
-  - `counter/lines.rs`: Byte and string line analysis, comment syntax classification.
+  - `counter/process.rs`: File worker, single-read byte loading, lossy UTF-8 fallback, binary checks, embedded language routing.
+  - `counter/lines.rs`: Byte and string line analysis, stateful quote tracking, string comment masking, nested block comment tracking.
+  - `counter/embedded.rs`: HTML `<script>`/`<style>` extraction and Jupyter notebook (`.ipynb`) cell JSON extraction.
   - `counter/discovery.rs`: Filesystem directory walking with ignore rules.
   - `counter/git.rs`: Git2 index enumeration, worktree status, commit history revwalk.
 - `src/agent/mod.rs`
@@ -30,7 +31,7 @@ This document explains how `loc-rs` is organized and how data flows through the 
 - `src/extractors/*`
   - Tree-sitter-backed per-language function extraction implementations.
 - `src/models/mod.rs`
-  - Core data structures (`FileInfo`, `FunctionInfo`, `ScanResult`, extension stats).
+  - Core data structures (`FileInfo`, `EmbeddedChunk`, `FunctionInfo`, `ScanResult`, extension stats).
 - `src/display/mod.rs`
   - Summary, breakdown, tree view, and function analysis output.
 - `src/export/*`

@@ -5,7 +5,31 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.11] - 2026-09-24
+
+### Added
+- Embedded-language handling for HTML, Vue, Svelte (`<script>` to JavaScript/TypeScript, `<style>` to CSS/SCSS).
+- Jupyter Notebook (`.ipynb`) support with JSON cell parsing and kernel language extraction (Python, R, Julia, Rust, JS/TS).
+- String-aware and escape-aware tokenizer in line analysis preventing string literals (`"// ..."`, `"/* ... */"`) from misclassifying code as comments.
+- Nested block comment support (`/* /* nested */ */`) for Rust, Swift, and Haskell (`{- {- ... -} -}`).
+- `EmbeddedChunk` model tracking multi-language container distributions in scan results and extension breakdowns.
+- Unit and integration tests for embedded script/style tags, Jupyter notebooks, nested comments, and string-contained comments.
+- Native decoding and automatic detection for all UTF variants (`UTF-8` with/without BOM, `UTF-16LE` & `UTF-16BE` with/without BOM, and `UTF-32LE` & `UTF-32BE` with BOM).
+- Multiline double-quoted and backtick string literal persistence across lines in the tokenizer.
+- Accurate classification of mixed lines containing code followed by opening block comments (`code, then /* start`).
+- Unit test suite verifying UTF-8 BOM, UTF-16LE/BE, UTF-32LE/BE, and all edge-case fixtures reported by benchmark harness.
+### Changed
+- Added `src/counter/embedded.rs` for dedicated script, style, and notebook extraction.
+- Modularized scanner into zero-allocation byte slice tokenizer in `src/counter/lines.rs`.
+- Added trigger character fast-filter (`[bool; 256]`) and whole-line single comment fast-path, bypassing the token scanner for ~80% of lines.
+- Eliminated redundant `is_file()` `stat` syscalls before file reading on the hot path in `src/counter/process.rs`.
+- Single-pass extension resolution with zero-allocation stack buffer `[u8; 16]` for registry lookups.
+- Pre-allocated `HashSet` capacity from git index length and added byte-prefix filtering for repository subdirectory scans in `src/counter/git.rs`.
+- Cached embedded HTML `<script>` and `<style>` regular expressions globally with `Lazy<Regex>` in `src/counter/embedded.rs`.
+- Early-exit check on empty include/exclude sets and eliminated unnecessary backslash string replacement in `src/locignore/mod.rs`.
+- Added `panic = "abort"` to release profile for reduced binary overhead and smaller call-site frames.
+
+## [0.2.10] - 2026-09-24
 
 ### Added
 - Lossy UTF-8 fallback (`String::from_utf8_lossy`) for text files containing non-UTF-8 characters (e.g. ISO-8859/Latin-1 or legacy byte lookup tables).

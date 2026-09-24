@@ -82,15 +82,12 @@ Fix:
 loc -e report.html
 ```
 
-## `stream did not contain valid UTF-8` warning
+## Non-UTF-8 or legacy encoded files (Latin-1/ISO-8859)
 
-Cause:
-- The file is encoded in UTF-16 or UTF-32.
-- While `loc-rs` correctly identifies these as non-binary files via BOM detection, the current file reader only supports UTF-8 encoded text.
-
-Fix:
-- Convert the file to UTF-8 if you need it included in line counts.
-- `loc-rs` will skip these files and emit a warning to ensure results for other files remain accurate.
+Behavior:
+- In `loc-rs` v0.2.10+, files with non-UTF-8 byte sequences (such as Latin-1/ISO-8859 comments or binary look-up tables in source files) are automatically parsed via a lossy UTF-8 fallback (`String::from_utf8_lossy`).
+- This eliminates `stream did not contain valid UTF-8` warning skips and ensures full line metrics are recorded without crashing or skipping valid source code.
+- Files identified as binary via null-byte inspection or known binary extensions are skipped automatically.
 
 ## Command fails with directory error
 

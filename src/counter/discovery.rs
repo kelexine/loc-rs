@@ -20,10 +20,12 @@ pub fn get_manual_files(dir: &Path, locignore: &LocIgnore, include_hidden: bool)
             if e.depth() == 0 {
                 return true;
             }
-            let name = e.file_name().to_string_lossy();
+            let Some(name) = e.file_name().to_str() else {
+                return false;
+            };
             if e.file_type().is_dir() {
                 // Always prune hard-excluded and hidden dirs.
-                if EXCLUDED_DIRS.contains(name.as_ref()) || name == ".git" {
+                if EXCLUDED_DIRS.contains(name) || name == ".git" {
                     return false;
                 }
                 if !include_hidden && name != ".well-known" && name.starts_with('.') {

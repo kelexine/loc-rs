@@ -38,6 +38,7 @@ pub static LANGUAGE_MAP: Lazy<HashMap<&'static str, Vec<&'static str>>> = Lazy::
     m.insert("lua", vec![".lua"]);
     m.insert("zig", vec![".zig"]);
     m.insert("nim", vec![".nim", ".nims"]);
+    m.insert("jupyter", vec![".ipynb"]);
     m
 });
 
@@ -61,6 +62,7 @@ static ALIASES: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     m.insert("yml", "yaml");
     m.insert("kt", "kotlin");
     m.insert("hs", "haskell");
+    m.insert("ipynb", "jupyter");
     m
 });
 
@@ -176,6 +178,8 @@ pub struct CommentSpec {
     pub single: Option<&'static str>,
     /// Multi-line comment (start, end)
     pub multi: Option<(&'static str, &'static str)>,
+    /// Whether block comments support nesting (e.g. `/* /* nested */ */`)
+    pub supports_nesting: bool,
 }
 
 /// Registry for comment specifications by extension.
@@ -185,46 +189,66 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
     let c_style = CommentSpec {
         single: Some("//"),
         multi: Some(("/*", "*/")),
+        supports_nesting: false,
+    };
+    let c_style_nested = CommentSpec {
+        single: Some("//"),
+        multi: Some(("/*", "*/")),
+        supports_nesting: true,
     };
     let bash_style = CommentSpec {
         single: Some("#"),
         multi: None,
+        supports_nesting: false,
     };
     let py_style = CommentSpec {
         single: Some("#"),
         multi: Some(("\"\"\"", "\"\"\"")), // Triple quotes are often used as docstrings but act like block comments
+        supports_nesting: false,
     };
     let html_style = CommentSpec {
         single: None,
         multi: Some(("<!--", "-->")),
+        supports_nesting: false,
     };
     let sql_style = CommentSpec {
         single: Some("--"),
         multi: Some(("/*", "*/")),
+        supports_nesting: false,
     };
     let lua_style = CommentSpec {
         single: Some("--"),
         multi: Some(("--[[", "]]")),
+        supports_nesting: false,
     };
     let haskell_style = CommentSpec {
         single: Some("--"),
         multi: Some(("{-", "-}")),
+        supports_nesting: true,
     };
     let ruby_style = CommentSpec {
         single: Some("#"),
         multi: Some(("=begin", "=end")),
+        supports_nesting: false,
+    };
+
+    let css_style = CommentSpec {
+        single: None,
+        multi: Some(("/*", "*/")),
+        supports_nesting: false,
     };
 
     // Mapping
     let mappings = [
         (
             vec![
-                ".rs", ".go", ".java", ".kt", ".kts", ".swift", ".c", ".h", ".cpp", ".cc", ".cxx",
-                ".hpp", ".hxx", ".h++", ".cs", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".mts",
-                ".php", ".scala", ".sc", ".zig",
+                ".go", ".java", ".kt", ".kts", ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hxx",
+                ".h++", ".cs", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".php", ".scala",
+                ".sc", ".zig",
             ],
             c_style,
         ),
+        (vec![".rs", ".swift"], c_style_nested),
         (vec![".py", ".pyw", ".pyi"], py_style),
         (
             vec![
@@ -237,6 +261,7 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
             vec![".html", ".htm", ".xml", ".xsl", ".xslt", ".vue", ".svelte"],
             html_style,
         ),
+        (vec![".css", ".scss", ".sass", ".less"], css_style),
         (vec![".sql"], sql_style),
         (vec![".lua"], lua_style),
         (vec![".hs", ".lhs"], haskell_style),
@@ -307,21 +332,21 @@ mod tests {
     fn test_resolve_extensions_aliases() {
         assert_eq!(
             resolve_extensions("py"),
-            vec![".py", ".pyw", ".pyi"]
+            [".py", ".pyw", ".pyi"]
                 .iter()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>()
         );
         assert_eq!(
             resolve_extensions("javascript"),
-            vec![".js", ".mjs", ".cjs"]
+            [".js", ".mjs", ".cjs"]
                 .iter()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>()
         );
         assert_eq!(
             resolve_extensions("js"),
-            vec![".js", ".mjs", ".cjs"]
+            [".js", ".mjs", ".cjs"]
                 .iter()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>()
@@ -333,7 +358,7 @@ mod tests {
         assert_eq!(resolve_extensions("RUST"), vec![".rs".to_string()]);
         assert_eq!(
             resolve_extensions("Py"),
-            vec![".py", ".pyw", ".pyi"]
+            [".py", ".pyw", ".pyi"]
                 .iter()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>()

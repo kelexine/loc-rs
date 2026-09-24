@@ -41,6 +41,17 @@ impl FunctionInfo {
     }
 }
 
+/// A chunk of embedded source code in a container file (such as HTML `<script>` or Jupyter cell).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddedChunk {
+    /// Target extension for language categorization, e.g. "js", "css", "py", "md".
+    pub extension: String,
+    pub lines: usize,
+    pub code: usize,
+    pub comment: usize,
+    pub blank: usize,
+}
+
 /// Aggregated information about a single source file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileInfo {
@@ -59,6 +70,9 @@ pub struct FileInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_modified: Option<DateTime<Utc>>,
     pub functions: Vec<FunctionInfo>,
+    /// Embedded language breakdown for multi-language containers (HTML, Jupyter Notebooks).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub embedded: Vec<EmbeddedChunk>,
 }
 
 impl FileInfo {
@@ -81,6 +95,7 @@ impl FileInfo {
             is_lockfile: false,
             last_modified,
             functions: Vec::new(),
+            embedded: Vec::new(),
         }
     }
 
@@ -95,6 +110,11 @@ impl FileInfo {
 
     pub fn with_functions(mut self, functions: Vec<FunctionInfo>) -> Self {
         self.functions = functions;
+        self
+    }
+
+    pub fn with_embedded(mut self, embedded: Vec<EmbeddedChunk>) -> Self {
+        self.embedded = embedded;
         self
     }
 

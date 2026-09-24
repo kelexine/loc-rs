@@ -72,15 +72,24 @@ impl LocIgnore {
     /// 2. Explicit exclude match → **exclude**
     /// 3. No match → **include** (default)
     pub fn is_excluded(&self, path: &Path) -> bool {
-        let rel = self.rel(path);
-        let s = rel.to_string_lossy().replace('\\', "/");
-
-        // Negation takes highest priority — an explicit include overrides all.
-        if !self.include.is_empty() && self.include.is_match(s.as_str()) {
+        if self.include.is_empty() && self.exclude.is_empty() {
             return false;
         }
 
-        !self.exclude.is_empty() && self.exclude.is_match(s.as_str())
+        let rel = self.rel(path);
+        let lossy = rel.to_string_lossy();
+        let s = if lossy.contains('\\') {
+            std::borrow::Cow::Owned(lossy.replace('\\', "/"))
+        } else {
+            lossy
+        };
+
+        // Negation takes highest priority — an explicit include overrides all.
+        if !self.include.is_empty() && self.include.is_match(s.as_ref()) {
+            return false;
+        }
+
+        !self.exclude.is_empty() && self.exclude.is_match(s.as_ref())
     }
 
     /// Compute path relative to the scan root (for matching).
@@ -137,11 +146,13 @@ impl LocIgnore {
             if !ft.is_dir() {
                 continue;
             }
-            let name = entry.file_name();
-            let n = name.to_string_lossy();
+            let file_name = entry.file_name();
+            let Some(n) = file_name.to_str() else {
+                continue;
+            };
             // Skip .git, target, node_modules, vendor — they're either excluded
             // by default or too large to recurse into cheaply.
-            if n.starts_with('.') || matches!(n.as_ref(), "target" | "node_modules" | "vendor") {
+            if n.starts_with('.') || matches!(n, "target" | "node_modules" | "vendor") {
                 continue;
             }
             Self::collect(&entry.path(), root, excl, incl, has_negations);

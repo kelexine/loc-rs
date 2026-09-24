@@ -8,7 +8,10 @@
 ## Features
 
 - **Fast project scanning**: Counts text files across a target directory with optional Rayon-powered parallel processing.
-- **Code/comment/blank split**: Classifies source lines using language-aware single-line and block-comment rules.
+- **Code/comment/blank split**: Classifies source lines using language-aware single-line, block-comment, and stateful string masking rules.
+- **Nested comment support**: Handles nested block comments (e.g. `/* /* nested */ */` in Rust and Swift, `{- {- ... -} -}` in Haskell).
+- **Embedded-language analysis**: Accurately extracts and credits embedded code blocks inside HTML, Vue, and Svelte templates (`<script>` to JS/TS, `<style>` to CSS/SCSS).
+- **Jupyter Notebook (`.ipynb`) support**: Deserializes notebook JSON, identifies the active kernel language, and parses code and markdown cells into respective language statistics.
 - **Tree view**: Renders a recursive project tree when `--tree` is enabled, with optional binary-file display.
 - **Function extraction**: Uses Tree-sitter-backed extractors for Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#/Scala, PHP, Swift, and Ruby.
 - **Complexity analysis**: Reports function length and a branch-count cyclomatic complexity estimate.
@@ -19,7 +22,7 @@
 - **Multi-format export**: Writes JSON, JSONL, CSV, TSV, and HTML reports.
 - **Global configuration**: Reads defaults from `~/.config/loc-rs/config.toml` through the platform config directory.
 - **Size warnings**: Flags files above a configured line threshold.
-- **BOM-aware binary detection**: Treats UTF-16/UTF-32 files as text instead of false-positive binary files.
+- **Resilient text loading**: Single-pass byte loading with BOM detection and lossy UTF-8 fallback (`String::from_utf8_lossy`) for files with legacy encodings (Latin-1/ISO-8859).
 
 ---
 

@@ -559,50 +559,6 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::models::FileInfo;
-    use std::path::PathBuf;
-
-    #[test]
-    fn test_iterative_tree_building_deep() {
-        let mut tree = BTreeMap::new();
-        // Create a deep path: a/b/c/.../z/file.rs (26 levels)
-        let mut path_parts = Vec::new();
-        for i in 0..26 {
-            path_parts.push(Box::leak(format!("{}", (b'a' + i) as char).into_boxed_str()) as &str);
-        }
-        let info = FileInfo::new(
-            PathBuf::from("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z/file.rs"),
-            10,
-            10,
-            0,
-            0,
-            false,
-            None,
-        );
-
-        insert_into_tree(&mut tree, &path_parts, &info);
-
-        // Verify the depth
-        let mut node = &tree["a"];
-        for i in 1..26 {
-            match node {
-                TreeNode::Dir(children) => {
-                    node = &children[path_parts[i]];
-                }
-                _ => panic!("Expected directory at depth {}", i),
-            }
-        }
-
-        match node {
-            TreeNode::File(fi) => assert_eq!(fi.lines, 10),
-            _ => panic!("Expected file at the leaf"),
-        }
-    }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Agent-mode display (TSV, no ANSI)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -673,5 +629,49 @@ pub fn display_quiet(result: &ScanResult, root: &Path) {
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| fi.path.display().to_string());
         println!("{}", rel);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::FileInfo;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_iterative_tree_building_deep() {
+        let mut tree = BTreeMap::new();
+        // Create a deep path: a/b/c/.../z/file.rs (26 levels)
+        let mut path_parts = Vec::new();
+        for i in 0..26 {
+            path_parts.push(Box::leak(format!("{}", (b'a' + i) as char).into_boxed_str()) as &str);
+        }
+        let info = FileInfo::new(
+            PathBuf::from("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z/file.rs"),
+            10,
+            10,
+            0,
+            0,
+            false,
+            None,
+        );
+
+        insert_into_tree(&mut tree, &path_parts, &info);
+
+        // Verify the depth
+        let mut node = &tree["a"];
+        for i in 1..26 {
+            match node {
+                TreeNode::Dir(children) => {
+                    node = &children[path_parts[i]];
+                }
+                _ => panic!("Expected directory at depth {}", i),
+            }
+        }
+
+        match node {
+            TreeNode::File(fi) => assert_eq!(fi.lines, 10),
+            _ => panic!("Expected file at the leaf"),
+        }
     }
 }

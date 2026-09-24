@@ -35,6 +35,11 @@ generated
 
 It traverses commit history via `git2` revwalk for file timestamps. Omit `--git-dates` when speed matters.
 
+## How does `loc-rs` handle multi-language files like HTML and Jupyter notebooks?
+
+- **HTML, Vue, Svelte**: `loc-rs` inspects `<script>` and `<style>` blocks, crediting lines to JavaScript/TypeScript and CSS/SCSS respectively, while non-script/style markup is attributed to the host template extension (`.html`, `.vue`, `.svelte`).
+- **Jupyter Notebooks (`.ipynb`)**: Notebook cells are deserialized from JSON, the kernel language is determined from notebook metadata (defaulting to Python), and code/markdown cells are accurately attributed to their respective language metrics.
+
 ## Does `loc-rs` scan binary files?
 
 Binary files are detected and excluded from line metrics. They can be shown in tree output with `--binary`.

@@ -873,7 +873,7 @@ mod tests {
     #[test]
     fn env_pattern_matches_is_const_evaluable() {
         const MATCHES: bool = EnvPattern::Exact("WarpTerminal").matches("WarpTerminal");
-        assert!(MATCHES);
+        const { assert!(MATCHES) };
     }
 
     // ── DetectionResult helpers ──────────────────────────────────────────────

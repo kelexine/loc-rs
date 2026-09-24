@@ -60,11 +60,32 @@ jobs:
           mkdir -p dist
           cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} dist/${{ matrix.asset_name }}
 
+      - name: Extract Release Notes from CHANGELOG
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag_name || github.ref_name }}"
+          VERSION="${TAG#v}"
+          python3 -c "
+          import re, sys
+          version = sys.argv[1]
+          content = open('CHANGELOG.md').read()
+          # Match section for version or unreleased
+          pattern = r'^## \[' + re.escape(version) + r'\].*?\n(.*?)(?=^## \[|\Z)'
+          m = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+          if not m and version:
+              # Fallback to Unreleased if tag section is not yet stamped
+              m = re.search(r'^## \[Unreleased\].*?\n(.*?)(?=^## \[|\Z)', content, re.MULTILINE | re.DOTALL)
+          notes = m.group(1).strip() if m else ''
+          with open('RELEASE_NOTES.md', 'w') as f:
+              f.write(notes + '\n')
+          " "$VERSION"
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
           files: dist/${{ matrix.asset_name }}
           name: Release ${{ inputs.tag_name || github.ref_name }}
           tag_name: ${{ inputs.tag_name || github.ref_name }}
+          body_path: RELEASE_NOTES.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
