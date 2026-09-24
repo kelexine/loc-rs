@@ -601,12 +601,16 @@ impl core::fmt::Display for DetectionResult {
 ///
 /// The registry data consulted is entirely compile-time (`const`); only the
 /// `std::env::var` calls happen at runtime.
-pub fn detect() -> DetectionResult {
+/// Detects the active agent harness using a custom environment variable lookup closure.
+pub fn detect_with<F>(lookup: F) -> DetectionResult
+where
+    F: Fn(&str) -> Option<String>,
+{
     // Phase 1 — harness-specific env-vars (insertion order = priority order).
     // A dedicated marker is a stronger signal than a generic AI_AGENT value.
     for (key, harness) in AGENT_HARNESSES {
         for check in harness.env_vars {
-            if let Ok(val) = std::env::var(check.name) {
+            if let Some(val) = lookup(check.name) {
                 if check.pattern.matches(&val) {
                     return DetectionResult::Known(*key);
                 }
@@ -616,7 +620,7 @@ pub fn detect() -> DetectionResult {
 
     // Phase 2 — standard agent env-vars (fallback / explicit override).
     for &var in STANDARD_AGENT_ENV_VARS {
-        if let Ok(val) = std::env::var(var) {
+        if let Some(val) = lookup(var) {
             if val.is_empty() {
                 continue;
             }
@@ -628,6 +632,10 @@ pub fn detect() -> DetectionResult {
     }
 
     DetectionResult::None
+}
+
+pub fn detect() -> DetectionResult {
+    detect_with(|name| std::env::var(name).ok())
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -806,103 +814,66 @@ mod tests {
         assert_eq!(DetectionResult::None.to_string(), "none");
     }
 
-    // ── detect() via env-var injection ──────────────────────────────────────
-    // Each test uses a unique variable already present in AGENT_HARNESSES so
-    // we don't need to mutate shared state — we set the var, run detect(),
-    // then immediately remove it. Tests are NOT marked `#[ignore]` because
-    // they rely on variables that are absent by default; they do mutate the
-    // process environment, so run with `-- --test-threads=1` if parallelism
-    // causes flakiness.
+    // ── detect_with() deterministic mock tests ──────────────────────────────
+    // Uses isolated closures without mutating global process environment.
+
+    fn mock_env<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |k| pairs.iter().find(|(name, _)| *name == k).map(|(_, v)| (*v).to_string())
+    }
 
     #[test]
     fn detect_standard_var_known() {
-        // Standard var resolves to a known key only when no harness-specific
-        // var for that harness is set (Phase 1 finds nothing, Phase 2 fires).
-        unsafe { std::env::set_var("AI_AGENT", "claude-code") };
-        let result = detect();
-        unsafe { std::env::remove_var("AI_AGENT") };
+        let result = detect_with(mock_env(&[("AI_AGENT", "claude-code")]));
         assert_eq!(result, DetectionResult::Known(AgentHarnessKey::ClaudeCode));
     }
 
     #[test]
     fn detect_standard_var_unknown() {
-        unsafe { std::env::set_var("AI_AGENT", "my-obscure-agent") };
-        let result = detect();
-        unsafe { std::env::remove_var("AI_AGENT") };
+        let result = detect_with(mock_env(&[("AI_AGENT", "my-obscure-agent")]));
         assert_eq!(result, DetectionResult::Unknown("my-obscure-agent".into()));
     }
 
     #[test]
     fn detect_harness_specific_var() {
-        unsafe { std::env::set_var("CRUSH", "1") };
-        let result = detect();
-        unsafe { std::env::remove_var("CRUSH") };
+        let result = detect_with(mock_env(&[("CRUSH", "1")]));
         assert_eq!(result, DetectionResult::Known(AgentHarnessKey::Crush));
     }
 
     #[test]
     fn detect_exact_pattern_warp() {
-        unsafe { std::env::set_var("TERM_PROGRAM", "WarpTerminal") };
-        let result = detect();
-        unsafe { std::env::remove_var("TERM_PROGRAM") };
+        let result = detect_with(mock_env(&[("TERM_PROGRAM", "WarpTerminal")]));
         assert_eq!(result, DetectionResult::Known(AgentHarnessKey::Warp));
     }
 
     #[test]
     fn detect_exact_pattern_non_warp_terminal_does_not_match() {
-        unsafe { std::env::set_var("TERM_PROGRAM", "iTerm.app") };
-        let result = detect();
-        unsafe { std::env::remove_var("TERM_PROGRAM") };
+        let result = detect_with(mock_env(&[("TERM_PROGRAM", "iTerm.app")]));
         assert_ne!(result, DetectionResult::Known(AgentHarnessKey::Warp));
     }
 
     #[test]
     fn detect_cowork_wins_over_claude_code_when_both_set() {
-        unsafe {
-            std::env::set_var("CLAUDE_CODE_IS_COWORK", "1");
-            std::env::set_var("CLAUDE_CODE", "1");
-        }
-        let result = detect();
-        unsafe {
-            std::env::remove_var("CLAUDE_CODE_IS_COWORK");
-            std::env::remove_var("CLAUDE_CODE");
-        }
+        let result = detect_with(mock_env(&[
+            ("CLAUDE_CODE_IS_COWORK", "1"),
+            ("CLAUDE_CODE", "1"),
+        ]));
         assert_eq!(result, DetectionResult::Known(AgentHarnessKey::Cowork));
     }
 
     /// Regression: harness-specific var must beat a conflicting standard-var
     /// value.  `AI_AGENT=codex` + `CRUSH=1` must return `Crush`, not `Codex`.
-    /// The old (incorrect) implementation returned `Codex` because it checked
-    /// standard vars first.
     #[test]
     fn detect_harness_specific_beats_standard_var_conflict() {
-        unsafe {
-            std::env::set_var("AI_AGENT", "codex");
-            std::env::set_var("CRUSH", "1");
-        }
-        let result = detect();
-        unsafe {
-            std::env::remove_var("AI_AGENT");
-            std::env::remove_var("CRUSH");
-        }
+        let result = detect_with(mock_env(&[
+            ("AI_AGENT", "codex"),
+            ("CRUSH", "1"),
+        ]));
         assert_eq!(result, DetectionResult::Known(AgentHarnessKey::Crush));
     }
 
     #[test]
     fn detect_returns_none_when_no_vars_set() {
-        let ai = std::env::var("AI_AGENT").ok();
-        let ag = std::env::var("AGENT").ok();
-        unsafe {
-            std::env::remove_var("AI_AGENT");
-            std::env::remove_var("AGENT");
-        }
-        let any_harness_var_set = AGENT_HARNESSES.iter().any(|(_, h)| {
-            h.env_vars.iter().any(|c| std::env::var(c.name).is_ok())
-        });
-        if !any_harness_var_set {
-            assert_eq!(detect(), DetectionResult::None);
-        }
-        if let Some(v) = ai { unsafe { std::env::set_var("AI_AGENT", v) } }
-        if let Some(v) = ag { unsafe { std::env::set_var("AGENT", v) } }
+        let result = detect_with(mock_env(&[]));
+        assert_eq!(result, DetectionResult::None);
     }
 }

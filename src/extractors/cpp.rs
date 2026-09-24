@@ -79,26 +79,26 @@ fn parse_function(
     }
 
     // Fallback: search deeper for function_declarator
-    if name.is_empty() {
-        if let Some(decl) = find_descendant(node, "function_declarator") {
-            let mut inner_cursor = decl.walk();
-            for inner_child in decl.children(&mut inner_cursor) {
-                let ikind = inner_child.kind();
-                if (ikind == "identifier"
-                    || ikind == "field_identifier"
-                    || ikind == "destructor_name")
-                    && name.is_empty()
-                {
-                    name = inner_child
-                        .utf8_text(content.as_bytes())
-                        .unwrap_or("")
-                        .to_string();
-                } else if ikind == "parameter_list" && params_str.is_empty() {
-                    params_str = inner_child
-                        .utf8_text(content.as_bytes())
-                        .unwrap_or("")
-                        .to_string();
-                }
+    if name.is_empty()
+        && let Some(decl) = find_descendant(node, "function_declarator")
+    {
+        let mut inner_cursor = decl.walk();
+        for inner_child in decl.children(&mut inner_cursor) {
+            let ikind = inner_child.kind();
+            if (ikind == "identifier"
+                || ikind == "field_identifier"
+                || ikind == "destructor_name")
+                && name.is_empty()
+            {
+                name = inner_child
+                    .utf8_text(content.as_bytes())
+                    .unwrap_or("")
+                    .to_string();
+            } else if ikind == "parameter_list" && params_str.is_empty() {
+                params_str = inner_child
+                    .utf8_text(content.as_bytes())
+                    .unwrap_or("")
+                    .to_string();
             }
         }
     }

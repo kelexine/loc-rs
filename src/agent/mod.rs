@@ -6,7 +6,7 @@
 // goes to stderr so it never pollutes the agent's parsing pipeline.
 
 pub mod harnesses;
-use harnesses::{DetectionResult, detect};
+use harnesses::DetectionResult;
 use crate::cli::OutputFormat;
 
 // ─── Output mode ─────────────────────────────────────────────────────────────
@@ -35,12 +35,16 @@ pub enum OutputMode {
 /// Resolve the output mode and optionally the detected agent name.
 ///
 /// Returns `(mode, detected_agent)` where `detected_agent` is `Some` when the
-/// mode was auto-detected from env vars (used in the startup hint).
-pub fn resolve_output_mode(
+/// Resolve the output mode and optionally the detected agent name with a custom env lookup closure.
+pub fn resolve_output_mode_with<F>(
     format: Option<OutputFormat>,
     json_flag: bool,
     quiet_flag: bool,
-) -> (OutputMode, Option<String>) {
+    lookup: F,
+) -> (OutputMode, Option<String>)
+where
+    F: Fn(&str) -> Option<String>,
+{
     // Explicit flags are checked first — they always override auto-detection.
     if quiet_flag {
         return (OutputMode::Quiet, None);
@@ -60,12 +64,24 @@ pub fn resolve_output_mode(
         );
     }
 
-    // Auto-detect from process environment.
-    match detect() {
+    // Auto-detect from environment.
+    match harnesses::detect_with(lookup) {
         DetectionResult::Known(key) => (OutputMode::Agent, Some(key.id().to_string())),
         DetectionResult::Unknown(v) => (OutputMode::Agent, Some(v)),
         DetectionResult::None       => (OutputMode::Human, None),
     }
+}
+
+/// Resolve the output mode and optionally the detected agent name.
+///
+/// Returns `(mode, detected_agent)` where `detected_agent` is `Some` when the
+/// mode was auto-detected from env vars (used in the startup hint).
+pub fn resolve_output_mode(
+    format: Option<OutputFormat>,
+    json_flag: bool,
+    quiet_flag: bool,
+) -> (OutputMode, Option<String>) {
+    resolve_output_mode_with(format, json_flag, quiet_flag, |name| std::env::var(name).ok())
 }
 
 // ─── Hint helpers ─────────────────────────────────────────────────────────────
@@ -173,20 +189,25 @@ mod tests {
         assert_eq!(mode, OutputMode::Quiet);
     }
 
+    fn mock_env<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |k| pairs.iter().find(|(name, _)| *name == k).map(|(_, v)| (*v).to_string())
+    }
+
     #[test]
     fn auto_detect_known_agent_returns_agent_mode() {
-        unsafe { std::env::set_var("CRUSH", "1") };
-        let (mode, name) = resolve_output_mode(None, false, false);
-        unsafe { std::env::remove_var("CRUSH") };
+        let (mode, name) = resolve_output_mode_with(None, false, false, mock_env(&[("CRUSH", "1")]));
         assert_eq!(mode, OutputMode::Agent);
         assert_eq!(name.as_deref(), Some("crush"));
     }
 
     #[test]
     fn auto_detect_unknown_agent_returns_agent_mode() {
-        unsafe { std::env::set_var("AI_AGENT", "my-custom-tool") };
-        let (mode, name) = resolve_output_mode(None, false, false);
-        unsafe { std::env::remove_var("AI_AGENT") };
+        let (mode, name) = resolve_output_mode_with(
+            None,
+            false,
+            false,
+            mock_env(&[("AI_AGENT", "my-custom-tool")]),
+        );
         assert_eq!(mode, OutputMode::Agent);
         assert_eq!(name.as_deref(), Some("my-custom-tool"));
     }
@@ -194,9 +215,12 @@ mod tests {
     #[test]
     fn explicit_flag_beats_env_detection() {
         // Even if an agent env-var is set, --format human must win.
-        unsafe { std::env::set_var("CRUSH", "1") };
-        let (mode, _) = resolve_output_mode(Some(OutputFormat::Human), false, false);
-        unsafe { std::env::remove_var("CRUSH") };
+        let (mode, _) = resolve_output_mode_with(
+            Some(OutputFormat::Human),
+            false,
+            false,
+            mock_env(&[("CRUSH", "1")]),
+        );
         assert_eq!(mode, OutputMode::Human);
     }
 }

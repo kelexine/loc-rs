@@ -45,7 +45,7 @@ fn traverse(
             | "arrow_function"
             | "function"
     ) {
-        if let Some(info) = parse_function(node, content, kind == "method_definition") {
+        if let Some(info) = parse_function(node, content, in_class || kind == "method_definition") {
             functions.push(info);
         }
     } else if kind == "class_declaration" || kind == "class" {

@@ -23,14 +23,14 @@ impl Extractor for GoExtractor {
 fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>) {
     let kind = node.kind();
 
-    if kind == "function_declaration" {
-        if let Some(info) = parse_function(node, content, false) {
-            functions.push(info);
-        }
-    } else if kind == "method_declaration" {
-        if let Some(info) = parse_function(node, content, true) {
-            functions.push(info);
-        }
+    if kind == "function_declaration"
+        && let Some(info) = parse_function(node, content, false)
+    {
+        functions.push(info);
+    } else if kind == "method_declaration"
+        && let Some(info) = parse_function(node, content, true)
+    {
+        functions.push(info);
     }
 
     let mut cursor = node.walk();

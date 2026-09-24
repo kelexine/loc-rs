@@ -43,10 +43,10 @@ fn traverse(
             } else if ckind == "function_item" {
                 let is_test = pending_attrs.iter().any(|a| a.contains("test"));
                 pending_attrs.clear();
-                if !is_test {
-                    if let Some(info) = parse_function(child, content, in_impl || is_impl) {
-                        functions.push(info);
-                    }
+                if !is_test
+                    && let Some(info) = parse_function(child, content, in_impl || is_impl)
+                {
+                    functions.push(info);
                 }
             } else if ckind == "struct_item" {
                 pending_attrs.clear();
@@ -65,14 +65,14 @@ fn traverse(
         return;
     }
 
-    if kind == "function_item" {
-        if let Some(info) = parse_function(node, content, in_impl) {
-            functions.push(info);
-        }
-    } else if kind == "struct_item" {
-        if let Some(info) = parse_struct(node, content) {
-            functions.push(info);
-        }
+    if kind == "function_item"
+        && let Some(info) = parse_function(node, content, in_impl)
+    {
+        functions.push(info);
+    } else if kind == "struct_item"
+        && let Some(info) = parse_struct(node, content)
+    {
+        functions.push(info);
     }
 
     let mut cursor = node.walk();

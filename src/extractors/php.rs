@@ -29,7 +29,7 @@ fn traverse(
     let kind = node.kind();
 
     if kind == "function_definition" || kind == "method_declaration" {
-        if let Some(info) = parse_function(node, content, kind == "method_declaration") {
+        if let Some(info) = parse_function(node, content, in_class || kind == "method_declaration") {
             functions.push(info);
         }
     } else if (kind == "class_declaration"

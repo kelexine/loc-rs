@@ -103,9 +103,7 @@ pub fn ast_complexity(root: Node<'_>, src: &[u8]) -> u32 {
             }
         }
 
-        if !visited && cursor.goto_first_child() {
-            visited = false;
-        } else if cursor.goto_next_sibling() {
+        if (!visited && cursor.goto_first_child()) || cursor.goto_next_sibling() {
             visited = false;
         } else if cursor.goto_parent() {
             visited = true;
