@@ -140,6 +140,23 @@ pub fn parse_jupyter_notebook(
     Some((total_lines, total_code, total_comment, total_blank, chunks))
 }
 
+/// Trims structural tag-boundary newlines from an embedded script/style block
+/// while preserving any genuine blank lines inside the block.
+fn trim_tag_newlines(s: &str) -> &str {
+    let mut s = s;
+    if let Some(pos) = s.find('\n')
+        && s[..pos].trim().is_empty()
+    {
+        s = &s[pos + 1..];
+    }
+    if let Some(pos) = s.rfind('\n')
+        && s[pos + 1..].trim().is_empty()
+    {
+        s = &s[..pos];
+    }
+    s
+}
+
 /// Extract embedded script, style, and template blocks from HTML-like content.
 pub fn parse_html_embedded(
     content: &str,
@@ -154,7 +171,8 @@ pub fn parse_html_embedded(
     // Process scripts
     for cap in SCRIPT_REGEX.captures_iter(content) {
         let attrs = cap.name("attrs").map(|m| m.as_str()).unwrap_or("");
-        let body = cap.name("body").map(|m| m.as_str()).unwrap_or("");
+        let raw_body = cap.name("body").map(|m| m.as_str()).unwrap_or("");
+        let body = trim_tag_newlines(raw_body);
 
         let is_ts = attrs.contains("lang=\"ts\"")
             || attrs.contains("lang='ts'")
@@ -179,7 +197,8 @@ pub fn parse_html_embedded(
     // Process styles
     for cap in STYLE_REGEX.captures_iter(content) {
         let attrs = cap.name("attrs").map(|m| m.as_str()).unwrap_or("");
-        let body = cap.name("body").map(|m| m.as_str()).unwrap_or("");
+        let raw_body = cap.name("body").map(|m| m.as_str()).unwrap_or("");
+        let body = trim_tag_newlines(raw_body);
 
         let is_scss = attrs.contains("lang=\"scss\"") || attrs.contains("lang='scss'");
         let target_ext = if is_scss { "scss" } else { "css" };

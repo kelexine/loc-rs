@@ -259,7 +259,7 @@ Function extraction is available when `-f` or `--func-analysis` is enabled. The 
 |---|---|---|
 | `Functions: 0` in summary | Function extraction not enabled | Run with `-f` or `--func-analysis` |
 | Unknown language warning (for example `dart`) | Language not in resolver map | Use a supported language or direct extension via `-t .ext` |
-| `stream did not contain valid UTF-8` warning | File is UTF-16/UTF-32 encoded | Convert to UTF-8; `loc-rs` current reader is UTF-8 only |
+| Non-UTF-8 or UTF-16/32 encoding | File is encoded in UTF-16, UTF-32, or legacy 8-bit text | Native decoders automatically handle UTF-16/32 and BOMs; non-UTF-8 uses lossy fallback |
 | Missing untracked files in output | Running inside a git repo with default git-based discovery | Check `.gitignore`, or run with `--include-hidden` / adjust ignore rules |
 | `--git-dates` appears slow | Traverses git commit history via git2 revwalk | Omit `--git-dates` for faster scans |
 | HTML report not opening as expected | Output path/extension mismatch | Export with `.html` or `.htm` extension |

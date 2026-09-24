@@ -495,10 +495,12 @@ fn main() {
         let js_stats = &result.breakdown["js"];
         assert_eq!(js_stats.code, 2);
         assert_eq!(js_stats.comment, 1);
+        assert_eq!(js_stats.blank, 0);
 
         let css_stats = &result.breakdown["css"];
         assert_eq!(css_stats.code, 1);
         assert_eq!(css_stats.comment, 1);
+        assert_eq!(css_stats.blank, 0);
     }
 
     #[test]

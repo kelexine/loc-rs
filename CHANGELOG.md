@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multiline double-quoted and backtick string literal persistence across lines in the tokenizer.
 - Accurate classification of mixed lines containing code followed by opening block comments (`code, then /* start`).
 - Unit test suite verifying UTF-8 BOM, UTF-16LE/BE, UTF-32LE/BE, and all edge-case fixtures reported by benchmark harness.
+- Fixed spurious blank line counts in embedded HTML `<script>` and `<style>` blocks by trimming structural tag-boundary newlines.
 ### Changed
 - Added `src/counter/embedded.rs` for dedicated script, style, and notebook extraction.
 - Modularized scanner into zero-allocation byte slice tokenizer in `src/counter/lines.rs`.

@@ -82,10 +82,11 @@ Fix:
 loc -e report.html
 ```
 
-## Non-UTF-8 or legacy encoded files (Latin-1/ISO-8859)
+## Non-UTF-8, UTF-16, UTF-32, or legacy encoded files
 
 Behavior:
-- In `loc-rs` v0.2.10+, files with non-UTF-8 byte sequences (such as Latin-1/ISO-8859 comments or binary look-up tables in source files) are automatically parsed via a lossy UTF-8 fallback (`String::from_utf8_lossy`).
+- In `loc-rs` v0.2.11+, files encoded in `UTF-16LE`, `UTF-16BE`, `UTF-32LE`, and `UTF-32BE` (with or without BOM) and `UTF-8` with BOM are automatically detected and decoded natively.
+- Non-UTF-8 8-bit text files (such as Latin-1/ISO-8859 comments or binary look-up tables in source files) are automatically parsed via a lossy UTF-8 fallback (`String::from_utf8_lossy`).
 - This eliminates `stream did not contain valid UTF-8` warning skips and ensures full line metrics are recorded without crashing or skipping valid source code.
 - Files identified as binary via null-byte inspection or known binary extensions are skipped automatically.
 
