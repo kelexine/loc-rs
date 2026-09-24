@@ -12,7 +12,7 @@
 - **Tree view**: Renders a recursive project tree when `--tree` is enabled, with optional binary-file display.
 - **Function extraction**: Uses Tree-sitter-backed extractors for Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#/Scala, PHP, Swift, and Ruby.
 - **Complexity analysis**: Reports function length and a branch-count cyclomatic complexity estimate.
-- **Git-aware discovery**: Uses `git ls-files` in repositories and can attach last-modified dates from `git log`.
+- **Git-aware discovery**: Uses native `git2` in repositories and can attach last-modified dates via revwalk commit history.
 - **Agent mode auto-detection**: Switches to token-efficient TSV output when run inside AI coding agents (Claude Code, Gemini CLI, etc.).
 - **Lockfile awareness**: Automatically detects dependency lockfiles (Cargo.lock, package-lock.json, etc.), excluding them from line metrics to prevent skewed stats.
 - **Machine-readable outputs**: Supports direct-to-stdout JSON (`--json`), TSV (`--format agent`), and pipe-friendly raw path lists (`-q`).
@@ -258,7 +258,7 @@ Function extraction is available when `-f` or `--func-analysis` is enabled. The 
 | Unknown language warning (for example `dart`) | Language not in resolver map | Use a supported language or direct extension via `-t .ext` |
 | `stream did not contain valid UTF-8` warning | File is UTF-16/UTF-32 encoded | Convert to UTF-8; `loc-rs` current reader is UTF-8 only |
 | Missing untracked files in output | Running inside a git repo with default git-based discovery | Check `.gitignore`, or run with `--include-hidden` / adjust ignore rules |
-| `--git-dates` appears slow | Uses `git log` history traversal | Omit `--git-dates` for faster scans |
+| `--git-dates` appears slow | Traverses git commit history via git2 revwalk | Omit `--git-dates` for faster scans |
 | HTML report not opening as expected | Output path/extension mismatch | Export with `.html` or `.htm` extension |
 
 ---

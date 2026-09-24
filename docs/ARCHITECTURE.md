@@ -35,7 +35,7 @@ This document explains how `loc-rs` is organized and how data flows through the 
 
 ## Discovery Strategy
 
-- In git repos (default): uses `git ls-files` to align with tracked/unignored files.
+- In git repos (default): uses native `git2` integration (`git2::Repository` index and statuses) to align with tracked and unignored files without shelling out to git.
 - Outside git: uses recursive filesystem walk with exclusion sets.
 - `.locignore` allows project-specific ignores.
 - Hidden files are skipped by default unless `--include-hidden` is used.

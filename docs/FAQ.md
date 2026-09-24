@@ -33,7 +33,7 @@ generated
 
 ## Why is `--git-dates` slower?
 
-It traverses commit history via `git log` for file timestamps. Omit `--git-dates` when speed matters.
+It traverses commit history via `git2` revwalk for file timestamps. Omit `--git-dates` when speed matters.
 
 ## Does `loc-rs` scan binary files?
 

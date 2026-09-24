@@ -3,7 +3,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
@@ -110,11 +109,7 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
     let files = if config.is_git_repo && !config.include_hidden {
         get_git_files(&config.target_dir, &config.locignore)
     } else {
-        get_manual_files(
-            &config.target_dir,
-            &config.locignore,
-            config.include_hidden,
-        )
+        get_manual_files(&config.target_dir, &config.locignore, config.include_hidden)
     };
 
     // Populate git dates cache *before* cloning config into runner_config.
@@ -213,8 +208,7 @@ fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>> {
             None
         };
         return Ok(Some(
-            FileInfo::new(path.to_path_buf(), 0, 0, 0, 0, false, last_modified)
-                .mark_as_lockfile(),
+            FileInfo::new(path.to_path_buf(), 0, 0, 0, 0, false, last_modified).mark_as_lockfile(),
         ));
     }
 
@@ -280,10 +274,9 @@ fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>> {
     if config.extract_functions
         && !is_binary
         && let Some(ref s) = content
+        && let Some(extractor) = extractors::get_extractor(path)
     {
-        if let Some(extractor) = extractors::get_extractor(path) {
-            fi = fi.with_functions(extractor.extract(s));
-        }
+        fi = fi.with_functions(extractor.extract(s));
     }
 
     Ok(Some(fi))
@@ -421,11 +414,8 @@ fn is_binary_file(path: &Path) -> bool {
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn check_git_repo(dir: &Path) -> bool {
-    Command::new("git")
-        .args(["rev-parse", "--is-inside-work-tree"])
-        .current_dir(dir)
-        .output()
-        .map(|o| o.status.success())
+    git2::Repository::discover(dir)
+        .map(|repo| repo.workdir().is_some())
         .unwrap_or(false)
 }
 
@@ -436,24 +426,24 @@ fn check_git_repo(dir: &Path) -> bool {
 /// of git-ignored files so that a negation can re-include them — giving
 /// `.locignore` full precedence over `.gitignore`.
 fn get_git_files(dir: &Path, locignore: &LocIgnore) -> Vec<PathBuf> {
-    // Base set: tracked + untracked files that git's own ignore rules would keep.
-    let mut files = git_ls_files(dir, &["--cached", "--others", "--exclude-standard"]);
+    let repo = match git2::Repository::discover(dir) {
+        Ok(r) => r,
+        Err(_) => return get_manual_files(dir, locignore, false),
+    };
+
+    let workdir = match repo.workdir() {
+        Some(w) => w,
+        None => return get_manual_files(dir, locignore, false),
+    };
+
+    let include_ignored = locignore.has_negations();
+    let mut files = match git_discover_files(&repo, workdir, dir, include_ignored) {
+        Ok(f) => f,
+        Err(_) => return get_manual_files(dir, locignore, false),
+    };
 
     if files.is_empty() {
-        // git unavailable or not a repo — fall back to manual walk.
         return get_manual_files(dir, locignore, false);
-    }
-
-    // If .locignore has negation patterns, fetch git-ignored files too so that
-    // `!pattern` can override .gitignore and re-include them.
-    if locignore.has_negations() {
-        let git_ignored = git_ls_files(dir, &["--others", "--ignored", "--exclude-standard"]);
-        for path in git_ignored {
-            // Only re-include if .locignore explicitly negates the exclusion.
-            if !locignore.is_excluded(&path) {
-                files.push(path);
-            }
-        }
     }
 
     // Apply .locignore excludes to the full combined set.
@@ -461,35 +451,64 @@ fn get_git_files(dir: &Path, locignore: &LocIgnore) -> Vec<PathBuf> {
     files
 }
 
-/// Run `git ls-files -z` with the given extra arguments and return absolute paths.
-fn git_ls_files(dir: &Path, args: &[&str]) -> Vec<PathBuf> {
-    let output = Command::new("git")
-        .arg("ls-files")
-        .arg("-z")
-        .args(args)
-        .current_dir(dir)
-        .output();
+/// Discovers repository files (tracked, untracked, and optionally ignored)
+/// located under `target_dir` using libgit2.
+fn git_discover_files(
+    repo: &git2::Repository,
+    workdir: &Path,
+    target_dir: &Path,
+    include_ignored: bool,
+) -> Result<Vec<PathBuf>> {
+    let mut file_set = HashSet::new();
 
-    match output {
-        Ok(out) if out.status.success() => {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            stdout
-                .split('\0')
-                .filter(|s| !s.is_empty())
-                .map(|s| dir.join(s))
-                .collect()
+    // 1. Tracked files from git index (equivalent to git ls-files --cached)
+    let index = repo.index().context("Failed to open git index")?;
+    for entry in index.iter() {
+        // Skip git submodules / non-file tree entries
+        if (entry.mode & 0o170000) == 0o160000 {
+            continue;
         }
-        _ => vec![],
+        if let Ok(rel_str) = std::str::from_utf8(&entry.path) {
+            let full_path = workdir.join(rel_str);
+            if full_path.starts_with(target_dir) && full_path.is_file() {
+                file_set.insert(full_path);
+            }
+        }
     }
+
+    // 2. Untracked (and optionally ignored) files in working directory
+    let mut status_opts = git2::StatusOptions::new();
+    status_opts
+        .include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .include_ignored(include_ignored)
+        .recurse_ignored_dirs(include_ignored);
+
+    let statuses = repo
+        .statuses(Some(&mut status_opts))
+        .context("Failed to query repository status")?;
+
+    for entry in statuses.iter() {
+        let status = entry.status();
+        let is_untracked = status.contains(git2::Status::WT_NEW);
+        let is_ignored = status.contains(git2::Status::IGNORED);
+
+        if (is_untracked || (include_ignored && is_ignored))
+            && let Ok(path_str) = entry.path()
+        {
+            let full_path = workdir.join(path_str);
+            if full_path.starts_with(target_dir) && full_path.is_file() {
+                file_set.insert(full_path);
+            }
+        }
+    }
+
+    Ok(file_set.into_iter().collect())
 }
 
 /// Walk `dir` with WalkDir, applying `.locignore` rules at both the directory
 /// pruning and file inclusion stages.
-fn get_manual_files(
-    dir: &Path,
-    locignore: &LocIgnore,
-    include_hidden: bool,
-) -> Vec<PathBuf> {
+fn get_manual_files(dir: &Path, locignore: &LocIgnore, include_hidden: bool) -> Vec<PathBuf> {
     use walkdir::WalkDir;
 
     WalkDir::new(dir)
@@ -530,32 +549,99 @@ fn get_manual_files(
 
 fn get_all_git_dates(root: &Path) -> HashMap<PathBuf, DateTime<Utc>> {
     let mut map = HashMap::new();
-    let output = Command::new("git")
-        .args(["log", "--format=commit %ct", "--name-only"])
-        .current_dir(root)
-        .output();
+    let repo = match git2::Repository::discover(root) {
+        Ok(r) => r,
+        Err(_) => return map,
+    };
 
-    if let Ok(out) = output
-        && out.status.success()
+    let workdir = match repo.workdir() {
+        Some(w) => w,
+        None => return map,
+    };
+
+    let mut revwalk = match repo.revwalk() {
+        Ok(rw) => rw,
+        Err(_) => return map,
+    };
+
+    // Newest commits first (topological + time order)
+    if revwalk
+        .set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL)
+        .is_err()
     {
-        let stdout = String::from_utf8_lossy(&out.stdout);
-        let mut current_ts = None;
-        for line in stdout.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            if let Some(rest) = line.strip_prefix("commit ") {
-                if let Ok(ts) = rest.parse::<i64>() {
-                    current_ts = Utc.timestamp_opt(ts, 0).single();
+        return map;
+    }
+    if revwalk.push_head().is_err() {
+        return map;
+    }
+
+    for oid_res in revwalk {
+        let oid = match oid_res {
+            Ok(id) => id,
+            Err(_) => continue,
+        };
+        let commit = match repo.find_commit(oid) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        let commit_time = commit.time().seconds();
+        let commit_date = match Utc.timestamp_opt(commit_time, 0).single() {
+            Some(d) => d,
+            None => continue,
+        };
+
+        let tree = match commit.tree() {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+
+        // For initial root commit (no parent), inspect all entries in the tree
+        if commit.parent_count() == 0 {
+            let _ = tree.walk(git2::TreeWalkMode::PreOrder, |dir, entry| {
+                if entry.kind() == Some(git2::ObjectType::Blob)
+                    && let Ok(name) = entry.name()
+                {
+                    let rel_path = if dir.is_empty() {
+                        PathBuf::from(name)
+                    } else {
+                        Path::new(dir).join(name)
+                    };
+                    let full_path = workdir.join(rel_path);
+                    if full_path.starts_with(root) {
+                        map.entry(full_path).or_insert(commit_date);
+                    }
                 }
-            } else if let Some(ts) = current_ts {
-                let path = root.join(line);
-                // git log is newest-first; only insert the first (most-recent) date
-                map.entry(path).or_insert(ts);
+                git2::TreeWalkResult::Ok
+            });
+            continue;
+        }
+
+        // Compare diff against first parent (matches `git log --name-only`)
+        let parent = match commit.parent(0) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let parent_tree = match parent.tree() {
+            Ok(pt) => pt,
+            Err(_) => continue,
+        };
+
+        let diff = match repo.diff_tree_to_tree(Some(&parent_tree), Some(&tree), None) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        for delta in diff.deltas() {
+            if let Some(new_file) = delta.new_file().path() {
+                let full_path = workdir.join(new_file);
+                if full_path.starts_with(root) {
+                    map.entry(full_path).or_insert(commit_date);
+                }
             }
         }
     }
+
     map
 }
 
@@ -643,11 +729,7 @@ mod tests {
         assert!(!is_binary_file(&u16le), "UTF-16LE should not be binary");
 
         let u32le = dir.path().join("utf32le.txt");
-        fs::write(
-            &u32le,
-            vec![0xFF, 0xFE, 0x00, 0x00, 0x61, 0x00, 0x00, 0x00],
-        )
-        .unwrap();
+        fs::write(&u32le, vec![0xFF, 0xFE, 0x00, 0x00, 0x61, 0x00, 0x00, 0x00]).unwrap();
         assert!(!is_binary_file(&u32le), "UTF-32LE should not be binary");
     }
 
@@ -739,5 +821,63 @@ fn main() {
         assert_eq!(total, 5);
         assert_eq!(comment, 2); // single-line + block-comment line
         assert_eq!(code, 3); // fn, let x, closing brace
+    }
+
+    // ── Git integration (git2) ───────────────────────────────────────────────
+
+    #[test]
+    fn test_git2_check_repo_and_discovery() {
+        let dir = tempdir().unwrap();
+        let path = dir.path();
+
+        // Not a repo initially
+        assert!(!check_git_repo(path));
+
+        // Init repo with git2
+        let repo = git2::Repository::init(path).unwrap();
+        assert!(check_git_repo(path));
+
+        // Create tracked file, untracked file, and ignored file
+        let tracked_file = path.join("tracked.rs");
+        fs::write(&tracked_file, "fn main() {}\n").unwrap();
+
+        let untracked_file = path.join("untracked.rs");
+        fs::write(&untracked_file, "fn untracked() {}\n").unwrap();
+
+        let gitignore = path.join(".gitignore");
+        fs::write(&gitignore, "ignored.rs\n").unwrap();
+
+        let ignored_file = path.join("ignored.rs");
+        fs::write(&ignored_file, "fn ignored() {}\n").unwrap();
+
+        // Stage and commit tracked.rs
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("tracked.rs")).unwrap();
+        index.write().unwrap();
+
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let sig = git2::Signature::now("Test", "test@example.com").unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+            .unwrap();
+
+        // 1. Without negation: tracked and untracked found; ignored excluded
+        let locignore_none = crate::locignore::LocIgnore::build(path);
+        let files = get_git_files(path, &locignore_none);
+        assert!(files.contains(&tracked_file));
+        assert!(files.contains(&untracked_file));
+        assert!(!files.contains(&ignored_file));
+
+        // 2. With negation in .locignore (!ignored.rs), ignored file is re-included
+        fs::write(path.join(".locignore"), "!ignored.rs\n").unwrap();
+        let locignore_neg = crate::locignore::LocIgnore::build(path);
+        let files_neg = get_git_files(path, &locignore_neg);
+        assert!(files_neg.contains(&tracked_file));
+        assert!(files_neg.contains(&untracked_file));
+        assert!(files_neg.contains(&ignored_file));
+
+        // 3. Git commit dates lookup
+        let dates = get_all_git_dates(path);
+        assert!(dates.contains_key(&tracked_file));
     }
 }
