@@ -19,8 +19,11 @@ This document explains how `loc-rs` is organized and how data flows through the 
   - Global config loading from platform config directory.
 - `src/language/mod.rs`
   - Language-extension mapping, alias resolution, comment specs, default exclusions.
-- `src/counter/mod.rs`
-  - File discovery, content analysis, binary detection, git integration, scan orchestration.
+- `src/counter/mod.rs` & submodules
+  - `counter/process.rs`: File worker, single-read byte loading, lossy UTF-8 fallback, binary checks.
+  - `counter/lines.rs`: Byte and string line analysis, comment syntax classification.
+  - `counter/discovery.rs`: Filesystem directory walking with ignore rules.
+  - `counter/git.rs`: Git2 index enumeration, worktree status, commit history revwalk.
 - `src/agent/mod.rs`
   - Environment-based auto-detection of AI coding agents (Claude Code, Gemini CLI, etc.).
   - Orchestration of token-efficient "Agent Mode" (TSV) output.

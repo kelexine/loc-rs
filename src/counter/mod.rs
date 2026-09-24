@@ -1,20 +1,26 @@
 // Author: kelexine (https://github.com/kelexine)
-// counter/mod.rs — File discovery, line counting, and parallel processing
+// counter/mod.rs — Scan configuration and parallel pipeline orchestrator
+
+pub mod discovery;
+pub mod git;
+pub mod lines;
+pub mod process;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use rayon::prelude::*;
 
 use crate::cli::Args;
-use crate::extractors;
-use crate::language::{BINARY_EXTENSIONS, EXCLUDED_DIRS};
 use crate::locignore::LocIgnore;
 use crate::models::{Breakdown, FileInfo, ScanResult};
+
+use self::discovery::get_manual_files;
+use self::git::{check_git_repo, get_all_git_dates, get_git_files};
+use self::process::process_file;
 
 /// Configuration for a scan run.
 ///
@@ -113,7 +119,6 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
     };
 
     // Populate git dates cache *before* cloning config into runner_config.
-    // Wrapping in Arc makes the subsequent clone() O(1).
     let git_dates_cache: Option<Arc<HashMap<PathBuf, DateTime<Utc>>>> =
         if config.use_git_dates && config.is_git_repo {
             Some(Arc::new(get_all_git_dates(&config.target_dir)))
@@ -121,9 +126,6 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
             None
         };
 
-    // Build a runner config that owns an Arc reference to the cache.
-    // No pre-sort: rayon doesn't preserve order, so sorting before dispatch
-    // is pointless — we sort the output instead.
     let mut runner_config = config.clone();
     runner_config.git_dates_cache = git_dates_cache;
 
@@ -183,480 +185,15 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
     })
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// File processing
-// ─────────────────────────────────────────────────────────────────────────────
-
-fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>> {
-    if !path.is_file() {
-        return Ok(None);
-    }
-
-    // ── Lockfile fast-path ────────────────────────────────────────────────────
-    // Recognised lockfiles are shown in the tree but never line-counted.
-    // We resolve last-modified when --git-dates is active, then return without
-    // reading any file content.  This also bypasses the extension filter so
-    // that lockfiles always show up in the tree even when -t is specified.
-    if crate::language::is_lockfile(path) {
-        let last_modified = if config.use_git_dates {
-            if let Some(ref cache) = config.git_dates_cache {
-                cache.get(path).copied()
-            } else {
-                get_fs_last_modified(path)
-            }
-        } else {
-            None
-        };
-        return Ok(Some(
-            FileInfo::new(path.to_path_buf(), 0, 0, 0, 0, false, last_modified).mark_as_lockfile(),
-        ));
-    }
-
-    // Extension filter
-    if let Some(allowed) = &config.allowed_extensions {
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| format!(".{}", e.to_lowercase()))
-            .unwrap_or_default();
-        if !allowed.contains(&ext) {
-            return Ok(None);
-        }
-    }
-
-    let is_binary = is_binary_file(path);
-
-    // Skip binary files when type-filtering is active
-    if is_binary && config.allowed_extensions.is_some() {
-        return Ok(None);
-    }
-
-    // Read the file content once; reuse for both analysis and extraction.
-    let content: Option<String> = if !is_binary {
-        match std::fs::read_to_string(path) {
-            Ok(s) => Some(s),
-            Err(e) => {
-                return Err(anyhow::anyhow!("read error: {}", e));
-            }
-        }
-    } else {
-        None
-    };
-
-    let (total, code, comment, blank) = match &content {
-        Some(s) => analyze_content(s, path),
-        None => (0, 0, 0, 0),
-    };
-
-    // Only populate last_modified when --git-dates is active.
-    // Without it, the tree view is cleaner with no date column.
-    let last_modified: Option<DateTime<Utc>> = if config.use_git_dates {
-        if let Some(ref cache) = config.git_dates_cache {
-            cache.get(path).copied()
-        } else {
-            // git-dates requested but cache not ready (shouldn't happen); fallback
-            get_fs_last_modified(path)
-        }
-    } else {
-        None
-    };
-
-    let mut fi = FileInfo::new(
-        path.to_path_buf(),
-        total,
-        code,
-        comment,
-        blank,
-        is_binary,
-        last_modified,
-    );
-
-    if config.extract_functions
-        && !is_binary
-        && let Some(ref s) = content
-        && let Some(extractor) = extractors::get_extractor(path)
-    {
-        fi = fi.with_functions(extractor.extract(s));
-    }
-
-    Ok(Some(fi))
-}
-
-/// Count lines in an already-loaded content string.
-///
-/// Multi-line comment tracking is language-aware via the comment registry.
-/// Handles the Python triple-quote single-liner bug: for equal start/end
-/// delimiters (e.g. `"""`), we verify a *second* occurrence exists on the same
-/// line before deciding the block closes immediately.
-fn analyze_content(content: &str, path: &Path) -> (usize, usize, usize, usize) {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| format!(".{}", e.to_lowercase()))
-        .unwrap_or_default();
-
-    let spec = crate::language::COMMENT_REGISTRY.get(ext.as_str());
-
-    let mut total = 0usize;
-    let mut code = 0usize;
-    let mut comment = 0usize;
-    let mut blank = 0usize;
-    let mut in_multi_comment = false;
-
-    for line in content.lines() {
-        total += 1;
-        let trimmed = line.trim();
-
-        if trimmed.is_empty() {
-            if in_multi_comment {
-                comment += 1;
-            } else {
-                blank += 1;
-            }
-            continue;
-        }
-
-        if let Some(s) = spec {
-            if in_multi_comment {
-                comment += 1;
-                if let Some((_, end)) = s.multi
-                    && trimmed.contains(end)
-                {
-                    in_multi_comment = false;
-                }
-                continue;
-            }
-
-            if let Some((start, end)) = s.multi
-                && trimmed.starts_with(start)
-            {
-                comment += 1;
-
-                // Determine whether the multi-line block closes on this same line.
-                let ends_on_same_line = if start == end {
-                    // Same delimiter on both sides (e.g. Python """...""").
-                    // A second occurrence must exist *after* the opening delimiter.
-                    trimmed[start.len()..].contains(end)
-                } else {
-                    // Different delimiters: block closes if end marker appears anywhere
-                    // on the line (and it's not just the opening marker itself).
-                    trimmed.contains(end)
-                };
-
-                if !ends_on_same_line {
-                    in_multi_comment = true;
-                }
-                continue;
-            }
-
-            if let Some(single) = s.single
-                && trimmed.starts_with(single)
-            {
-                comment += 1;
-                continue;
-            }
-        }
-
-        code += 1;
-    }
-
-    (total, code, comment, blank)
-}
-
-// Thin wrapper used by unit tests.
-#[cfg(test)]
-fn analyze_file(path: &Path) -> (usize, usize, usize, usize) {
-    match std::fs::read_to_string(path) {
-        Ok(s) => analyze_content(&s, path),
-        Err(_) => (0, 0, 0, 0),
-    }
-}
-
-fn is_binary_file(path: &Path) -> bool {
-    // Fast path: extension lookup
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| format!(".{}", e.to_lowercase()))
-        .unwrap_or_default();
-
-    if BINARY_EXTENSIONS.contains(ext.as_str()) {
-        return true;
-    }
-
-    // Read first 8 KiB and look for null bytes
-    let mut buf = [0u8; 8192];
-    match std::fs::File::open(path) {
-        Ok(mut f) => {
-            use std::io::Read;
-            let n = f.read(&mut buf).unwrap_or(0);
-
-            // BOM Check: UTF-16/32 files contain null bytes but are not binary
-            if n >= 2 && ((buf[0] == 0xFE && buf[1] == 0xFF) || (buf[0] == 0xFF && buf[1] == 0xFE))
-            {
-                return false; // UTF-16
-            }
-            if n >= 4
-                && ((buf[0] == 0x00 && buf[1] == 0x00 && buf[2] == 0xFE && buf[3] == 0xFF)
-                    || (buf[0] == 0xFF && buf[1] == 0xFE && buf[2] == 0x00 && buf[3] == 0x00))
-            {
-                return false; // UTF-32
-            }
-
-            buf[..n].contains(&0u8)
-        }
-        Err(_) => true,
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Git integration
-// ─────────────────────────────────────────────────────────────────────────────
-
-fn check_git_repo(dir: &Path) -> bool {
-    git2::Repository::discover(dir)
-        .map(|repo| repo.workdir().is_some())
-        .unwrap_or(false)
-}
-
-/// Enumerate all files that git knows about (tracked + untracked non-ignored),
-/// post-filtered by the `.locignore` ruleset.
-///
-/// When `.locignore` contains negation patterns (`!`), we also query the list
-/// of git-ignored files so that a negation can re-include them — giving
-/// `.locignore` full precedence over `.gitignore`.
-fn get_git_files(dir: &Path, locignore: &LocIgnore) -> Vec<PathBuf> {
-    let repo = match git2::Repository::discover(dir) {
-        Ok(r) => r,
-        Err(_) => return get_manual_files(dir, locignore, false),
-    };
-
-    let workdir = match repo.workdir() {
-        Some(w) => w,
-        None => return get_manual_files(dir, locignore, false),
-    };
-
-    let include_ignored = locignore.has_negations();
-    let mut files = match git_discover_files(&repo, workdir, dir, include_ignored) {
-        Ok(f) => f,
-        Err(_) => return get_manual_files(dir, locignore, false),
-    };
-
-    if files.is_empty() {
-        return get_manual_files(dir, locignore, false);
-    }
-
-    // Apply .locignore excludes to the full combined set.
-    files.retain(|p| !locignore.is_excluded(p));
-    files
-}
-
-/// Discovers repository files (tracked, untracked, and optionally ignored)
-/// located under `target_dir` using libgit2.
-fn git_discover_files(
-    repo: &git2::Repository,
-    workdir: &Path,
-    target_dir: &Path,
-    include_ignored: bool,
-) -> Result<Vec<PathBuf>> {
-    let mut file_set = HashSet::new();
-
-    // 1. Tracked files from git index (equivalent to git ls-files --cached)
-    let index = repo.index().context("Failed to open git index")?;
-    for entry in index.iter() {
-        // Skip git submodules / non-file tree entries
-        if (entry.mode & 0o170000) == 0o160000 {
-            continue;
-        }
-        if let Ok(rel_str) = std::str::from_utf8(&entry.path) {
-            let full_path = workdir.join(rel_str);
-            if full_path.starts_with(target_dir) && full_path.is_file() {
-                file_set.insert(full_path);
-            }
-        }
-    }
-
-    // 2. Untracked (and optionally ignored) files in working directory
-    let mut status_opts = git2::StatusOptions::new();
-    status_opts
-        .include_untracked(true)
-        .recurse_untracked_dirs(true)
-        .include_ignored(include_ignored)
-        .recurse_ignored_dirs(include_ignored);
-
-    let statuses = repo
-        .statuses(Some(&mut status_opts))
-        .context("Failed to query repository status")?;
-
-    for entry in statuses.iter() {
-        let status = entry.status();
-        let is_untracked = status.contains(git2::Status::WT_NEW);
-        let is_ignored = status.contains(git2::Status::IGNORED);
-
-        if (is_untracked || (include_ignored && is_ignored))
-            && let Ok(path_str) = entry.path()
-        {
-            let full_path = workdir.join(path_str);
-            if full_path.starts_with(target_dir) && full_path.is_file() {
-                file_set.insert(full_path);
-            }
-        }
-    }
-
-    Ok(file_set.into_iter().collect())
-}
-
-/// Walk `dir` with WalkDir, applying `.locignore` rules at both the directory
-/// pruning and file inclusion stages.
-fn get_manual_files(dir: &Path, locignore: &LocIgnore, include_hidden: bool) -> Vec<PathBuf> {
-    use walkdir::WalkDir;
-
-    WalkDir::new(dir)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(move |e| {
-            if e.depth() == 0 {
-                return true;
-            }
-            let name = e.file_name().to_string_lossy();
-            if e.file_type().is_dir() {
-                // Always prune hard-excluded and hidden dirs.
-                if EXCLUDED_DIRS.contains(name.as_ref()) || name == ".git" {
-                    return false;
-                }
-                if !include_hidden && name != ".well-known" && name.starts_with('.') {
-                    return false;
-                }
-                // Prune via locignore only when there are no negation patterns.
-                // If negations exist we must descend to check each file individually,
-                // because a !pattern inside an excluded dir should still take effect.
-                if !locignore.has_negations() && locignore.is_excluded(e.path()) {
-                    return false;
-                }
-                true
-            } else {
-                include_hidden || !name.starts_with('.')
-            }
-        })
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        // Final per-file locignore check (handles both the no-negation and
-        // the has-negation cases uniformly).
-        .filter(|e| !locignore.is_excluded(e.path()))
-        .map(|e| e.path().to_path_buf())
-        .collect()
-}
-
-fn get_all_git_dates(root: &Path) -> HashMap<PathBuf, DateTime<Utc>> {
-    let mut map = HashMap::new();
-    let repo = match git2::Repository::discover(root) {
-        Ok(r) => r,
-        Err(_) => return map,
-    };
-
-    let workdir = match repo.workdir() {
-        Some(w) => w,
-        None => return map,
-    };
-
-    let mut revwalk = match repo.revwalk() {
-        Ok(rw) => rw,
-        Err(_) => return map,
-    };
-
-    // Newest commits first (topological + time order)
-    if revwalk
-        .set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL)
-        .is_err()
-    {
-        return map;
-    }
-    if revwalk.push_head().is_err() {
-        return map;
-    }
-
-    for oid_res in revwalk {
-        let oid = match oid_res {
-            Ok(id) => id,
-            Err(_) => continue,
-        };
-        let commit = match repo.find_commit(oid) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-
-        let commit_time = commit.time().seconds();
-        let commit_date = match Utc.timestamp_opt(commit_time, 0).single() {
-            Some(d) => d,
-            None => continue,
-        };
-
-        let tree = match commit.tree() {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
-
-        // For initial root commit (no parent), inspect all entries in the tree
-        if commit.parent_count() == 0 {
-            let _ = tree.walk(git2::TreeWalkMode::PreOrder, |dir, entry| {
-                if entry.kind() == Some(git2::ObjectType::Blob)
-                    && let Ok(name) = entry.name()
-                {
-                    let rel_path = if dir.is_empty() {
-                        PathBuf::from(name)
-                    } else {
-                        Path::new(dir).join(name)
-                    };
-                    let full_path = workdir.join(rel_path);
-                    if full_path.starts_with(root) {
-                        map.entry(full_path).or_insert(commit_date);
-                    }
-                }
-                git2::TreeWalkResult::Ok
-            });
-            continue;
-        }
-
-        // Compare diff against first parent (matches `git log --name-only`)
-        let parent = match commit.parent(0) {
-            Ok(p) => p,
-            Err(_) => continue,
-        };
-        let parent_tree = match parent.tree() {
-            Ok(pt) => pt,
-            Err(_) => continue,
-        };
-
-        let diff = match repo.diff_tree_to_tree(Some(&parent_tree), Some(&tree), None) {
-            Ok(d) => d,
-            Err(_) => continue,
-        };
-
-        for delta in diff.deltas() {
-            if let Some(new_file) = delta.new_file().path() {
-                let full_path = workdir.join(new_file);
-                if full_path.starts_with(root) {
-                    map.entry(full_path).or_insert(commit_date);
-                }
-            }
-        }
-    }
-
-    map
-}
-
-fn get_fs_last_modified(path: &Path) -> Option<DateTime<Utc>> {
-    path.metadata()
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .and_then(|d| Utc.timestamp_opt(d.as_secs() as i64, 0).single())
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::discovery::get_manual_files;
+    use super::git::{check_git_repo, get_all_git_dates, get_git_files};
+    use super::lines::analyze_file;
+    use super::process::is_binary_file;
+    use std::collections::HashSet;
     use std::fs;
+    use std::path::Path;
     use tempfile::tempdir;
 
     fn count_lines(path: &Path) -> usize {
@@ -695,6 +232,24 @@ mod tests {
         let p = dir.path().join("single.txt");
         fs::write(&p, "only one line").unwrap();
         assert_eq!(count_lines(&p), 1);
+    }
+
+    #[test]
+    fn test_count_lines_non_utf8_encoding() {
+        let dir = tempdir().unwrap();
+        let p = dir.path().join("latin1.c");
+        // Non-UTF-8 bytes (e.g. ISO-8859-1 'é' = 0xE9) without null bytes
+        fs::write(
+            &p,
+            vec![
+                b'/', b'/', b' ', 0xE9, b'\n', b'i', b'n', b't', b' ', b'x', b';', b'\n',
+            ],
+        )
+        .unwrap();
+        let (total, code, comment, _) = analyze_file(&p);
+        assert_eq!(total, 2);
+        assert_eq!(comment, 1);
+        assert_eq!(code, 1);
     }
 
     // ── Binary detection ────────────────────────────────────────────────────
@@ -774,19 +329,14 @@ mod tests {
         )
         .unwrap();
         let (total, code, comment, blank) = analyze_file(&p);
-        // lines() in Rust does not produce a trailing empty element for a
-        // terminating newline, so the file yields 6 lines, not 7.
         assert_eq!(total, 6);
-        // def foo(): + return 42 = 2 code lines
         assert_eq!(code, 2);
-        // opening """, two body lines, closing """ = 4 comment lines
         assert_eq!(comment, 4);
         assert_eq!(blank, 0);
     }
 
     #[test]
     fn test_python_triple_quote_single_liner() {
-        // Regression: """one liner""" must NOT open in_multi_comment
         let dir = tempdir().unwrap();
         let p = dir.path().join("test.py");
         fs::write(
@@ -799,7 +349,6 @@ mod tests {
         )
         .unwrap();
         let (_total, code, _comment, _blank) = analyze_file(&p);
-        // def + x + y = 3 code lines; single-line docstring = 1 comment
         assert_eq!(code, 3, "x = 1 and y = 2 must not be swallowed as comments");
     }
 
@@ -819,8 +368,8 @@ fn main() {
         .unwrap();
         let (total, code, comment, _blank) = analyze_file(&p);
         assert_eq!(total, 5);
-        assert_eq!(comment, 2); // single-line + block-comment line
-        assert_eq!(code, 3); // fn, let x, closing brace
+        assert_eq!(comment, 2);
+        assert_eq!(code, 3);
     }
 
     // ── Git integration (git2) ───────────────────────────────────────────────

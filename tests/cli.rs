@@ -122,16 +122,32 @@ fn test_multilingual_summary() {
 fn test_format_agent_produces_tsv_summary() {
     let fixture = make_fixture(&[
         ("main.rs", "fn main() {\n    println!(\"hi\");\n}\n"),
-        ("lib.rs",  "pub fn add(a: i32, b: i32) -> i32 { a + b }\n"),
+        ("lib.rs", "pub fn add(a: i32, b: i32) -> i32 { a + b }\n"),
     ]);
 
     let out = run_loc(&[fixture.path().to_str().unwrap(), "--format", "agent"]);
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("# SUMMARY\n"), "Missing SUMMARY section:\n{}", stdout);
-    assert!(stdout.contains("metric\tvalue\n"), "Missing TSV header:\n{}", stdout);
-    assert!(stdout.contains("total_lines\t"), "Missing total_lines:\n{}", stdout);
-    assert!(stdout.contains("total_code\t"), "Missing total_code:\n{}", stdout);
+    assert!(
+        stdout.contains("# SUMMARY\n"),
+        "Missing SUMMARY section:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains("metric\tvalue\n"),
+        "Missing TSV header:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains("total_lines\t"),
+        "Missing total_lines:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains("total_code\t"),
+        "Missing total_code:\n{}",
+        stdout
+    );
 }
 
 #[test]
@@ -144,19 +160,40 @@ fn test_format_agent_with_detailed_produces_breakdown_section() {
     let out = run_loc(&[fixture.path().to_str().unwrap(), "--format", "agent", "-d"]);
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("# BREAKDOWN\n"), "Missing BREAKDOWN section:\n{}", stdout);
-    assert!(stdout.contains("extension\tfiles\t"), "Missing breakdown header:\n{}", stdout);
+    assert!(
+        stdout.contains("# BREAKDOWN\n"),
+        "Missing BREAKDOWN section:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains("extension\tfiles\t"),
+        "Missing breakdown header:\n{}",
+        stdout
+    );
 }
 
 #[test]
 fn test_format_agent_with_tree_produces_files_section() {
     let fixture = make_fixture(&[("src/main.rs", "fn main() {}\n")]);
 
-    let out = run_loc(&[fixture.path().to_str().unwrap(), "--format", "agent", "--tree"]);
+    let out = run_loc(&[
+        fixture.path().to_str().unwrap(),
+        "--format",
+        "agent",
+        "--tree",
+    ]);
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("# FILES\n"), "Missing FILES section:\n{}", stdout);
-    assert!(stdout.contains("path\tlines\t"), "Missing file header:\n{}", stdout);
+    assert!(
+        stdout.contains("# FILES\n"),
+        "Missing FILES section:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains("path\tlines\t"),
+        "Missing file header:\n{}",
+        stdout
+    );
 }
 
 #[test]
@@ -177,7 +214,7 @@ fn test_format_agent_no_ansi_codes() {
 fn test_quiet_flag_prints_one_path_per_line() {
     let fixture = make_fixture(&[
         ("main.rs", "fn main() {}\n"),
-        ("lib.rs",  "pub fn foo() {}\n"),
+        ("lib.rs", "pub fn foo() {}\n"),
     ]);
 
     let out = run_loc(&[fixture.path().to_str().unwrap(), "-q"]);
@@ -197,7 +234,7 @@ fn test_quiet_long_flag_equivalent_to_short() {
     let fixture = make_fixture(&[("main.rs", "fn main() {}\n")]);
 
     let short = run_loc(&[fixture.path().to_str().unwrap(), "-q"]);
-    let long  = run_loc(&[fixture.path().to_str().unwrap(), "--quiet"]);
+    let long = run_loc(&[fixture.path().to_str().unwrap(), "--quiet"]);
     assert_eq!(
         String::from_utf8_lossy(&short.stdout),
         String::from_utf8_lossy(&long.stdout),
@@ -212,7 +249,7 @@ fn test_format_json_equivalent_to_json_flag() {
     let fixture = make_fixture(&[("main.rs", "fn main() {}\n")]);
     let path = fixture.path().to_str().unwrap();
 
-    let via_flag   = run_loc_with_env(&[path, "--json"], &HashMap::new());
+    let via_flag = run_loc_with_env(&[path, "--json"], &HashMap::new());
     let via_format = run_loc_with_env(&[path, "--format", "json"], &HashMap::new());
 
     assert!(via_flag.status.success());
@@ -226,9 +263,12 @@ fn test_format_json_equivalent_to_json_flag() {
         re.replace_all(s, r#""timestamp":"<stripped>""#).to_string()
     };
 
-    let flag_json   = strip_timestamp(&String::from_utf8_lossy(&via_flag.stdout));
+    let flag_json = strip_timestamp(&String::from_utf8_lossy(&via_flag.stdout));
     let format_json = strip_timestamp(&String::from_utf8_lossy(&via_format.stdout));
-    assert_eq!(flag_json, format_json, "--json and --format json must produce identical stdout");
+    assert_eq!(
+        flag_json, format_json,
+        "--json and --format json must produce identical stdout"
+    );
 }
 
 #[test]
@@ -257,7 +297,10 @@ fn test_format_human_overrides_agent_env_var() {
     let mut env = HashMap::new();
     env.insert("CRUSH", "1");
 
-    let out = run_loc_with_env(&[fixture.path().to_str().unwrap(), "--format", "human"], &env);
+    let out = run_loc_with_env(
+        &[fixture.path().to_str().unwrap(), "--format", "human"],
+        &env,
+    );
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
@@ -278,21 +321,41 @@ fn test_export_tsv_creates_valid_file() {
 
     let fixture = make_fixture(&[
         ("main.rs", "fn main() {}\n"),
-        ("lib.rs",  "pub fn foo() {}\n"),
+        ("lib.rs", "pub fn foo() {}\n"),
     ]);
     let out_path = fixture.path().join("out.tsv");
 
     let out = run_loc_with_env(
-        &[fixture.path().to_str().unwrap(), "-e", out_path.to_str().unwrap()],
+        &[
+            fixture.path().to_str().unwrap(),
+            "-e",
+            out_path.to_str().unwrap(),
+        ],
         &HashMap::new(),
     );
-    assert!(out.status.success(), "loc exited non-zero: {:?}", out.status);
+    assert!(
+        out.status.success(),
+        "loc exited non-zero: {:?}",
+        out.status
+    );
     assert!(out_path.exists(), "out.tsv was not created");
 
     let contents = std::fs::read_to_string(&out_path).unwrap();
-    assert!(contents.contains("# SUMMARY"),   "Missing SUMMARY in TSV:\n{}", contents);
-    assert!(contents.contains("# BREAKDOWN"), "Missing BREAKDOWN in TSV:\n{}", contents);
-    assert!(contents.contains("# FILES"),     "Missing FILES in TSV:\n{}", contents);
+    assert!(
+        contents.contains("# SUMMARY"),
+        "Missing SUMMARY in TSV:\n{}",
+        contents
+    );
+    assert!(
+        contents.contains("# BREAKDOWN"),
+        "Missing BREAKDOWN in TSV:\n{}",
+        contents
+    );
+    assert!(
+        contents.contains("# FILES"),
+        "Missing FILES in TSV:\n{}",
+        contents
+    );
 }
 
 #[test]
@@ -306,6 +369,14 @@ fn test_hints_go_to_stderr_not_stdout() {
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(!stdout.contains("Hint:"), "Hints must not appear on stdout:\n{}", stdout);
-    assert!(stderr.contains("Hint:"), "Hints must appear on stderr:\n{}", stderr);
+    assert!(
+        !stdout.contains("Hint:"),
+        "Hints must not appear on stdout:\n{}",
+        stdout
+    );
+    assert!(
+        stderr.contains("Hint:"),
+        "Hints must appear on stderr:\n{}",
+        stderr
+    );
 }

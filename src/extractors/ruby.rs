@@ -21,18 +21,11 @@ impl Extractor for RubyExtractor {
     }
 }
 
-fn traverse(
-    node: Node,
-    content: &str,
-    functions: &mut Vec<FunctionInfo>,
-    in_class: bool,
-) {
+fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>, in_class: bool) {
     let kind = node.kind();
 
     if kind == "method" || kind == "singleton_method" {
-        if let Some(info) =
-            parse_method(node, content, in_class || kind == "singleton_method")
-        {
+        if let Some(info) = parse_method(node, content, in_class || kind == "singleton_method") {
             functions.push(info);
         }
     } else if (kind == "class" || kind == "module")
@@ -49,20 +42,22 @@ fn traverse(
     }
 }
 
-fn parse_method(
-    node: Node,
-    content: &str,
-    is_method: bool,
-) -> Option<FunctionInfo> {
+fn parse_method(node: Node, content: &str, is_method: bool) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut params_str = String::new();
 
     if let Some(name_node) = node.child_by_field_name("name") {
-        name = name_node.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        name = name_node
+            .utf8_text(content.as_bytes())
+            .unwrap_or("")
+            .to_string();
     }
 
     if let Some(params_node) = node.child_by_field_name("parameters") {
-        params_str = params_node.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        params_str = params_node
+            .utf8_text(content.as_bytes())
+            .unwrap_or("")
+            .to_string();
     }
 
     if name.is_empty() || name == "?" || name == "?obj" {
@@ -103,7 +98,10 @@ fn parse_class(node: Node, content: &str) -> Option<FunctionInfo> {
     let mut name = String::new();
 
     if let Some(name_node) = node.child_by_field_name("name") {
-        name = name_node.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+        name = name_node
+            .utf8_text(content.as_bytes())
+            .unwrap_or("")
+            .to_string();
     }
 
     if name.is_empty() {

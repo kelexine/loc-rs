@@ -20,12 +20,7 @@ impl Extractor for JavaExtractor {
     }
 }
 
-fn traverse(
-    node: Node,
-    content: &str,
-    functions: &mut Vec<FunctionInfo>,
-    in_class: bool,
-) {
+fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>, in_class: bool) {
     let kind = node.kind();
 
     if kind == "method_declaration" || kind == "constructor_declaration" {
@@ -48,11 +43,7 @@ fn traverse(
     }
 }
 
-fn parse_method(
-    node: Node,
-    content: &str,
-    is_method: bool,
-) -> Option<FunctionInfo> {
+fn parse_method(node: Node, content: &str, is_method: bool) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut params_str = String::new();
 
@@ -60,9 +51,15 @@ fn parse_method(
     for child in node.children(&mut cursor) {
         let kind = child.kind();
         if kind == "identifier" && name.is_empty() {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         } else if kind == "formal_parameters" {
-            params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            params_str = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         }
     }
 
@@ -106,7 +103,10 @@ fn parse_class(node: Node, content: &str) -> Option<FunctionInfo> {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "identifier" && name.is_empty() {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
             break;
         }
     }

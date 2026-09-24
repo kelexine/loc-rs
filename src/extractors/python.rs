@@ -65,7 +65,12 @@ fn traverse(
     }
 
     if kind == "function_definition" {
-        functions.push(parse_function(node, content, in_class, pending_decorators.clone()));
+        functions.push(parse_function(
+            node,
+            content,
+            in_class,
+            pending_decorators.clone(),
+        ));
         pending_decorators.clear();
     } else if kind == "class_definition" {
         functions.push(parse_class(node, content, pending_decorators.clone()));
@@ -76,7 +81,13 @@ fn traverse(
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        traverse(child, content, functions, in_class || is_class_body, Vec::new());
+        traverse(
+            child,
+            content,
+            functions,
+            in_class || is_class_body,
+            Vec::new(),
+        );
     }
 }
 
@@ -95,11 +106,17 @@ fn parse_function(
     for child in node.children(&mut cursor) {
         let kind = child.kind();
         if kind == "identifier" && name.is_empty() {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         } else if kind == "async" {
             is_async = true;
         } else if kind == "parameters" {
-            params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            params_str = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         } else if kind == "block" && child.child_count() > 0 {
             let first_stmt = child.child(0).unwrap();
             if first_stmt.kind() == "expression_statement" && first_stmt.child_count() > 0 {
@@ -152,11 +169,7 @@ fn parse_function(
     }
 }
 
-fn parse_class(
-    node: Node,
-    content: &str,
-    decorators: Vec<String>,
-) -> FunctionInfo {
+fn parse_class(node: Node, content: &str, decorators: Vec<String>) -> FunctionInfo {
     let mut name = String::new();
     let mut params_str = String::new();
 
@@ -164,9 +177,15 @@ fn parse_class(
     for child in node.children(&mut cursor) {
         let kind = child.kind();
         if kind == "identifier" && name.is_empty() {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         } else if kind == "argument_list" {
-            params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            params_str = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         }
     }
 

@@ -158,10 +158,7 @@ fn test_export_json_metadata_has_lockfile_count() {
         "binary_files",
         "lockfiles",
     ] {
-        assert!(
-            meta.get(key).is_some(),
-            "metadata missing key '{key}'"
-        );
+        assert!(meta.get(key).is_some(), "metadata missing key '{key}'");
     }
 }
 
@@ -194,10 +191,7 @@ fn test_export_json_file_objects_include_is_lockfile_field() {
 
 #[test]
 fn test_jsonl_excludes_lockfiles() {
-    let fixture = make_fixture(&[
-        ("a.rs", "fn a() {}\n"),
-        ("Cargo.lock", "version = 3\n"),
-    ]);
+    let fixture = make_fixture(&[("a.rs", "fn a() {}\n"), ("Cargo.lock", "version = 3\n")]);
     let out_jsonl = fixture.path().join("out.jsonl");
 
     let out = run_loc(&[
@@ -210,7 +204,11 @@ fn test_jsonl_excludes_lockfiles() {
     let content = fs::read_to_string(&out_jsonl).unwrap();
     let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
     // Only a.rs should appear — Cargo.lock is excluded
-    assert_eq!(lines.len(), 1, "JSONL must contain exactly 1 record (lockfile excluded)");
+    assert_eq!(
+        lines.len(),
+        1,
+        "JSONL must contain exactly 1 record (lockfile excluded)"
+    );
     let record: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
     assert!(
         record["path"].as_str().unwrap_or("").contains("a.rs"),

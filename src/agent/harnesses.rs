@@ -116,29 +116,29 @@ impl AgentHarnessKey {
     #[inline]
     pub const fn id(self) -> &'static str {
         match self {
-            Self::Antigravity   => "antigravity",
-            Self::AugmentCli    => "augment-cli",
-            Self::Cline         => "cline",
-            Self::Cowork        => "cowork",
-            Self::ClaudeCode    => "claude-code",
-            Self::Codex         => "codex",
-            Self::Crush         => "crush",
-            Self::GeminiCli     => "gemini-cli",
+            Self::Antigravity => "antigravity",
+            Self::AugmentCli => "augment-cli",
+            Self::Cline => "cline",
+            Self::Cowork => "cowork",
+            Self::ClaudeCode => "claude-code",
+            Self::Codex => "codex",
+            Self::Crush => "crush",
+            Self::GeminiCli => "gemini-cli",
             Self::GithubCopilot => "github-copilot",
-            Self::Goose         => "goose",
-            Self::HermesAgent   => "hermes-agent",
-            Self::KiloCode      => "kilo-code",
-            Self::Kiro          => "kiro",
-            Self::OpenClaw      => "openclaw",
-            Self::OpenCode      => "opencode",
-            Self::Pi            => "pi",
-            Self::Replit        => "replit",
-            Self::Trae          => "trae",
-            Self::Warp          => "warp",
-            Self::Zed           => "zed",
-            Self::CursorCli     => "cursor-cli",
-            Self::Cursor        => "cursor",
-            Self::Devin         => "devin",
+            Self::Goose => "goose",
+            Self::HermesAgent => "hermes-agent",
+            Self::KiloCode => "kilo-code",
+            Self::Kiro => "kiro",
+            Self::OpenClaw => "openclaw",
+            Self::OpenCode => "opencode",
+            Self::Pi => "pi",
+            Self::Replit => "replit",
+            Self::Trae => "trae",
+            Self::Warp => "warp",
+            Self::Zed => "zed",
+            Self::CursorCli => "cursor-cli",
+            Self::Cursor => "cursor",
+            Self::Devin => "devin",
         }
     }
 
@@ -150,30 +150,30 @@ impl AgentHarnessKey {
     pub const fn from_id(id: &str) -> Option<Self> {
         // `match` on byte slices is the idiomatic const-fn string switch.
         match id.as_bytes() {
-            b"antigravity"    => Some(Self::Antigravity),
-            b"augment-cli"    => Some(Self::AugmentCli),
-            b"cline"          => Some(Self::Cline),
-            b"cowork"         => Some(Self::Cowork),
-            b"claude-code"    => Some(Self::ClaudeCode),
-            b"codex"          => Some(Self::Codex),
-            b"crush"          => Some(Self::Crush),
-            b"gemini-cli"     => Some(Self::GeminiCli),
+            b"antigravity" => Some(Self::Antigravity),
+            b"augment-cli" => Some(Self::AugmentCli),
+            b"cline" => Some(Self::Cline),
+            b"cowork" => Some(Self::Cowork),
+            b"claude-code" => Some(Self::ClaudeCode),
+            b"codex" => Some(Self::Codex),
+            b"crush" => Some(Self::Crush),
+            b"gemini-cli" => Some(Self::GeminiCli),
             b"github-copilot" => Some(Self::GithubCopilot),
-            b"goose"          => Some(Self::Goose),
-            b"hermes-agent"   => Some(Self::HermesAgent),
-            b"kilo-code"      => Some(Self::KiloCode),
-            b"kiro"           => Some(Self::Kiro),
-            b"openclaw"       => Some(Self::OpenClaw),
-            b"opencode"       => Some(Self::OpenCode),
-            b"pi"             => Some(Self::Pi),
-            b"replit"         => Some(Self::Replit),
-            b"trae"           => Some(Self::Trae),
-            b"warp"           => Some(Self::Warp),
-            b"zed"            => Some(Self::Zed),
-            b"cursor-cli"     => Some(Self::CursorCli),
-            b"cursor"         => Some(Self::Cursor),
-            b"devin"          => Some(Self::Devin),
-            _                 => None,
+            b"goose" => Some(Self::Goose),
+            b"hermes-agent" => Some(Self::HermesAgent),
+            b"kilo-code" => Some(Self::KiloCode),
+            b"kiro" => Some(Self::Kiro),
+            b"openclaw" => Some(Self::OpenClaw),
+            b"opencode" => Some(Self::OpenCode),
+            b"pi" => Some(Self::Pi),
+            b"replit" => Some(Self::Replit),
+            b"trae" => Some(Self::Trae),
+            b"warp" => Some(Self::Warp),
+            b"zed" => Some(Self::Zed),
+            b"cursor-cli" => Some(Self::CursorCli),
+            b"cursor" => Some(Self::Cursor),
+            b"devin" => Some(Self::Devin),
+            _ => None,
         }
     }
 
@@ -251,30 +251,39 @@ pub const AGENT_HARNESSES: &[(AgentHarnessKey, AgentHarness)] = &[
         AgentHarnessKey::Antigravity,
         AgentHarness {
             pretty_label: "Antigravity",
-            repo_url:     None,
-            docs_url:     Some("https://antigravity.google"),
-            description:  Some("Agentic development platform from Google built around Gemini."),
-            env_vars: &[EnvVarCheck { name: "ANTIGRAVITY_AGENT", pattern: EnvPattern::Any }],
+            repo_url: None,
+            docs_url: Some("https://antigravity.google"),
+            description: Some("Agentic development platform from Google built around Gemini."),
+            env_vars: &[EnvVarCheck {
+                name: "ANTIGRAVITY_AGENT",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::AugmentCli,
         AgentHarness {
             pretty_label: "Augment CLI",
-            repo_url:     Some("https://github.com/augmentcode/auggie"),
-            docs_url:     Some("https://www.augmentcode.com"),
-            description:  Some("Auggie, the command-line coding agent from Augment Code."),
-            env_vars: &[EnvVarCheck { name: "AUGMENT_AGENT", pattern: EnvPattern::Any }],
+            repo_url: Some("https://github.com/augmentcode/auggie"),
+            docs_url: Some("https://www.augmentcode.com"),
+            description: Some("Auggie, the command-line coding agent from Augment Code."),
+            env_vars: &[EnvVarCheck {
+                name: "AUGMENT_AGENT",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::Cline,
         AgentHarness {
             pretty_label: "Cline",
-            repo_url:     Some("https://github.com/cline/cline"),
-            docs_url:     Some("https://cline.bot"),
-            description:  Some("Open-source autonomous coding agent for VS Code."),
-            env_vars: &[EnvVarCheck { name: "CLINE_ACTIVE", pattern: EnvPattern::Any }],
+            repo_url: Some("https://github.com/cline/cline"),
+            docs_url: Some("https://cline.bot"),
+            description: Some("Open-source autonomous coding agent for VS Code."),
+            env_vars: &[EnvVarCheck {
+                name: "CLINE_ACTIVE",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
@@ -283,22 +292,33 @@ pub const AGENT_HARNESSES: &[(AgentHarnessKey, AgentHarness)] = &[
         AgentHarnessKey::Cowork,
         AgentHarness {
             pretty_label: "Cowork",
-            repo_url:     None,
-            docs_url:     Some("https://claude.com/product/cowork"),
-            description:  Some("Anthropic's agent for autonomous knowledge work, built on top of Claude Code."),
-            env_vars: &[EnvVarCheck { name: "CLAUDE_CODE_IS_COWORK", pattern: EnvPattern::Any }],
+            repo_url: None,
+            docs_url: Some("https://claude.com/product/cowork"),
+            description: Some(
+                "Anthropic's agent for autonomous knowledge work, built on top of Claude Code.",
+            ),
+            env_vars: &[EnvVarCheck {
+                name: "CLAUDE_CODE_IS_COWORK",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::ClaudeCode,
         AgentHarness {
             pretty_label: "Claude Code",
-            repo_url:     Some("https://github.com/anthropics/claude-code"),
-            docs_url:     Some("https://code.claude.com/docs"),
-            description:  Some("Anthropic's agentic coding tool that lives in your terminal."),
+            repo_url: Some("https://github.com/anthropics/claude-code"),
+            docs_url: Some("https://code.claude.com/docs"),
+            description: Some("Anthropic's agentic coding tool that lives in your terminal."),
             env_vars: &[
-                EnvVarCheck { name: "CLAUDECODE",  pattern: EnvPattern::Any },
-                EnvVarCheck { name: "CLAUDE_CODE", pattern: EnvPattern::Any },
+                EnvVarCheck {
+                    name: "CLAUDECODE",
+                    pattern: EnvPattern::Any,
+                },
+                EnvVarCheck {
+                    name: "CLAUDE_CODE",
+                    pattern: EnvPattern::Any,
+                },
             ],
         },
     ),
@@ -306,13 +326,22 @@ pub const AGENT_HARNESSES: &[(AgentHarnessKey, AgentHarness)] = &[
         AgentHarnessKey::Codex,
         AgentHarness {
             pretty_label: "Codex",
-            repo_url:     Some("https://github.com/openai/codex"),
-            docs_url:     Some("https://developers.openai.com/codex"),
-            description:  Some("OpenAI's lightweight coding agent that runs in your terminal."),
+            repo_url: Some("https://github.com/openai/codex"),
+            docs_url: Some("https://developers.openai.com/codex"),
+            description: Some("OpenAI's lightweight coding agent that runs in your terminal."),
             env_vars: &[
-                EnvVarCheck { name: "CODEX_SANDBOX",   pattern: EnvPattern::Any },
-                EnvVarCheck { name: "CODEX_CI",        pattern: EnvPattern::Any },
-                EnvVarCheck { name: "CODEX_THREAD_ID", pattern: EnvPattern::Any },
+                EnvVarCheck {
+                    name: "CODEX_SANDBOX",
+                    pattern: EnvPattern::Any,
+                },
+                EnvVarCheck {
+                    name: "CODEX_CI",
+                    pattern: EnvPattern::Any,
+                },
+                EnvVarCheck {
+                    name: "CODEX_THREAD_ID",
+                    pattern: EnvPattern::Any,
+                },
             ],
         },
     ),
@@ -320,33 +349,50 @@ pub const AGENT_HARNESSES: &[(AgentHarnessKey, AgentHarness)] = &[
         AgentHarnessKey::Crush,
         AgentHarness {
             pretty_label: "Crush",
-            repo_url:     Some("https://github.com/charmbracelet/crush"),
-            docs_url:     Some("https://github.com/charmbracelet/crush"),
-            description:  Some("Charm's open-source AI coding agent for the terminal."),
-            env_vars: &[EnvVarCheck { name: "CRUSH", pattern: EnvPattern::Any }],
+            repo_url: Some("https://github.com/charmbracelet/crush"),
+            docs_url: Some("https://github.com/charmbracelet/crush"),
+            description: Some("Charm's open-source AI coding agent for the terminal."),
+            env_vars: &[EnvVarCheck {
+                name: "CRUSH",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::GeminiCli,
         AgentHarness {
             pretty_label: "Gemini CLI",
-            repo_url:     Some("https://github.com/google-gemini/gemini-cli"),
-            docs_url:     Some("https://geminicli.com"),
-            description:  Some("Google's open-source terminal AI coding agent powered by Gemini models."),
-            env_vars: &[EnvVarCheck { name: "GEMINI_CLI", pattern: EnvPattern::Any }],
+            repo_url: Some("https://github.com/google-gemini/gemini-cli"),
+            docs_url: Some("https://geminicli.com"),
+            description: Some(
+                "Google's open-source terminal AI coding agent powered by Gemini models.",
+            ),
+            env_vars: &[EnvVarCheck {
+                name: "GEMINI_CLI",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::GithubCopilot,
         AgentHarness {
             pretty_label: "GitHub Copilot",
-            repo_url:     None,
-            docs_url:     Some("https://docs.github.com/copilot"),
-            description:  Some("GitHub's AI coding assistant."),
+            repo_url: None,
+            docs_url: Some("https://docs.github.com/copilot"),
+            description: Some("GitHub's AI coding assistant."),
             env_vars: &[
-                EnvVarCheck { name: "COPILOT_MODEL",       pattern: EnvPattern::Any },
-                EnvVarCheck { name: "COPILOT_ALLOW_ALL",   pattern: EnvPattern::Any },
-                EnvVarCheck { name: "COPILOT_GITHUB_TOKEN",pattern: EnvPattern::Any },
+                EnvVarCheck {
+                    name: "COPILOT_MODEL",
+                    pattern: EnvPattern::Any,
+                },
+                EnvVarCheck {
+                    name: "COPILOT_ALLOW_ALL",
+                    pattern: EnvPattern::Any,
+                },
+                EnvVarCheck {
+                    name: "COPILOT_GITHUB_TOKEN",
+                    pattern: EnvPattern::Any,
+                },
             ],
         },
     ),
@@ -354,111 +400,154 @@ pub const AGENT_HARNESSES: &[(AgentHarnessKey, AgentHarness)] = &[
         AgentHarnessKey::Goose,
         AgentHarness {
             pretty_label: "Goose",
-            repo_url:     Some("https://github.com/aaif-goose/goose"),
-            docs_url:     Some("https://goose-docs.ai/"),
-            description:  Some("Open-source, extensible AI agent, originally from Block and now part of the Agentic AI Foundation."),
-            env_vars: &[EnvVarCheck { name: "GOOSE_TERMINAL", pattern: EnvPattern::Any }],
+            repo_url: Some("https://github.com/aaif-goose/goose"),
+            docs_url: Some("https://goose-docs.ai/"),
+            description: Some(
+                "Open-source, extensible AI agent, originally from Block and now part of the Agentic AI Foundation.",
+            ),
+            env_vars: &[EnvVarCheck {
+                name: "GOOSE_TERMINAL",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::HermesAgent,
         AgentHarness {
             pretty_label: "Hermes Agent",
-            repo_url:     Some("https://github.com/NousResearch/hermes-agent"),
-            docs_url:     Some("https://hermes-agent.nousresearch.com/docs"),
-            description:  Some("Nous Research's self-improving, multi-provider terminal AI agent."),
-            env_vars: &[EnvVarCheck { name: "HERMES_SESSION_ID", pattern: EnvPattern::Any }],
+            repo_url: Some("https://github.com/NousResearch/hermes-agent"),
+            docs_url: Some("https://hermes-agent.nousresearch.com/docs"),
+            description: Some("Nous Research's self-improving, multi-provider terminal AI agent."),
+            env_vars: &[EnvVarCheck {
+                name: "HERMES_SESSION_ID",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::KiloCode,
         AgentHarness {
             pretty_label: "Kilo Code",
-            repo_url:     Some("https://github.com/Kilo-Org/kilocode"),
-            docs_url:     Some("https://kilocode.ai/docs"),
-            description:  Some("Open-source agentic coding agent for VS Code, JetBrains, and the terminal."),
-            env_vars: &[EnvVarCheck { name: "KILOCODE_FEATURE", pattern: EnvPattern::Any }],
+            repo_url: Some("https://github.com/Kilo-Org/kilocode"),
+            docs_url: Some("https://kilocode.ai/docs"),
+            description: Some(
+                "Open-source agentic coding agent for VS Code, JetBrains, and the terminal.",
+            ),
+            env_vars: &[EnvVarCheck {
+                name: "KILOCODE_FEATURE",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::Kiro,
         AgentHarness {
             pretty_label: "Kiro",
-            repo_url:     None,
-            docs_url:     Some("https://kiro.dev"),
-            description:  Some("AWS's agentic IDE for spec-driven AI software development."),
-            env_vars: &[EnvVarCheck { name: "AGENT_CONTEXT_OUT", pattern: EnvPattern::Any }],
+            repo_url: None,
+            docs_url: Some("https://kiro.dev"),
+            description: Some("AWS's agentic IDE for spec-driven AI software development."),
+            env_vars: &[EnvVarCheck {
+                name: "AGENT_CONTEXT_OUT",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::OpenClaw,
         AgentHarness {
             pretty_label: "OpenClaw",
-            repo_url:     Some("https://github.com/openclaw/openclaw"),
-            docs_url:     Some("https://openclaw.ai"),
-            description:  Some("Open-source, self-hosted personal AI assistant that runs on your own devices."),
-            env_vars: &[EnvVarCheck { name: "OPENCLAW_SHELL", pattern: EnvPattern::Any }],
+            repo_url: Some("https://github.com/openclaw/openclaw"),
+            docs_url: Some("https://openclaw.ai"),
+            description: Some(
+                "Open-source, self-hosted personal AI assistant that runs on your own devices.",
+            ),
+            env_vars: &[EnvVarCheck {
+                name: "OPENCLAW_SHELL",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::OpenCode,
         AgentHarness {
             pretty_label: "opencode",
-            repo_url:     Some("https://github.com/anomalyco/opencode"),
-            docs_url:     Some("https://opencode.ai"),
-            description:  Some("Open-source AI coding agent built for the terminal."),
-            env_vars: &[EnvVarCheck { name: "OPENCODE_CLIENT", pattern: EnvPattern::Any }],
+            repo_url: Some("https://github.com/anomalyco/opencode"),
+            docs_url: Some("https://opencode.ai"),
+            description: Some("Open-source AI coding agent built for the terminal."),
+            env_vars: &[EnvVarCheck {
+                name: "OPENCODE_CLIENT",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::Pi,
         AgentHarness {
             pretty_label: "Pi",
-            repo_url:     Some("https://github.com/earendil-works/pi"),
-            docs_url:     Some("https://pi.dev"),
-            description:  Some("Minimal, self-extensible terminal coding agent with a unified multi-provider LLM API."),
-            env_vars: &[EnvVarCheck { name: "PI_CODING_AGENT", pattern: EnvPattern::Any }],
+            repo_url: Some("https://github.com/earendil-works/pi"),
+            docs_url: Some("https://pi.dev"),
+            description: Some(
+                "Minimal, self-extensible terminal coding agent with a unified multi-provider LLM API.",
+            ),
+            env_vars: &[EnvVarCheck {
+                name: "PI_CODING_AGENT",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::Replit,
         AgentHarness {
             pretty_label: "Replit",
-            repo_url:     None,
-            docs_url:     Some("https://replit.com"),
-            description:  Some("Cloud development environment with an AI coding agent."),
-            env_vars: &[EnvVarCheck { name: "REPL_ID", pattern: EnvPattern::Any }],
+            repo_url: None,
+            docs_url: Some("https://replit.com"),
+            description: Some("Cloud development environment with an AI coding agent."),
+            env_vars: &[EnvVarCheck {
+                name: "REPL_ID",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::Trae,
         AgentHarness {
             pretty_label: "Trae",
-            repo_url:     None,
-            docs_url:     Some("https://trae.ai"),
-            description:  Some("AI-powered IDE from ByteDance."),
-            env_vars: &[EnvVarCheck { name: "TRAE_AI_SHELL_ID", pattern: EnvPattern::Any }],
+            repo_url: None,
+            docs_url: Some("https://trae.ai"),
+            description: Some("AI-powered IDE from ByteDance."),
+            env_vars: &[EnvVarCheck {
+                name: "TRAE_AI_SHELL_ID",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::Warp,
         AgentHarness {
             pretty_label: "Warp",
-            repo_url:     Some("https://github.com/warpdotdev/Warp"),
-            docs_url:     Some("https://docs.warp.dev"),
-            description:  Some("AI-powered terminal with an agentic Agent Mode."),
+            repo_url: Some("https://github.com/warpdotdev/Warp"),
+            docs_url: Some("https://docs.warp.dev"),
+            description: Some("AI-powered terminal with an agentic Agent Mode."),
             // Exact match: TERM_PROGRAM == "WarpTerminal"
-            env_vars: &[EnvVarCheck { name: "TERM_PROGRAM", pattern: EnvPattern::Exact("WarpTerminal") }],
+            env_vars: &[EnvVarCheck {
+                name: "TERM_PROGRAM",
+                pattern: EnvPattern::Exact("WarpTerminal"),
+            }],
         },
     ),
     (
         AgentHarnessKey::Zed,
         AgentHarness {
             pretty_label: "Zed",
-            repo_url:     Some("https://github.com/zed-industries/zed"),
-            docs_url:     Some("https://zed.dev"),
-            description:  Some("High-performance code editor with an integrated AI agent panel and terminal."),
-            env_vars: &[EnvVarCheck { name: "ZED_TERM", pattern: EnvPattern::Any }],
+            repo_url: Some("https://github.com/zed-industries/zed"),
+            docs_url: Some("https://zed.dev"),
+            description: Some(
+                "High-performance code editor with an integrated AI agent panel and terminal.",
+            ),
+            env_vars: &[EnvVarCheck {
+                name: "ZED_TERM",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
@@ -468,29 +557,35 @@ pub const AGENT_HARNESSES: &[(AgentHarnessKey, AgentHarness)] = &[
         AgentHarnessKey::CursorCli,
         AgentHarness {
             pretty_label: "Cursor CLI",
-            repo_url:     None,
-            docs_url:     Some("https://cursor.com/docs/cli/overview"),
-            description:  Some("Cursor's coding agent for the command line."),
-            env_vars: &[EnvVarCheck { name: "CURSOR_AGENT", pattern: EnvPattern::Any }],
+            repo_url: None,
+            docs_url: Some("https://cursor.com/docs/cli/overview"),
+            description: Some("Cursor's coding agent for the command line."),
+            env_vars: &[EnvVarCheck {
+                name: "CURSOR_AGENT",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::Cursor,
         AgentHarness {
             pretty_label: "Cursor",
-            repo_url:     None,
-            docs_url:     Some("https://cursor.com"),
-            description:  Some("AI-powered code editor."),
-            env_vars: &[EnvVarCheck { name: "CURSOR_TRACE_ID", pattern: EnvPattern::Any }],
+            repo_url: None,
+            docs_url: Some("https://cursor.com"),
+            description: Some("AI-powered code editor."),
+            env_vars: &[EnvVarCheck {
+                name: "CURSOR_TRACE_ID",
+                pattern: EnvPattern::Any,
+            }],
         },
     ),
     (
         AgentHarnessKey::Devin,
         AgentHarness {
             pretty_label: "Devin",
-            repo_url:     None,
-            docs_url:     Some("https://devin.ai"),
-            description:  Some("Autonomous AI software engineer from Cognition."),
+            repo_url: None,
+            docs_url: Some("https://devin.ai"),
+            description: Some("Autonomous AI software engineer from Cognition."),
             // No specific env-var; detected only via STANDARD_AGENT_ENV_VARS.
             env_vars: &[],
         },
@@ -573,9 +668,9 @@ impl DetectionResult {
 impl core::fmt::Display for DetectionResult {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Known(k)   => write!(f, "{}", k.id()),
+            Self::Known(k) => write!(f, "{}", k.id()),
             Self::Unknown(v) => write!(f, "unknown ({})", v),
-            Self::None       => f.write_str("none"),
+            Self::None => f.write_str("none"),
         }
     }
 }
@@ -610,10 +705,10 @@ where
     // A dedicated marker is a stronger signal than a generic AI_AGENT value.
     for (key, harness) in AGENT_HARNESSES {
         for check in harness.env_vars {
-            if let Some(val) = lookup(check.name) {
-                if check.pattern.matches(&val) {
-                    return DetectionResult::Known(*key);
-                }
+            if let Some(val) = lookup(check.name)
+                && check.pattern.matches(&val)
+            {
+                return DetectionResult::Known(*key);
             }
         }
     }
@@ -626,7 +721,7 @@ where
             }
             return match AgentHarnessKey::from_id(&val) {
                 Some(key) => DetectionResult::Known(key),
-                None      => DetectionResult::Unknown(val),
+                None => DetectionResult::Unknown(val),
             };
         }
     }
@@ -752,10 +847,7 @@ mod tests {
     fn warp_uses_exact_match() {
         let info = AgentHarnessKey::Warp.info();
         assert_eq!(info.env_vars.len(), 1);
-        assert_eq!(
-            info.env_vars[0].pattern,
-            EnvPattern::Exact("WarpTerminal"),
-        );
+        assert_eq!(info.env_vars[0].pattern, EnvPattern::Exact("WarpTerminal"),);
     }
 
     #[test]
@@ -809,8 +901,14 @@ mod tests {
 
     #[test]
     fn detection_result_display() {
-        assert_eq!(DetectionResult::Known(AgentHarnessKey::Warp).to_string(), "warp");
-        assert_eq!(DetectionResult::Unknown("foo".into()).to_string(), "unknown (foo)");
+        assert_eq!(
+            DetectionResult::Known(AgentHarnessKey::Warp).to_string(),
+            "warp"
+        );
+        assert_eq!(
+            DetectionResult::Unknown("foo".into()).to_string(),
+            "unknown (foo)"
+        );
         assert_eq!(DetectionResult::None.to_string(), "none");
     }
 
@@ -818,7 +916,12 @@ mod tests {
     // Uses isolated closures without mutating global process environment.
 
     fn mock_env<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
-        move |k| pairs.iter().find(|(name, _)| *name == k).map(|(_, v)| (*v).to_string())
+        move |k| {
+            pairs
+                .iter()
+                .find(|(name, _)| *name == k)
+                .map(|(_, v)| (*v).to_string())
+        }
     }
 
     #[test]
@@ -864,10 +967,7 @@ mod tests {
     /// value.  `AI_AGENT=codex` + `CRUSH=1` must return `Crush`, not `Codex`.
     #[test]
     fn detect_harness_specific_beats_standard_var_conflict() {
-        let result = detect_with(mock_env(&[
-            ("AI_AGENT", "codex"),
-            ("CRUSH", "1"),
-        ]));
+        let result = detect_with(mock_env(&[("AI_AGENT", "codex"), ("CRUSH", "1")]));
         assert_eq!(result, DetectionResult::Known(AgentHarnessKey::Crush));
     }
 

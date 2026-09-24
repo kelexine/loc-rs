@@ -6,8 +6,8 @@
 // goes to stderr so it never pollutes the agent's parsing pipeline.
 
 pub mod harnesses;
-use harnesses::DetectionResult;
 use crate::cli::OutputFormat;
+use harnesses::DetectionResult;
 
 // ─── Output mode ─────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ where
             match fmt {
                 OutputFormat::Human => OutputMode::Human,
                 OutputFormat::Agent => OutputMode::Agent,
-                OutputFormat::Json  => OutputMode::Json,
+                OutputFormat::Json => OutputMode::Json,
                 OutputFormat::Quiet => OutputMode::Quiet,
             },
             None,
@@ -68,7 +68,7 @@ where
     match harnesses::detect_with(lookup) {
         DetectionResult::Known(key) => (OutputMode::Agent, Some(key.id().to_string())),
         DetectionResult::Unknown(v) => (OutputMode::Agent, Some(v)),
-        DetectionResult::None       => (OutputMode::Human, None),
+        DetectionResult::None => (OutputMode::Human, None),
     }
 }
 
@@ -81,7 +81,9 @@ pub fn resolve_output_mode(
     json_flag: bool,
     quiet_flag: bool,
 ) -> (OutputMode, Option<String>) {
-    resolve_output_mode_with(format, json_flag, quiet_flag, |name| std::env::var(name).ok())
+    resolve_output_mode_with(format, json_flag, quiet_flag, |name| {
+        std::env::var(name).ok()
+    })
 }
 
 // ─── Hint helpers ─────────────────────────────────────────────────────────────
@@ -130,10 +132,14 @@ pub fn print_hints(
             // Escalate function hints: neither → combined hint; -f only → suggest --func-analysis.
             // Note: --func-analysis auto-enables -f, so they are not independent flags.
             if !used_functions && !used_func_analysis {
-                hint("Use --func-analysis for function counts + full cyclomatic-complexity report \
-                      (or just -f for counts only; --func-analysis implies -f)");
+                hint(
+                    "Use --func-analysis for function counts + full cyclomatic-complexity report \
+                      (or just -f for counts only; --func-analysis implies -f)",
+                );
             } else if used_functions && !used_func_analysis {
-                hint("Use --func-analysis for a full cyclomatic-complexity report (implies -f, already active)");
+                hint(
+                    "Use --func-analysis for a full cyclomatic-complexity report (implies -f, already active)",
+                );
             }
 
             if !used_export {
@@ -190,12 +196,18 @@ mod tests {
     }
 
     fn mock_env<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
-        move |k| pairs.iter().find(|(name, _)| *name == k).map(|(_, v)| (*v).to_string())
+        move |k| {
+            pairs
+                .iter()
+                .find(|(name, _)| *name == k)
+                .map(|(_, v)| (*v).to_string())
+        }
     }
 
     #[test]
     fn auto_detect_known_agent_returns_agent_mode() {
-        let (mode, name) = resolve_output_mode_with(None, false, false, mock_env(&[("CRUSH", "1")]));
+        let (mode, name) =
+            resolve_output_mode_with(None, false, false, mock_env(&[("CRUSH", "1")]));
         assert_eq!(mode, OutputMode::Agent);
         assert_eq!(name.as_deref(), Some("crush"));
     }

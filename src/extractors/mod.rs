@@ -66,11 +66,7 @@ thread_local! {
 
 /// Set `language` on the thread-local parser, parse `content`, and invoke `f`
 /// on the resulting tree.  Returns `None` if language loading or parsing fails.
-pub fn with_parsed_tree<F, R>(
-    language: ::tree_sitter::Language,
-    content: &str,
-    f: F,
-) -> Option<R>
+pub fn with_parsed_tree<F, R>(language: ::tree_sitter::Language, content: &str, f: F) -> Option<R>
 where
     F: FnOnce(::tree_sitter::Tree) -> R,
 {
@@ -105,8 +101,7 @@ pub fn estimate_complexity(block: &[&str]) -> u32 {
         // ── loops — space-style and paren-style ───────────────────────────
         // Leading-space guard removed so column-0 loops are caught.
         // Two patterns each avoid requiring a trailing space before `(`.
-        "while ", "while(",
-        "for ",   "for(",
+        "while ", "while(", "for ", "for(",
         // ── match / switch ─────────────────────────────────────────────────
         " match ", "case ",
         // ── exception handling ─────────────────────────────────────────────

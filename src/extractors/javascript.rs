@@ -29,12 +29,7 @@ impl Extractor for JavascriptExtractor {
     }
 }
 
-fn traverse(
-    node: Node,
-    content: &str,
-    functions: &mut Vec<FunctionInfo>,
-    in_class: bool,
-) {
+fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>, in_class: bool) {
     let kind = node.kind();
 
     if matches!(
@@ -71,11 +66,7 @@ fn traverse(
     }
 }
 
-fn parse_function(
-    node: Node,
-    content: &str,
-    is_method: bool,
-) -> Option<FunctionInfo> {
+fn parse_function(node: Node, content: &str, is_method: bool) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut params_str = String::new();
 
@@ -83,9 +74,15 @@ fn parse_function(
     for child in node.children(&mut cursor) {
         let kind = child.kind();
         if (kind == "identifier" || kind == "property_identifier") && name.is_empty() {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         } else if kind == "formal_parameters" {
-            params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            params_str = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         }
     }
 
@@ -126,10 +123,7 @@ fn parse_function(
     })
 }
 
-fn parse_variable_declarator(
-    node: Node,
-    content: &str,
-) -> Option<FunctionInfo> {
+fn parse_variable_declarator(node: Node, content: &str) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut func_node = None;
 
@@ -137,7 +131,10 @@ fn parse_variable_declarator(
     for child in node.children(&mut cursor) {
         let kind = child.kind();
         if kind == "identifier" && name.is_empty() {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         } else if kind == "arrow_function" || kind == "function" {
             func_node = Some(child);
         }
@@ -164,7 +161,10 @@ fn parse_class(node: Node, content: &str) -> Option<FunctionInfo> {
     for child in node.children(&mut cursor) {
         let kind = child.kind();
         if (kind == "identifier" || kind == "type_identifier") && name.is_empty() {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         }
     }
 

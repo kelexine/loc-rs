@@ -18,7 +18,6 @@
 //   • --format human|agent|json|quiet  +  legacy --json  +  -q
 
 mod agent;
-mod locignore;
 mod cli;
 mod config;
 mod counter;
@@ -26,6 +25,7 @@ mod display;
 mod export;
 mod extractors;
 mod language;
+mod locignore;
 mod models;
 
 use agent::OutputMode;
@@ -42,8 +42,7 @@ fn main() {
     }
 
     // ── Resolve output mode ───────────────────────────────────────────────────
-    let (mode, detected_agent) =
-        agent::resolve_output_mode(args.format, args.json, args.quiet);
+    let (mode, detected_agent) = agent::resolve_output_mode(args.format, args.json, args.quiet);
 
     let config = match counter::ScanConfig::from_args(&args) {
         Ok(c) => c,
@@ -72,9 +71,7 @@ fn main() {
                     "[WARN]".yellow().bold()
                 );
             }
-            if let Err(e) =
-                export::json::print_json_stats(&result, config.extract_functions)
-            {
+            if let Err(e) = export::json::print_json_stats(&result, config.extract_functions) {
                 eprintln!("{} {}", "[ERROR]".red().bold(), e);
                 process::exit(1);
             }
@@ -152,17 +149,17 @@ fn main() {
     }
 
     // ── Export (always honoured regardless of mode) ───────────────────────────
-    if let Some(ref output_file) = args.export {
-        if let Err(e) = export::export(
+    if let Some(ref output_file) = args.export
+        && let Err(e) = export::export(
             &result,
             output_file,
             &config.target_dir,
             config.extract_functions,
             args.func_analysis,
             config.warn_size,
-        ) {
-            eprintln!("{} {}", "[ERROR]".red().bold(), e);
-            process::exit(1);
-        }
+        )
+    {
+        eprintln!("{} {}", "[ERROR]".red().bold(), e);
+        process::exit(1);
     }
 }

@@ -20,12 +20,7 @@ impl Extractor for CppExtractor {
     }
 }
 
-fn traverse(
-    node: Node,
-    content: &str,
-    functions: &mut Vec<FunctionInfo>,
-    in_class: bool,
-) {
+fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>, in_class: bool) {
     let kind = node.kind();
 
     if kind == "function_definition" {
@@ -46,11 +41,7 @@ fn traverse(
     }
 }
 
-fn parse_function(
-    node: Node,
-    content: &str,
-    is_method: bool,
-) -> Option<FunctionInfo> {
+fn parse_function(node: Node, content: &str, is_method: bool) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut params_str = String::new();
 
@@ -85,9 +76,7 @@ fn parse_function(
         let mut inner_cursor = decl.walk();
         for inner_child in decl.children(&mut inner_cursor) {
             let ikind = inner_child.kind();
-            if (ikind == "identifier"
-                || ikind == "field_identifier"
-                || ikind == "destructor_name")
+            if (ikind == "identifier" || ikind == "field_identifier" || ikind == "destructor_name")
                 && name.is_empty()
             {
                 name = inner_child
@@ -143,7 +132,10 @@ fn parse_class(node: Node, content: &str) -> Option<FunctionInfo> {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "type_identifier" && name.is_empty() {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
             break;
         }
     }

@@ -253,10 +253,7 @@ pub fn display_results(
             fmt_num(bin_files).yellow()
         );
     } else if bin_files > 0 {
-        println!(
-            "  Binary Files       : {:<16}",
-            fmt_num(bin_files).yellow()
-        );
+        println!("  Binary Files       : {:<16}", fmt_num(bin_files).yellow());
     }
 
     if show_functions && total_cls > 0 {
@@ -295,7 +292,7 @@ fn display_breakdown(breakdown: &Breakdown, total_lines: usize, has_functions: b
     println!();
 
     let mut sorted: Vec<_> = breakdown.iter().collect();
-    sorted.sort_by(|a, b| b.1.lines.cmp(&a.1.lines));
+    sorted.sort_by_key(|a| std::cmp::Reverse(a.1.lines));
 
     if has_functions {
         println!(
@@ -413,7 +410,7 @@ fn display_largest_functions(files_with_fns: &[&FileInfo], root: &Path) {
                 .map(move |f| (fi.path.as_path(), f))
         })
         .collect();
-    all_fns.sort_by(|a, b| b.1.line_count().cmp(&a.1.line_count()));
+    all_fns.sort_by_key(|a| std::cmp::Reverse(a.1.line_count()));
 
     if all_fns.is_empty() {
         return;
@@ -466,7 +463,7 @@ fn display_complex_functions(files_with_fns: &[&FileInfo], root: &Path) {
         return;
     }
 
-    complex_fns.sort_by(|a, b| b.1.complexity.cmp(&a.1.complexity));
+    complex_fns.sort_by_key(|a| std::cmp::Reverse(a.1.complexity));
     println!("{}", "High Complexity Functions (>10):".bold());
     println!("{:<42} {:<32} {:>12}", "Function", "File", "Complexity");
     println!("{}", "-".repeat(86));

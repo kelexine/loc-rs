@@ -683,22 +683,43 @@ mod tests {
         let mut breakdown = HashMap::new();
         breakdown.insert(
             "rs".to_string(),
-            ExtensionStats { lines: 100, code: 80, comment: 10, blank: 10, files: 1, functions: 1 },
+            ExtensionStats {
+                lines: 100,
+                code: 80,
+                comment: 10,
+                blank: 10,
+                files: 1,
+                functions: 1,
+            },
         );
-        let file = FileInfo::new(PathBuf::from("/repo/src/main.rs"), 100, 80, 10, 10, false, None)
-            .with_functions(vec![FunctionInfo {
-                name: "main".to_string(),
-                line_start: 1,
-                line_end: 20,
-                parameters: vec![],
-                is_async: false,
-                is_method: false,
-                is_class: false,
-                docstring: None,
-                decorators: vec![],
-                complexity: 15,
-            }]);
-        (ScanResult { files: vec![file], breakdown }, root)
+        let file = FileInfo::new(
+            PathBuf::from("/repo/src/main.rs"),
+            100,
+            80,
+            10,
+            10,
+            false,
+            None,
+        )
+        .with_functions(vec![FunctionInfo {
+            name: "main".to_string(),
+            line_start: 1,
+            line_end: 20,
+            parameters: vec![],
+            is_async: false,
+            is_method: false,
+            is_class: false,
+            docstring: None,
+            decorators: vec![],
+            complexity: 15,
+        }]);
+        (
+            ScanResult {
+                files: vec![file],
+                breakdown,
+            },
+            root,
+        )
     }
 
     fn make_plain_result() -> (ScanResult, PathBuf) {
@@ -706,11 +727,26 @@ mod tests {
         let mut breakdown = HashMap::new();
         breakdown.insert(
             "rs".to_string(),
-            ExtensionStats { lines: 50, code: 40, comment: 5, blank: 5, files: 1, functions: 0 },
+            ExtensionStats {
+                lines: 50,
+                code: 40,
+                comment: 5,
+                blank: 5,
+                files: 1,
+                functions: 0,
+            },
         );
         (
             ScanResult {
-                files: vec![FileInfo::new(PathBuf::from("/repo/src/lib.rs"), 50, 40, 5, 5, false, None)],
+                files: vec![FileInfo::new(
+                    PathBuf::from("/repo/src/lib.rs"),
+                    50,
+                    40,
+                    5,
+                    5,
+                    false,
+                    None,
+                )],
                 breakdown,
             },
             root,
@@ -741,9 +777,15 @@ mod tests {
         export_html(&result, &path, &root, true, true, Some(50)).unwrap();
         let contents = std::fs::read_to_string(&path).unwrap();
         assert!(contents.contains("<!DOCTYPE html>"));
-        assert!(contents.contains("\"src/main.rs\""), "expected relative path embedded");
+        assert!(
+            contents.contains("\"src/main.rs\""),
+            "expected relative path embedded"
+        );
         assert!(contents.contains("\"function_analysis_enabled\":true"));
-        assert!(!contents.contains("/repo/src/main.rs"), "absolute path leaked into report");
+        assert!(
+            !contents.contains("/repo/src/main.rs"),
+            "absolute path leaked into report"
+        );
     }
 
     #[test]
@@ -760,12 +802,18 @@ mod tests {
     #[test]
     fn export_html_includes_binary_and_lockfiles_in_data() {
         let (mut result, root) = make_plain_result();
-        result.files.push(
-            FileInfo::new(PathBuf::from("/repo/bin/tool"), 0, 0, 0, 0, true, None)
-        );
+        result.files.push(FileInfo::new(
+            PathBuf::from("/repo/bin/tool"),
+            0,
+            0,
+            0,
+            0,
+            true,
+            None,
+        ));
         result.files.push(
             FileInfo::new(PathBuf::from("/repo/Cargo.lock"), 500, 0, 0, 0, false, None)
-                .mark_as_lockfile()
+                .mark_as_lockfile(),
         );
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("out.html");

@@ -89,7 +89,11 @@ pub fn export_jsonl(result: &ScanResult, path: &Path) -> Result<()> {
     let f = File::create(path).with_context(|| format!("Cannot create {}", path.display()))?;
     let mut writer = BufWriter::new(f);
 
-    for fi in result.files.iter().filter(|f| !f.is_binary && !f.is_lockfile) {
+    for fi in result
+        .files
+        .iter()
+        .filter(|f| !f.is_binary && !f.is_lockfile)
+    {
         let line = serde_json::to_string(&file_to_value(fi, true, None))
             .with_context(|| "Failed to serialize JSONL record")?;
         writeln!(writer, "{}", line)?;
@@ -178,7 +182,14 @@ mod tests {
         let mut breakdown = HashMap::new();
         breakdown.insert(
             "rs".to_string(),
-            ExtensionStats { lines: 100, code: 80, comment: 10, blank: 10, files: 1, functions: 0 },
+            ExtensionStats {
+                lines: 100,
+                code: 80,
+                comment: 10,
+                blank: 10,
+                files: 1,
+                functions: 0,
+            },
         );
         ScanResult {
             files: vec![make_file("/repo/src/main.rs")],
@@ -213,7 +224,10 @@ mod tests {
         let abs = build_scan_json(&result, false, None);
         let rel = build_scan_json(&result, false, Some(Path::new("/repo")));
         // Same schema (keys), different path representation.
-        assert_eq!(abs["metadata"]["total_lines"], rel["metadata"]["total_lines"]);
+        assert_eq!(
+            abs["metadata"]["total_lines"],
+            rel["metadata"]["total_lines"]
+        );
         assert_eq!(abs["files"][0]["path"], "/repo/src/main.rs");
         assert_eq!(rel["files"][0]["path"], "src/main.rs");
     }
@@ -229,7 +243,10 @@ mod tests {
         let mut b = build_scan_json(&result, true, None);
         a["metadata"]["timestamp"] = json!(null);
         b["metadata"]["timestamp"] = json!(null);
-        assert_eq!(a, b, "builder must be deterministic for identical inputs (aside from timestamp)");
+        assert_eq!(
+            a, b,
+            "builder must be deterministic for identical inputs (aside from timestamp)"
+        );
     }
 
     #[test]

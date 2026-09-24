@@ -112,9 +112,15 @@ pub fn write_breakdown_section<W: Write>(
 ) -> Result<()> {
     writeln!(w, "# BREAKDOWN")?;
     if include_functions {
-        writeln!(w, "extension\tfiles\tlines\tcode\tcomment\tblank\tfunctions\tpct_lines")?;
+        writeln!(
+            w,
+            "extension\tfiles\tlines\tcode\tcomment\tblank\tfunctions\tpct_lines"
+        )?;
     } else {
-        writeln!(w, "extension\tfiles\tlines\tcode\tcomment\tblank\tpct_lines")?;
+        writeln!(
+            w,
+            "extension\tfiles\tlines\tcode\tcomment\tblank\tpct_lines"
+        )?;
     }
 
     let total_lines = result.total_lines();
@@ -131,8 +137,14 @@ pub fn write_breakdown_section<W: Write>(
             writeln!(
                 w,
                 "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                ext, stats.files, stats.lines, stats.code, stats.comment, stats.blank,
-                stats.functions, pct
+                ext,
+                stats.files,
+                stats.lines,
+                stats.code,
+                stats.comment,
+                stats.blank,
+                stats.functions,
+                pct
             )?;
         } else {
             writeln!(
@@ -178,10 +190,7 @@ pub fn write_files_section<W: Write>(
             .strip_prefix(root)
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| fi.path.display().to_string());
-        let modified = fi
-            .last_modified
-            .map(|d| d.to_rfc3339())
-            .unwrap_or_default();
+        let modified = fi.last_modified.map(|d| d.to_rfc3339()).unwrap_or_default();
 
         if include_functions {
             writeln!(
@@ -358,7 +367,14 @@ mod tests {
         let mut breakdown = HashMap::new();
         breakdown.insert(
             "rs".to_string(),
-            ExtensionStats { lines: 100, code: 80, comment: 10, blank: 10, files: 1, functions: 1 },
+            ExtensionStats {
+                lines: 100,
+                code: 80,
+                comment: 10,
+                blank: 10,
+                files: 1,
+                functions: 1,
+            },
         );
         let file = FileInfo::new(
             PathBuf::from("/repo/src/main.rs"),
@@ -382,7 +398,10 @@ mod tests {
             complexity: 15,
         }]);
         (
-            ScanResult { files: vec![file], breakdown },
+            ScanResult {
+                files: vec![file],
+                breakdown,
+            },
             root,
         )
     }
@@ -391,7 +410,14 @@ mod tests {
         let mut breakdown = HashMap::new();
         breakdown.insert(
             "rs".to_string(),
-            ExtensionStats { lines: 100, code: 80, comment: 10, blank: 10, files: 2, functions: 5 },
+            ExtensionStats {
+                lines: 100,
+                code: 80,
+                comment: 10,
+                blank: 10,
+                files: 2,
+                functions: 5,
+            },
         );
         ScanResult {
             files: vec![FileInfo::new(
@@ -443,19 +469,39 @@ mod tests {
         let mut breakdown = HashMap::new();
         breakdown.insert(
             "py".to_string(),
-            ExtensionStats { lines: 50, code: 40, comment: 5, blank: 5, files: 1, functions: 0 },
+            ExtensionStats {
+                lines: 50,
+                code: 40,
+                comment: 5,
+                blank: 5,
+                files: 1,
+                functions: 0,
+            },
         );
         breakdown.insert(
             "rs".to_string(),
-            ExtensionStats { lines: 200, code: 160, comment: 20, blank: 20, files: 3, functions: 10 },
+            ExtensionStats {
+                lines: 200,
+                code: 160,
+                comment: 20,
+                blank: 20,
+                files: 3,
+                functions: 10,
+            },
         );
-        let result = ScanResult { files: vec![], breakdown };
+        let result = ScanResult {
+            files: vec![],
+            breakdown,
+        };
         let mut buf = Vec::new();
         write_breakdown_section(&mut buf, &result, false).unwrap();
         let out = String::from_utf8(buf).unwrap();
         let rs_pos = out.find("rs\t").unwrap();
         let py_pos = out.find("py\t").unwrap();
-        assert!(rs_pos < py_pos, "rs (200 lines) should precede py (50 lines)");
+        assert!(
+            rs_pos < py_pos,
+            "rs (200 lines) should precede py (50 lines)"
+        );
     }
 
     #[test]
@@ -464,7 +510,11 @@ mod tests {
         let mut buf = Vec::new();
         write_breakdown_section(&mut buf, &result, false).unwrap();
         let out = String::from_utf8(buf).unwrap();
-        assert!(out.contains("100.00%"), "Single-ext pct should be 100.00%:\n{}", out);
+        assert!(
+            out.contains("100.00%"),
+            "Single-ext pct should be 100.00%:\n{}",
+            out
+        );
     }
 
     #[test]
@@ -474,9 +524,15 @@ mod tests {
         write_breakdown_section(&mut buf, &result, true).unwrap();
         let out = String::from_utf8(buf).unwrap();
         let header = out.lines().nth(1).unwrap();
-        assert_eq!(header, "extension\tfiles\tlines\tcode\tcomment\tblank\tfunctions\tpct_lines");
+        assert_eq!(
+            header,
+            "extension\tfiles\tlines\tcode\tcomment\tblank\tfunctions\tpct_lines"
+        );
         // rs row: files=2, lines=100, code=80, comment=10, blank=10, functions=5
-        assert!(out.lines().any(|l| l == "rs\t2\t100\t80\t10\t10\t5\t100.00%"));
+        assert!(
+            out.lines()
+                .any(|l| l == "rs\t2\t100\t80\t10\t10\t5\t100.00%")
+        );
     }
 
     #[test]
@@ -505,8 +561,16 @@ mod tests {
         let mut buf = Vec::new();
         write_files_section(&mut buf, &result, &root, false).unwrap();
         let out = String::from_utf8(buf).unwrap();
-        assert!(out.contains("src/main.rs\t"), "expected relative path:\n{}", out);
-        assert!(!out.contains("/repo/src/main.rs"), "path should not remain absolute:\n{}", out);
+        assert!(
+            out.contains("src/main.rs\t"),
+            "expected relative path:\n{}",
+            out
+        );
+        assert!(
+            !out.contains("/repo/src/main.rs"),
+            "path should not remain absolute:\n{}",
+            out
+        );
     }
 
     #[test]

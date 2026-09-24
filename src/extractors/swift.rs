@@ -20,12 +20,7 @@ impl Extractor for SwiftExtractor {
     }
 }
 
-fn traverse(
-    node: Node,
-    content: &str,
-    functions: &mut Vec<FunctionInfo>,
-    in_class: bool,
-) {
+fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>, in_class: bool) {
     let kind = node.kind();
 
     if kind == "function_declaration" || kind == "init_declaration" {
@@ -53,11 +48,7 @@ fn traverse(
     }
 }
 
-fn parse_function(
-    node: Node,
-    content: &str,
-    is_method: bool,
-) -> Option<FunctionInfo> {
+fn parse_function(node: Node, content: &str, is_method: bool) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut parameters = Vec::new();
     let mut is_async = false;
@@ -67,9 +58,17 @@ fn parse_function(
     for child in node.children(&mut cursor) {
         let kind = child.kind();
         if kind == "simple_identifier" && name.is_empty() {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         } else if kind == "parameter" {
-            parameters.push(child.utf8_text(content.as_bytes()).unwrap_or("").to_string());
+            parameters.push(
+                child
+                    .utf8_text(content.as_bytes())
+                    .unwrap_or("")
+                    .to_string(),
+            );
         } else if kind == "modifiers" {
             let mod_text = child.utf8_text(content.as_bytes()).unwrap_or("");
             if mod_text.contains("mutating")
@@ -117,7 +116,10 @@ fn parse_class(node: Node, content: &str) -> Option<FunctionInfo> {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "type_identifier" && name.is_empty() {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
             break;
         }
     }

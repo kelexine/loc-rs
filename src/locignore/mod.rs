@@ -319,7 +319,7 @@ mod tests {
         write(dir.path(), "src/.locignore", "*.tmp\n");
         write(dir.path(), "src/work.tmp", "");
         write(dir.path(), "src/main.rs", "");
-        write(dir.path(), "root.tmp", "");   // NOT under src/ → not excluded
+        write(dir.path(), "root.tmp", ""); // NOT under src/ → not excluded
 
         let li = LocIgnore::build(dir.path());
         assert!(li.is_excluded(&dir.path().join("src/work.tmp")));

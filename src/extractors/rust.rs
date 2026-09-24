@@ -20,12 +20,7 @@ impl Extractor for RustExtractor {
     }
 }
 
-fn traverse(
-    node: Node,
-    content: &str,
-    functions: &mut Vec<FunctionInfo>,
-    in_impl: bool,
-) {
+fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>, in_impl: bool) {
     let kind = node.kind();
     let is_impl = kind == "impl_item";
 
@@ -43,9 +38,7 @@ fn traverse(
             } else if ckind == "function_item" {
                 let is_test = pending_attrs.iter().any(|a| a.contains("test"));
                 pending_attrs.clear();
-                if !is_test
-                    && let Some(info) = parse_function(child, content, in_impl || is_impl)
-                {
+                if !is_test && let Some(info) = parse_function(child, content, in_impl || is_impl) {
                     functions.push(info);
                 }
             } else if ckind == "struct_item" {
@@ -81,11 +74,7 @@ fn traverse(
     }
 }
 
-fn parse_function(
-    node: Node,
-    content: &str,
-    is_method: bool,
-) -> Option<FunctionInfo> {
+fn parse_function(node: Node, content: &str, is_method: bool) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut is_async = false;
     let mut is_pub = false;
@@ -95,7 +84,10 @@ fn parse_function(
     for child in node.children(&mut cursor) {
         let kind = child.kind();
         if kind == "identifier" && name.is_empty() {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         } else if kind == "function_modifiers" {
             // In tree-sitter-rust, `async` lives inside function_modifiers
             let mod_text = child.utf8_text(content.as_bytes()).unwrap_or("");
@@ -105,7 +97,10 @@ fn parse_function(
         } else if kind == "visibility_modifier" {
             is_pub = true;
         } else if kind == "parameters" {
-            params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            params_str = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         }
     }
 
@@ -149,7 +144,10 @@ fn parse_struct(node: Node, content: &str) -> Option<FunctionInfo> {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "type_identifier" {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
             break;
         }
     }

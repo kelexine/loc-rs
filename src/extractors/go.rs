@@ -39,11 +39,7 @@ fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>) {
     }
 }
 
-fn parse_function(
-    node: Node,
-    content: &str,
-    is_method: bool,
-) -> Option<FunctionInfo> {
+fn parse_function(node: Node, content: &str, is_method: bool) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut params_str = String::new();
 
@@ -51,9 +47,15 @@ fn parse_function(
     for child in node.children(&mut cursor) {
         let kind = child.kind();
         if (kind == "identifier" || kind == "field_identifier") && name.is_empty() {
-            name = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            name = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         } else if kind == "parameter_list" {
-            params_str = child.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+            params_str = child
+                .utf8_text(content.as_bytes())
+                .unwrap_or("")
+                .to_string();
         }
     }
 

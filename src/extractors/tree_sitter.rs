@@ -3,8 +3,8 @@
 
 use super::Extractor;
 use crate::models::FunctionInfo;
-use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator};
 use std::collections::HashMap;
+use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator};
 
 // ── AST-based cyclomatic complexity ──────────────────────────────────────────
 //
@@ -21,49 +21,49 @@ use std::collections::HashMap;
 /// Covers every tree-sitter grammar bundled with loc-rs.
 const DECISION_NODE_TYPES: &[&str] = &[
     // ── if / elif / elseif ────────────────────────────────────────────────
-    "if_expression",              // Rust
-    "if_statement",               // Python, JS, TS, Java, C, C++, Go, PHP, Swift
-    "elif_clause",                // Python   ← never double-counted with if_statement
-    "elseif_clause",              // PHP
+    "if_expression", // Rust
+    "if_statement",  // Python, JS, TS, Java, C, C++, Go, PHP, Swift
+    "elif_clause",   // Python   ← never double-counted with if_statement
+    "elseif_clause", // PHP
     // ── loops ────────────────────────────────────────────────────────────
-    "while_expression",           // Rust
-    "while_statement",            // Python, JS, TS, Java, C, C++, PHP, Swift
-    "do_statement",               // JS, TS, Java, C, C++, PHP
-    "for_expression",             // Rust
-    "for_statement",              // Python, JS, TS, Java, C, C++, PHP
-    "for_in_statement",           // JS, TS
-    "for_of_statement",           // JS, TS
-    "foreach_statement",          // PHP
-    "enhanced_for_statement",     // Java
-    "loop_expression",            // Rust (infinite loop)
+    "while_expression",       // Rust
+    "while_statement",        // Python, JS, TS, Java, C, C++, PHP, Swift
+    "do_statement",           // JS, TS, Java, C, C++, PHP
+    "for_expression",         // Rust
+    "for_statement",          // Python, JS, TS, Java, C, C++, PHP
+    "for_in_statement",       // JS, TS
+    "for_of_statement",       // JS, TS
+    "foreach_statement",      // PHP
+    "enhanced_for_statement", // Java
+    "loop_expression",        // Rust (infinite loop)
     // ── match / switch cases ─────────────────────────────────────────────
-    "match_arm",                  // Rust — each arm = 1 decision point
-    "case_statement",             // C, C++
+    "match_arm",                    // Rust — each arm = 1 decision point
+    "case_statement",               // C, C++
     "switch_block_statement_group", // Java
-    "expression_case_clause",     // Go
-    "case_clause",                // Go, JS
-    "when",                       // Ruby
+    "expression_case_clause",       // Go
+    "case_clause",                  // Go, JS
+    "when",                         // Ruby
     // ── exception handling ────────────────────────────────────────────────
-    "catch_clause",               // JS, TS, Java, C++
-    "except_clause",              // Python
-    "rescue_clause",              // Ruby
-    "rescue",                     // Ruby (alternate form)
+    "catch_clause",  // JS, TS, Java, C++
+    "except_clause", // Python
+    "rescue_clause", // Ruby
+    "rescue",        // Ruby (alternate form)
     // ── ternary / conditional ─────────────────────────────────────────────
-    "ternary_expression",         // JS, TS, PHP, Java, C, C++
-    "conditional_expression",     // C, C++ (some grammars)
+    "ternary_expression",     // JS, TS, PHP, Java, C, C++
+    "conditional_expression", // C, C++ (some grammars)
     // ── guard ────────────────────────────────────────────────────────────
-    "guard_statement",            // Swift
+    "guard_statement", // Swift
     // ── logical operators as first-class node types (some grammars) ──────
-    "boolean_operator",           // Python: `and` / `or`
-    "logical_and",                // some grammars
-    "logical_or",                 // some grammars
+    "boolean_operator", // Python: `and` / `or`
+    "logical_and",      // some grammars
+    "logical_or",       // some grammars
 ];
 
 /// Binary-expression node types that contain `&&`/`||` as operator child tokens
 /// rather than exposing them as a named node type.
 const BINARY_EXPR_TYPES: &[&str] = &[
-    "binary_expression",   // Rust, JS, TS, Java, C, C++, Go, PHP, Ruby
-    "logical_expression",  // some TS grammars
+    "binary_expression",  // Rust, JS, TS, Java, C, C++, Go, PHP, Ruby
+    "logical_expression", // some TS grammars
 ];
 
 /// Operator texts treated as logical decision points inside binary expressions.
@@ -171,7 +171,11 @@ impl Extractor for TreeSitterExtractor {
 
             for cap in m.captures {
                 let capture_name = capture_names[cap.index as usize];
-                let text = cap.node.utf8_text(content.as_bytes()).unwrap_or("").to_string();
+                let text = cap
+                    .node
+                    .utf8_text(content.as_bytes())
+                    .unwrap_or("")
+                    .to_string();
 
                 match capture_name {
                     "function" | "class" | "method" => {
@@ -195,13 +199,17 @@ impl Extractor for TreeSitterExtractor {
             {
                 let start_point = node.start_position();
                 let end_point = node.end_position();
-                
+
                 let line_start = start_point.row + 1;
                 let line_end = end_point.row + 1;
-                
+
                 // AST-based complexity — accurate because strings/comments
                 // are invisible to the parser and node types are unambiguous.
-                let complexity = if is_class { 1 } else { ast_complexity(node, content.as_bytes()) };
+                let complexity = if is_class {
+                    1
+                } else {
+                    ast_complexity(node, content.as_bytes())
+                };
 
                 let info = FunctionInfo {
                     name: name.clone(),
