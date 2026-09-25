@@ -167,7 +167,7 @@ pub fn export_html(
             "function_analysis_enabled": func_analysis && function_analysis.is_some(),
             "warn_size": warn_size,
             "scan_dir": root.display().to_string(),
-            "generator": concat!("loc v", env!("CARGO_PKG_VERSION"), " by kelexine (https://github.com/kelexine)"),
+            "generator": concat!("loc-rs v", env!("CARGO_PKG_VERSION"), " by kelexine (https://github.com/kelexine)"),
         },
         "breakdown": result.breakdown,
         "files": all_files,

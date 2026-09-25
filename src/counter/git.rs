@@ -12,9 +12,19 @@ use crate::locignore::LocIgnore;
 
 /// Check whether `dir` is inside a git working tree.
 pub fn check_git_repo(dir: &Path) -> bool {
-    git2::Repository::discover(dir)
-        .map(|repo| repo.workdir().is_some())
-        .unwrap_or(false)
+    let mut current = if dir.is_file() {
+        dir.parent()
+    } else {
+        Some(dir)
+    };
+    while let Some(p) = current {
+        let git_dir = p.join(".git");
+        if git_dir.exists() {
+            return true;
+        }
+        current = p.parent();
+    }
+    false
 }
 
 /// Enumerate all files that git knows about (tracked + untracked non-ignored),
@@ -23,6 +33,7 @@ pub fn check_git_repo(dir: &Path) -> bool {
 /// When `.locignore` contains negation patterns (`!`), we also query the list
 /// of git-ignored files so that a negation can re-include them — giving
 /// `.locignore` full precedence over `.gitignore`.
+#[allow(dead_code)]
 pub fn get_git_files(dir: &Path, locignore: &LocIgnore) -> Vec<PathBuf> {
     let repo = match git2::Repository::discover(dir) {
         Ok(r) => r,
@@ -51,6 +62,7 @@ pub fn get_git_files(dir: &Path, locignore: &LocIgnore) -> Vec<PathBuf> {
 
 /// Discovers repository files (tracked, untracked, and optionally ignored)
 /// located under `target_dir` using libgit2.
+#[allow(dead_code)]
 fn git_discover_files(
     repo: &git2::Repository,
     workdir: &Path,

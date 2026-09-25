@@ -5,6 +5,15 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.20] - 2026-09-26
+
+### Performance
+- Fast-path git repository check: replaced heavy `git2::Repository::discover` traversal with direct filesystem parent directory checks for `.git`, reducing repository discovery latency from ~13.8ms to <7µs.
+- Optimized small repository discovery: routed directory scans through lightweight `WalkDir` combined with pre-compiled `LocIgnore` rules, eliminating costly `repo.statuses()` working-tree diffing and cryptographic hashing during plain scans. Reduced discovery latency from ~14.8ms to <300µs and total scan time on small repos to ~3-11ms (outperforming `tokei`).
+
+### Changed
+- Aligned generator identity: updated export metadata in JSON and HTML reports from `loc v<version>` to `loc-rs v<version>`.
+
 ## [0.2.19] - 2026-09-26
 
 ### Added

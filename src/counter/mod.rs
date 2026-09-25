@@ -20,7 +20,7 @@ use crate::locignore::LocIgnore;
 use crate::models::{Breakdown, FileInfo, ScanResult};
 
 use self::discovery::get_manual_files;
-use self::git::{check_git_repo, get_all_git_dates, get_git_files};
+use self::git::{check_git_repo, get_all_git_dates};
 use self::process::process_file;
 
 /// Configuration for a scan run.
@@ -146,12 +146,7 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
                 files.push(path.clone());
             }
         } else if path.is_dir() {
-            let is_git = config.is_git_repo && check_git_repo(path);
-            let dir_files = if is_git && !config.include_hidden {
-                get_git_files(path, &config.locignore)
-            } else {
-                get_manual_files(path, &config.locignore, config.include_hidden)
-            };
+            let dir_files = get_manual_files(path, &config.locignore, config.include_hidden);
             for f in dir_files {
                 if seen.insert(f.clone()) {
                     files.push(f);

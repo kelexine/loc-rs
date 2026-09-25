@@ -28,7 +28,11 @@ pub fn get_manual_files(dir: &Path, locignore: &LocIgnore, include_hidden: bool)
                 if EXCLUDED_DIRS.contains(name) || name == ".git" {
                     return false;
                 }
-                if !include_hidden && name != ".well-known" && name.starts_with('.') {
+                if !include_hidden
+                    && name != ".well-known"
+                    && name != ".github"
+                    && name.starts_with('.')
+                {
                     return false;
                 }
                 // Prune via locignore only when there are no negation patterns.

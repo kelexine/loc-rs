@@ -48,7 +48,7 @@ pub fn build_scan_json(
             "total_classes":  result.total_classes(),
             "timestamp":      Utc::now().to_rfc3339(),
             "function_extraction_enabled": extract_functions,
-            "generator": concat!("loc v", env!("CARGO_PKG_VERSION"), " by kelexine (https://github.com/kelexine)"),
+            "generator": concat!("loc-rs v", env!("CARGO_PKG_VERSION"), " by kelexine (https://github.com/kelexine)"),
         },
         "breakdown": result.breakdown,
         "files": text_files.iter().map(|f| file_to_value(f, extract_functions, root)).collect::<Vec<_>>(),
