@@ -79,8 +79,16 @@ fn insert_into_tree<'a>(
 fn build_tree<'a>(files: &'a [FileInfo], root: &Path) -> BTreeMap<String, TreeNode<'a>> {
     let mut tree: BTreeMap<String, TreeNode> = BTreeMap::new();
     for fi in files {
-        if let Ok(rel) = fi.path.strip_prefix(root) {
-            let parts: Vec<&str> = rel.iter().filter_map(|c| c.to_str()).collect();
+        let parts: Vec<&str> = if let Ok(rel) = fi.path.strip_prefix(root) {
+            rel.iter().filter_map(|c| c.to_str()).collect()
+        } else {
+            fi.path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| vec![n])
+                .unwrap_or_default()
+        };
+        if !parts.is_empty() {
             insert_into_tree(&mut tree, &parts, fi);
         }
     }

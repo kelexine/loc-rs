@@ -380,3 +380,85 @@ fn test_hints_go_to_stderr_not_stdout() {
         stderr
     );
 }
+
+#[test]
+fn test_single_file_argument() {
+    let fixture = make_fixture(&[
+        (
+            "target_file.rs",
+            "fn main() {\n    // comment\n    println!(\"hi\");\n}\n",
+        ),
+        ("other_file.rs", "fn ignored() {}\n"),
+    ]);
+
+    let target_path = fixture.path().join("target_file.rs");
+    let out = run_loc(&[target_path.to_str().unwrap(), "--format", "json"]);
+    assert!(
+        out.status.success(),
+        "loc exited non-zero: {:?}",
+        out.status
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid json output");
+    assert_eq!(json["metadata"]["total_files"], 1);
+    assert_eq!(json["metadata"]["total_code"], 3);
+    assert_eq!(json["metadata"]["total_comment"], 1);
+}
+
+#[test]
+fn test_multiple_file_arguments() {
+    let fixture = make_fixture(&[
+        ("file1.rs", "fn one() {}\n"),
+        ("file2.py", "# python comment\nprint(1)\n"),
+        ("file3.md", "# title\n"),
+    ]);
+
+    let p1 = fixture.path().join("file1.rs");
+    let p2 = fixture.path().join("file2.py");
+    let out = run_loc(&[
+        p1.to_str().unwrap(),
+        p2.to_str().unwrap(),
+        "--format",
+        "json",
+    ]);
+    assert!(
+        out.status.success(),
+        "loc exited non-zero: {:?}",
+        out.status
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid json output");
+    assert_eq!(json["metadata"]["total_files"], 2);
+    assert!(json["breakdown"].get("rs").is_some());
+    assert!(json["breakdown"].get("py").is_some());
+    assert!(json["breakdown"].get("md").is_none());
+}
+
+#[test]
+fn test_mixed_file_and_directory_arguments() {
+    let fixture = make_fixture(&[
+        ("sub/file1.rs", "fn one() {}\n"),
+        ("file2.rs", "fn two() {}\n"),
+        ("other.txt", "some text\n"),
+    ]);
+
+    let sub_dir = fixture.path().join("sub");
+    let file2 = fixture.path().join("file2.rs");
+    let out = run_loc(&[
+        sub_dir.to_str().unwrap(),
+        file2.to_str().unwrap(),
+        "--format",
+        "json",
+    ]);
+    assert!(
+        out.status.success(),
+        "loc exited non-zero: {:?}",
+        out.status
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid json output");
+    assert_eq!(json["metadata"]["total_files"], 2);
+}

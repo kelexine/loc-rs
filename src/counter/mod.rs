@@ -29,8 +29,10 @@ use self::process::process_file;
 /// of how many files are tracked — the heavy HashMap is shared, not copied.
 #[derive(Clone)]
 pub struct ScanConfig {
-    /// Canonicalized target directory to scan.
+    /// Canonicalized base directory for relative path display and git repo checks.
     pub target_dir: PathBuf,
+    /// Explicit target files or directories to scan.
+    pub target_paths: Vec<PathBuf>,
     /// Optional extension allowlist (for `-t/--type` filters), including leading dots.
     pub allowed_extensions: Option<HashSet<String>>,
     /// Optional line threshold for "large file" warnings.
@@ -55,13 +57,28 @@ pub struct ScanConfig {
 impl ScanConfig {
     /// Build a scan configuration from parsed CLI arguments and global config.
     pub fn from_args(args: &Args) -> Result<Self> {
-        let target_dir = Path::new(&args.directory)
-            .canonicalize()
-            .with_context(|| format!("Cannot resolve directory: {}", args.directory))?;
-
-        if !target_dir.is_dir() {
-            anyhow::bail!("Not a directory: {}", target_dir.display());
+        let mut target_paths = Vec::new();
+        for p in &args.paths {
+            let canon = Path::new(p)
+                .canonicalize()
+                .with_context(|| format!("Cannot resolve path: {}", p))?;
+            target_paths.push(canon);
         }
+
+        // Determine base target_dir for relative paths and git checks:
+        // If single directory is provided, use it directly.
+        // Otherwise, use current working directory (or common ancestor).
+        let target_dir = if target_paths.len() == 1 && target_paths[0].is_dir() {
+            target_paths[0].clone()
+        } else {
+            std::env::current_dir().unwrap_or_else(|_| {
+                target_paths
+                    .first()
+                    .and_then(|p| p.parent())
+                    .unwrap_or(Path::new("."))
+                    .to_path_buf()
+            })
+        };
 
         let is_git_repo = check_git_repo(&target_dir);
         let global_config = crate::config::GlobalConfig::load();
@@ -98,6 +115,7 @@ impl ScanConfig {
 
         Ok(Self {
             target_dir,
+            target_paths,
             allowed_extensions,
             warn_size,
             use_git_dates: args.git_dates,
@@ -113,11 +131,34 @@ impl ScanConfig {
 
 /// Run the full scan and return a ScanResult.
 pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
-    let files = if config.is_git_repo && !config.include_hidden {
-        get_git_files(&config.target_dir, &config.locignore)
+    let mut files = Vec::new();
+    let mut seen = HashSet::new();
+
+    let paths: &[PathBuf] = if config.target_paths.is_empty() {
+        std::slice::from_ref(&config.target_dir)
     } else {
-        get_manual_files(&config.target_dir, &config.locignore, config.include_hidden)
+        &config.target_paths
     };
+
+    for path in paths {
+        if path.is_file() {
+            if seen.insert(path.clone()) {
+                files.push(path.clone());
+            }
+        } else if path.is_dir() {
+            let is_git = config.is_git_repo && check_git_repo(path);
+            let dir_files = if is_git && !config.include_hidden {
+                get_git_files(path, &config.locignore)
+            } else {
+                get_manual_files(path, &config.locignore, config.include_hidden)
+            };
+            for f in dir_files {
+                if seen.insert(f.clone()) {
+                    files.push(f);
+                }
+            }
+        }
+    }
 
     // Populate git dates cache *before* cloning config into runner_config.
     let git_dates_cache: Option<Arc<HashMap<PathBuf, DateTime<Utc>>>> =
@@ -476,6 +517,7 @@ fn main() {
 
         let config = super::ScanConfig {
             target_dir: dir.path().to_path_buf(),
+            target_paths: Vec::new(),
             allowed_extensions: None,
             warn_size: None,
             use_git_dates: false,
@@ -544,6 +586,7 @@ fn main() {
 
         let config = super::ScanConfig {
             target_dir: dir.path().to_path_buf(),
+            target_paths: Vec::new(),
             allowed_extensions: None,
             warn_size: None,
             use_git_dates: false,
@@ -578,6 +621,7 @@ fn main() {
 
         let config = super::ScanConfig {
             target_dir: dir.path().to_path_buf(),
+            target_paths: Vec::new(),
             allowed_extensions: None,
             warn_size: None,
             use_git_dates: false,

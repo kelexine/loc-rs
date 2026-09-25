@@ -5,6 +5,14 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.12] - 2026-09-25
+
+### Added
+- Direct file counting support: run `loc` directly on individual files (e.g. `loc src/main.rs`).
+- Multi-path and glob scanning: pass multiple files, directories, or shell glob patterns (e.g. `loc *.rs *.py`, `loc dir1/ dir2/ file.rs`).
+- Automatic base directory resolution with fallback for paths outside current working directory in tree rendering.
+- Integration test coverage for single-file arguments, multiple file arguments, and mixed file/directory inputs.
+
 ## [0.2.11] - 2026-09-24
 
 ### Added

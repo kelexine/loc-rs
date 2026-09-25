@@ -37,7 +37,8 @@ pub enum OutputFormat {
     after_help = "\
 EXAMPLES:
   loc                          Count LOC in current directory
-  loc src/                     Scan a specific directory
+  loc src/main.rs              Count LOC in a single file
+  loc *.rs *.py                Count LOC across matching files
   loc -d                       Show per-language breakdown table
   loc -f                       Extract and list functions/methods
   loc -f --func-analysis       Full function complexity report
@@ -75,9 +76,9 @@ FUNCTION EXTRACTION:
   Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#, PHP, Swift, Ruby"
 )]
 pub struct Args {
-    /// Target directory to scan (default: current directory)
-    #[arg(default_value = ".")]
-    pub directory: String,
+    /// Target files or directories to scan (default: current directory)
+    #[arg(default_value = ".", num_args = 1..)]
+    pub paths: Vec<String>,
 
     /// Show per-language breakdown table
     #[arg(short = 'd', long = "detailed")]

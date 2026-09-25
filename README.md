@@ -93,10 +93,10 @@ cargo doc --no-deps --open
 ## Usage
 
 ```text
-loc [OPTIONS] [DIRECTORY]
+loc [OPTIONS] [PATHS]...
 ```
 
-`DIRECTORY` defaults to the current directory.
+`PATHS` defaults to the current directory (`.`), and supports single files (`loc src/main.rs`), globs (`loc *.rs *.py`), and multiple files or directories.
 
 ### Common workflows
 
@@ -104,6 +104,8 @@ loc [OPTIONS] [DIRECTORY]
 |---|---|
 | Scan the current directory | `loc` |
 | Scan a specific directory | `loc src/` |
+| Count a single file | `loc src/main.rs` |
+| Count multiple files or globs | `loc *.rs *.py` |
 | Show per-extension metrics | `loc -d` |
 | Show a recursive tree | `loc --tree` |
 | Include binary files in the tree | `loc --tree -b` |
