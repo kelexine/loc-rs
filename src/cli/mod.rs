@@ -30,7 +30,8 @@ pub enum OutputFormat {
 /// Author: kelexine (<https://github.com/kelexine>)
 #[derive(Parser, Debug)]
 #[command(
-    name = "loc",
+    name = "loc-rs",
+    bin_name = "loc",
     version = env!("CARGO_PKG_VERSION"),
     author = "kelexine <https://github.com/kelexine>",
     about = "Advanced LOC counter — functions, git dates, parallel scan, multi-format output",

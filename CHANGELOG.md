@@ -5,6 +5,11 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.16] - 2026-09-25
+
+### Changed
+- Differentiate CLI identity as `loc-rs` while retaining the `loc` binary command (`loc --version` outputs `loc-rs 0.2.16`, distinguishing it from the older `loc` tool by cgag).
+
 ## [0.2.15] - 2026-09-25
 
 ### Added
