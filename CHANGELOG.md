@@ -5,6 +5,16 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.14] - 2026-09-25
+
+### Added
+- `.gitignore` awareness across all scans (both git repositories and non-git directories) with cascading subdirectory loading, while maintaining `.locignore` priority.
+- Structured Unicode table reporting: redesigned summary output and per-language breakdown into aligned terminal grid boxes.
+- Default per-language breakdown: always displayed in human output mode without requiring explicit `-d` flag.
+- Extensionless file classification: automatic language and comment resolution for known filenames (`Makefile`, `Kconfig`, `Dockerfile`, `CMakeLists.txt`, `Meson`, `Jenkinsfile`, etc.) and `#!` shebang scripts (`bash`, `sh`, `python`, `perl`, `ruby`, `node`, `php`).
+- Expanded language support for raw LOC counting: Assembly, Perl, OCaml, Erlang, Dart, Fortran, Pascal, Clojure, R, Julia, V, Odin, CUDA, GLSL/Shaders, Protobuf, GraphQL, CMake, Meson, Kconfig, and Makefile.
+- Unit and integration tests for `.gitignore` support, `.locignore` precedence, shebang detection, known filenames, and comment counting.
+
 ## [0.2.13] - 2026-09-25
 
 ### Fixed

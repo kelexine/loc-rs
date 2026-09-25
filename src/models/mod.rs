@@ -73,6 +73,9 @@ pub struct FileInfo {
     /// Embedded language breakdown for multi-language containers (HTML, Jupyter Notebooks).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub embedded: Vec<EmbeddedChunk>,
+    /// Explicit or detected language / breakdown key (e.g. "sh", "py", "Makefile", "Kconfig").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 impl FileInfo {
@@ -96,6 +99,7 @@ impl FileInfo {
             last_modified,
             functions: Vec::new(),
             embedded: Vec::new(),
+            language: None,
         }
     }
 
@@ -105,6 +109,11 @@ impl FileInfo {
     /// contribute nothing to line-count statistics.
     pub fn mark_as_lockfile(mut self) -> Self {
         self.is_lockfile = true;
+        self
+    }
+
+    pub fn with_language(mut self, language: impl Into<String>) -> Self {
+        self.language = Some(language.into());
         self
     }
 
@@ -140,6 +149,17 @@ impl FileInfo {
     /// File extension without the leading dot, or empty string.
     pub fn extension(&self) -> &str {
         self.path.extension().and_then(|e| e.to_str()).unwrap_or("")
+    }
+
+    /// Returns the resolved language/extension key for grouping in breakdown.
+    pub fn language_key(&self) -> &str {
+        if let Some(ref lang) = self.language {
+            lang.as_str()
+        } else if self.extension().is_empty() {
+            "(no ext)"
+        } else {
+            self.extension()
+        }
     }
 }
 

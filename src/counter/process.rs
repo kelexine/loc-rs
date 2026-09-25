@@ -57,11 +57,28 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
         None => Cow::Borrowed(""),
     };
 
+    let known_file = crate::language::detect_known_filename(path);
+
     // Extension filter
-    if let Some(allowed) = &config.allowed_extensions
-        && !allowed.contains(ext_str.as_ref())
-    {
-        return Ok(None);
+    if let Some(allowed) = &config.allowed_extensions {
+        let is_allowed = allowed.contains(ext_str.as_ref())
+            || path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| allowed.contains(n))
+                .unwrap_or(false)
+            || known_file
+                .as_ref()
+                .map(|k| {
+                    allowed.contains(k.breakdown_key)
+                        || allowed.contains(&format!(".{}", k.breakdown_key))
+                })
+                .unwrap_or(false);
+
+        // If not allowed and not an extensionless candidate for shebang detection, filter out now.
+        if !is_allowed && !ext_str.is_empty() {
+            return Ok(None);
+        }
     }
 
     // Check fast-path binary extension
@@ -107,7 +124,39 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
         return Ok(None);
     }
 
-    let spec = crate::language::COMMENT_REGISTRY.get(ext_str.as_ref());
+    // Resolve comment spec and language:
+    // 1. Known filename (Makefile, Dockerfile, Kconfig, CMakeLists.txt, etc.)
+    // 2. Extension registry (.rs, .py, .c, etc.)
+    // 3. Shebang (#!) for extensionless files
+    let mut resolved_lang = known_file.as_ref().map(|k| k.breakdown_key);
+    let mut spec = known_file.as_ref().map(|k| k.comment_spec).or_else(|| {
+        crate::language::COMMENT_REGISTRY
+            .get(ext_str.as_ref())
+            .copied()
+    });
+
+    if spec.is_none()
+        && ext_str.is_empty()
+        && let Some(ref s) = content
+        && let Some(first_line) = s.lines().next()
+        && let Some(shebang) = crate::language::detect_shebang(first_line)
+    {
+        resolved_lang = Some(shebang.breakdown_key);
+        spec = Some(shebang.comment_spec);
+    }
+
+    // Deferred type filter check for extensionless files
+    if let Some(allowed) = &config.allowed_extensions
+        && ext_str.is_empty()
+        && known_file.is_none()
+    {
+        let is_allowed = resolved_lang
+            .map(|lang| allowed.contains(lang) || allowed.contains(&format!(".{}", lang)))
+            .unwrap_or(false);
+        if !is_allowed {
+            return Ok(None);
+        }
+    }
 
     let mut embedded_chunks = Vec::new();
     let (total, code, comment, blank) = match &content {
@@ -116,12 +165,12 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
                 embedded_chunks = chunks;
                 (t, c, cm, b)
             } else {
-                analyze_content_with_spec(s, spec)
+                analyze_content_with_spec(s, spec.as_ref())
             }
         }
         Some(s) if is_html_or_template(path) => {
             let container = if ext_str.is_empty() {
-                ".html"
+                resolved_lang.unwrap_or(".html")
             } else {
                 ext_str.as_ref()
             };
@@ -129,7 +178,7 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
             embedded_chunks = chunks;
             (t, c, cm, b)
         }
-        Some(s) => analyze_content_with_spec(s, spec),
+        Some(s) => analyze_content_with_spec(s, spec.as_ref()),
         None => (0, 0, 0, 0),
     };
 
@@ -153,6 +202,10 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
         is_binary,
         last_modified,
     );
+
+    if let Some(lang) = resolved_lang {
+        fi = fi.with_language(lang);
+    }
 
     if !embedded_chunks.is_empty() {
         fi = fi.with_embedded(embedded_chunks);

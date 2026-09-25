@@ -168,3 +168,105 @@ fn test_multiple_lockfile_ecosystems() {
         stdout
     );
 }
+
+#[test]
+fn test_extensionless_known_filenames_classification_and_comments() {
+    let makefile_content = "# Makefile comment\nall:\n\techo done\n";
+    let kconfig_content = "# Kernel config\nconfig FOO\n\tbool \"Foo\"\n";
+    let fixture = make_fixture(&[("Makefile", makefile_content), ("Kconfig", kconfig_content)]);
+
+    let out = run_loc(&["--json", fixture.path().to_str().unwrap()]);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+
+    let breakdown = &parsed["breakdown"];
+    assert!(
+        breakdown.get("Makefile").is_some(),
+        "Makefile must be classified under 'Makefile'"
+    );
+    assert!(
+        breakdown.get("Kconfig").is_some(),
+        "Kconfig must be classified under 'Kconfig'"
+    );
+
+    // Check comments were recognized (1 comment line in Makefile)
+    let make_stats = &breakdown["Makefile"];
+    assert_eq!(make_stats["comment"].as_u64().unwrap(), 1);
+    assert_eq!(make_stats["code"].as_u64().unwrap(), 2);
+
+    let kconfig_stats = &breakdown["Kconfig"];
+    assert_eq!(kconfig_stats["comment"].as_u64().unwrap(), 1);
+    assert_eq!(kconfig_stats["code"].as_u64().unwrap(), 2);
+}
+
+#[test]
+fn test_extensionless_shebang_script_classification_and_comments() {
+    let script_content = "#!/bin/bash\n# Helper script\necho 'hello'\n";
+    let py_script_content = "#!/usr/bin/env python3\n# Python helper\nprint('hello')\n";
+    let fixture = make_fixture(&[("run", script_content), ("deploy", py_script_content)]);
+
+    let out = run_loc(&["--json", fixture.path().to_str().unwrap()]);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+
+    let breakdown = &parsed["breakdown"];
+    assert!(
+        breakdown.get("sh").is_some(),
+        "bash shebang script must be classified under 'sh'"
+    );
+    assert!(
+        breakdown.get("py").is_some(),
+        "python shebang script must be classified under 'py'"
+    );
+
+    let sh_stats = &breakdown["sh"];
+    assert_eq!(sh_stats["comment"].as_u64().unwrap(), 2); // shebang + comment line
+    assert_eq!(sh_stats["code"].as_u64().unwrap(), 1);
+
+    let py_stats = &breakdown["py"];
+    assert_eq!(py_stats["comment"].as_u64().unwrap(), 2);
+    assert_eq!(py_stats["code"].as_u64().unwrap(), 1);
+}
+
+#[test]
+fn test_gitignore_respected_in_scan() {
+    let fixture = make_fixture(&[
+        (".gitignore", "*.log\nbuild/\n"),
+        ("app.log", "error line 1\n"),
+        ("build/test.rs", "fn test() {}\n"),
+        ("src/main.rs", "fn main() {}\n"),
+    ]);
+
+    let out = run_loc(&["--json", fixture.path().to_str().unwrap()]);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+
+    let files = parsed["files"].as_array().unwrap();
+    assert_eq!(files.len(), 1, "Only src/main.rs should be included");
+    assert!(files[0]["path"].as_str().unwrap().contains("main.rs"));
+}
+
+#[test]
+fn test_locignore_precedence_over_gitignore_in_scan() {
+    let fixture = make_fixture(&[
+        (".gitignore", "*.tmp\n"),
+        (".locignore", "!keep.tmp\n"),
+        ("drop.tmp", "temporary\n"),
+        ("keep.tmp", "keep this\n"),
+        ("src/main.rs", "fn main() {}\n"),
+    ]);
+
+    let out = run_loc(&["--json", fixture.path().to_str().unwrap()]);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+
+    let files = parsed["files"].as_array().unwrap();
+    assert_eq!(files.len(), 2, "main.rs and keep.tmp should be included");
+    let paths: Vec<&str> = files.iter().map(|f| f["path"].as_str().unwrap()).collect();
+    assert!(paths.iter().any(|p| p.contains("keep.tmp")));
+    assert!(!paths.iter().any(|p| p.contains("drop.tmp")));
+}

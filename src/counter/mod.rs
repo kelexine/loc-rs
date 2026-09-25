@@ -204,15 +204,7 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
             continue;
         }
 
-        let container_ext = if fi.extension().is_empty() {
-            fi.path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("(no ext)")
-                .to_string()
-        } else {
-            fi.extension().to_string()
-        };
+        let container_ext = fi.language_key().to_string();
 
         if fi.embedded.is_empty() {
             let stats = breakdown.entry(container_ext).or_default();

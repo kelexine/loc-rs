@@ -39,6 +39,35 @@ pub static LANGUAGE_MAP: Lazy<HashMap<&'static str, Vec<&'static str>>> = Lazy::
     m.insert("zig", vec![".zig"]);
     m.insert("nim", vec![".nim", ".nims"]);
     m.insert("jupyter", vec![".ipynb"]);
+    m.insert("assembly", vec![".s", ".asm", ".S"]);
+    m.insert("perl", vec![".pl", ".pm", ".t"]);
+    m.insert("ocaml", vec![".ml", ".mli"]);
+    m.insert("erlang", vec![".erl", ".hrl"]);
+    m.insert("dart", vec![".dart"]);
+    m.insert(
+        "fortran",
+        vec![".f", ".for", ".f90", ".f95", ".f03", ".f08"],
+    );
+    m.insert("pascal", vec![".pas", ".pp", ".inc"]);
+    m.insert("clojure", vec![".clj", ".cljs", ".cljc", ".edn"]);
+    m.insert("r", vec![".r", ".R"]);
+    m.insert("julia", vec![".jl"]);
+    m.insert("v", vec![".v"]);
+    m.insert("odin", vec![".odin"]);
+    m.insert("cuda", vec![".cu", ".cuh"]);
+    m.insert(
+        "glsl",
+        vec![
+            ".glsl", ".vert", ".frag", ".geom", ".comp", ".hlsl", ".wgsl",
+        ],
+    );
+    m.insert("protobuf", vec![".proto"]);
+    m.insert("graphql", vec![".graphql", ".gql"]);
+    m.insert("cmake", vec![".cmake"]);
+    m.insert("makefile", vec![".mk"]);
+    m.insert("meson", vec![".meson"]);
+    m.insert("kconfig", vec![".kconfig"]);
+    m.insert("dockerfile", vec![".dockerfile"]);
     m
 });
 
@@ -63,6 +92,19 @@ static ALIASES: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     m.insert("kt", "kotlin");
     m.insert("hs", "haskell");
     m.insert("ipynb", "jupyter");
+    m.insert("asm", "assembly");
+    m.insert("s", "assembly");
+    m.insert("pl", "perl");
+    m.insert("pm", "perl");
+    m.insert("ml", "ocaml");
+    m.insert("erl", "erlang");
+    m.insert("f", "fortran");
+    m.insert("f90", "fortran");
+    m.insert("jl", "julia");
+    m.insert("proto", "protobuf");
+    m.insert("gql", "graphql");
+    m.insert("make", "makefile");
+    m.insert("docker", "dockerfile");
     m
 });
 
@@ -172,7 +214,7 @@ pub static BINARY_EXTENSIONS: Lazy<std::collections::HashSet<&'static str>> = La
 });
 
 /// Specification for comment markers in a language.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CommentSpec {
     /// Single-line comment marker (e.g. "//" or "#")
     pub single: Option<&'static str>,
@@ -237,6 +279,41 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
         multi: Some(("/*", "*/")),
         supports_nesting: false,
     };
+    let semicolon_style = CommentSpec {
+        single: Some(";"),
+        multi: None,
+        supports_nesting: false,
+    };
+    let ocaml_style = CommentSpec {
+        single: None,
+        multi: Some(("(*", "*)")),
+        supports_nesting: true,
+    };
+    let erlang_style = CommentSpec {
+        single: Some("%"),
+        multi: None,
+        supports_nesting: false,
+    };
+    let fortran_style = CommentSpec {
+        single: Some("!"),
+        multi: None,
+        supports_nesting: false,
+    };
+    let pascal_style = CommentSpec {
+        single: Some("//"),
+        multi: Some(("{", "}")),
+        supports_nesting: false,
+    };
+    let julia_style = CommentSpec {
+        single: Some("#"),
+        multi: Some(("#=", "=#")),
+        supports_nesting: true,
+    };
+    let perl_style = CommentSpec {
+        single: Some("#"),
+        multi: Some(("=pod", "=cut")),
+        supports_nesting: false,
+    };
 
     // Mapping
     let mappings = [
@@ -244,7 +321,8 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
             vec![
                 ".go", ".java", ".kt", ".kts", ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hxx",
                 ".h++", ".cs", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".php", ".scala",
-                ".sc", ".zig",
+                ".sc", ".zig", ".dart", ".v", ".odin", ".cu", ".cuh", ".glsl", ".vert", ".frag",
+                ".geom", ".comp", ".hlsl", ".wgsl", ".proto",
             ],
             c_style,
         ),
@@ -252,8 +330,29 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
         (vec![".py", ".pyw", ".pyi"], py_style),
         (
             vec![
-                ".sh", ".bash", ".zsh", ".fish", ".rb", ".rake", ".gemspec", ".yaml", ".yml",
-                ".toml", ".ex", ".exs", ".nim", ".nims",
+                ".sh",
+                ".bash",
+                ".zsh",
+                ".fish",
+                ".rb",
+                ".rake",
+                ".gemspec",
+                ".yaml",
+                ".yml",
+                ".toml",
+                ".ex",
+                ".exs",
+                ".nim",
+                ".nims",
+                ".r",
+                ".R",
+                ".graphql",
+                ".gql",
+                ".cmake",
+                ".mk",
+                ".kconfig",
+                ".dockerfile",
+                ".meson",
             ],
             bash_style,
         ),
@@ -266,6 +365,19 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
         (vec![".lua"], lua_style),
         (vec![".hs", ".lhs"], haskell_style),
         (vec![".rb"], ruby_style), // Overwrite for block comments
+        (
+            vec![".s", ".asm", ".S", ".clj", ".cljs", ".cljc", ".edn"],
+            semicolon_style,
+        ),
+        (vec![".ml", ".mli"], ocaml_style),
+        (vec![".erl", ".hrl"], erlang_style),
+        (
+            vec![".f", ".for", ".f90", ".f95", ".f03", ".f08"],
+            fortran_style,
+        ),
+        (vec![".pas", ".pp", ".inc"], pascal_style),
+        (vec![".jl"], julia_style),
+        (vec![".pl", ".pm", ".t"], perl_style),
     ];
 
     for (exts, spec) in mappings {
@@ -276,6 +388,192 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
 
     m
 });
+
+/// Classification of a known special filename or extensionless file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KnownFileSpec {
+    /// Canonical language or file type name (e.g. "Makefile", "Dockerfile", "Kconfig", "CMakeLists.txt").
+    pub language: &'static str,
+    /// Grouping key for breakdown (e.g. "Makefile", "Dockerfile", "Kconfig", "cmake", "sh", "py").
+    pub breakdown_key: &'static str,
+    /// Comment specification for line counting.
+    pub comment_spec: CommentSpec,
+}
+
+/// Detect language and comment spec for a file based on its filename or path.
+pub fn detect_known_filename(path: &std::path::Path) -> Option<KnownFileSpec> {
+    let name = path.file_name().and_then(|n| n.to_str())?;
+
+    let bash_comment = CommentSpec {
+        single: Some("#"),
+        multi: None,
+        supports_nesting: false,
+    };
+    let c_comment = CommentSpec {
+        single: Some("//"),
+        multi: Some(("/*", "*/")),
+        supports_nesting: false,
+    };
+
+    if name == "Makefile" || name == "makefile" || name == "GNUmakefile" || name == "Kbuild" {
+        return Some(KnownFileSpec {
+            language: "Makefile",
+            breakdown_key: "Makefile",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == "Dockerfile"
+        || name == "Containerfile"
+        || name.starts_with("Dockerfile.")
+        || name.starts_with("Containerfile.")
+    {
+        return Some(KnownFileSpec {
+            language: "Dockerfile",
+            breakdown_key: "Dockerfile",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == "Kconfig" || name.starts_with("Kconfig.") {
+        return Some(KnownFileSpec {
+            language: "Kconfig",
+            breakdown_key: "Kconfig",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == "CMakeLists.txt" {
+        return Some(KnownFileSpec {
+            language: "CMake",
+            breakdown_key: "cmake",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == "meson.build" || name == "meson_options.txt" {
+        return Some(KnownFileSpec {
+            language: "Meson",
+            breakdown_key: "meson",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == "Jenkinsfile" || name.starts_with("Jenkinsfile.") {
+        return Some(KnownFileSpec {
+            language: "Jenkinsfile",
+            breakdown_key: "Jenkinsfile",
+            comment_spec: c_comment,
+        });
+    }
+
+    if name == "Rakefile" || name == "Gemfile" {
+        return Some(KnownFileSpec {
+            language: "Ruby",
+            breakdown_key: "rb",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == "Justfile" || name == "justfile" {
+        return Some(KnownFileSpec {
+            language: "Justfile",
+            breakdown_key: "Justfile",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == "BUILD" || name == "BUILD.bazel" || name == "WORKSPACE" {
+        return Some(KnownFileSpec {
+            language: "Bazel",
+            breakdown_key: "bzl",
+            comment_spec: bash_comment,
+        });
+    }
+
+    None
+}
+
+/// Detect language and comment spec from a `#!` shebang on the first line.
+pub fn detect_shebang(first_line: &str) -> Option<KnownFileSpec> {
+    if !first_line.starts_with("#!") {
+        return None;
+    }
+
+    let line = first_line.to_ascii_lowercase();
+
+    let bash_comment = CommentSpec {
+        single: Some("#"),
+        multi: None,
+        supports_nesting: false,
+    };
+    let c_comment = CommentSpec {
+        single: Some("//"),
+        multi: Some(("/*", "*/")),
+        supports_nesting: false,
+    };
+
+    if line.contains("python") {
+        return Some(KnownFileSpec {
+            language: "Python",
+            breakdown_key: "py",
+            comment_spec: CommentSpec {
+                single: Some("#"),
+                multi: Some(("\"\"\"", "\"\"\"")),
+                supports_nesting: false,
+            },
+        });
+    }
+
+    if line.contains("bash")
+        || line.contains("/sh")
+        || line.ends_with(" sh")
+        || line.contains("zsh")
+        || line.contains("fish")
+        || line.contains("ksh")
+        || line.contains("dash")
+    {
+        return Some(KnownFileSpec {
+            language: "Shell",
+            breakdown_key: "sh",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if line.contains("perl") {
+        return Some(KnownFileSpec {
+            language: "Perl",
+            breakdown_key: "pl",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if line.contains("ruby") {
+        return Some(KnownFileSpec {
+            language: "Ruby",
+            breakdown_key: "rb",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if line.contains("node") || line.contains("bun") || line.contains("deno") {
+        return Some(KnownFileSpec {
+            language: "JavaScript",
+            breakdown_key: "js",
+            comment_spec: c_comment,
+        });
+    }
+
+    if line.contains("php") {
+        return Some(KnownFileSpec {
+            language: "PHP",
+            breakdown_key: "php",
+            comment_spec: c_comment,
+        });
+    }
+
+    None
+}
 
 /// Directories excluded by default in non-git mode.
 pub static EXCLUDED_DIRS: Lazy<std::collections::HashSet<&'static str>> = Lazy::new(|| {
@@ -320,6 +618,7 @@ pub fn all_languages() -> Vec<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn test_resolve_extensions_basic() {
@@ -442,5 +741,81 @@ mod tests {
         assert!(is_lockfile(Path::new("project/Cargo.lock")));
         assert!(is_lockfile(Path::new("/home/user/app/yarn.lock")));
         assert!(!is_lockfile(Path::new("deep/src/main.rs")));
+    }
+
+    #[test]
+    fn test_detect_known_filename() {
+        let make = detect_known_filename(Path::new("Makefile")).unwrap();
+        assert_eq!(make.language, "Makefile");
+        assert_eq!(make.breakdown_key, "Makefile");
+        assert_eq!(make.comment_spec.single, Some("#"));
+
+        let kbuild = detect_known_filename(Path::new("drivers/gpu/Kbuild")).unwrap();
+        assert_eq!(kbuild.language, "Makefile");
+
+        let kconfig = detect_known_filename(Path::new("arch/arm64/Kconfig.debug")).unwrap();
+        assert_eq!(kconfig.language, "Kconfig");
+        assert_eq!(kconfig.breakdown_key, "Kconfig");
+
+        let docker = detect_known_filename(Path::new("Dockerfile.prod")).unwrap();
+        assert_eq!(docker.language, "Dockerfile");
+        assert_eq!(docker.breakdown_key, "Dockerfile");
+
+        let cmake = detect_known_filename(Path::new("CMakeLists.txt")).unwrap();
+        assert_eq!(cmake.language, "CMake");
+        assert_eq!(cmake.breakdown_key, "cmake");
+
+        let jenkins = detect_known_filename(Path::new("Jenkinsfile")).unwrap();
+        assert_eq!(jenkins.language, "Jenkinsfile");
+        assert_eq!(jenkins.comment_spec.single, Some("//"));
+
+        assert!(detect_known_filename(Path::new("regular_file.rs")).is_none());
+    }
+
+    #[test]
+    fn test_detect_shebang() {
+        let bash = detect_shebang("#!/usr/bin/env bash").unwrap();
+        assert_eq!(bash.language, "Shell");
+        assert_eq!(bash.breakdown_key, "sh");
+        assert_eq!(bash.comment_spec.single, Some("#"));
+
+        let sh = detect_shebang("#!/bin/sh").unwrap();
+        assert_eq!(sh.breakdown_key, "sh");
+
+        let python = detect_shebang("#!/usr/bin/env python3").unwrap();
+        assert_eq!(python.language, "Python");
+        assert_eq!(python.breakdown_key, "py");
+        assert_eq!(python.comment_spec.single, Some("#"));
+
+        let perl = detect_shebang("#!/usr/bin/perl").unwrap();
+        assert_eq!(perl.language, "Perl");
+        assert_eq!(perl.breakdown_key, "pl");
+
+        let node = detect_shebang("#!/usr/bin/env node").unwrap();
+        assert_eq!(node.language, "JavaScript");
+        assert_eq!(node.breakdown_key, "js");
+
+        assert!(detect_shebang("echo 'not a shebang'").is_none());
+        assert!(detect_shebang("# plain comment").is_none());
+    }
+
+    #[test]
+    fn test_expanded_languages_and_aliases() {
+        assert_eq!(resolve_extensions("asm"), vec![".s", ".asm", ".S"]);
+        assert_eq!(resolve_extensions("make"), vec![".mk"]);
+        assert_eq!(
+            resolve_extensions("f90"),
+            vec![".f", ".for", ".f90", ".f95", ".f03", ".f08"]
+        );
+        assert_eq!(resolve_extensions("ocaml"), vec![".ml", ".mli"]);
+
+        assert!(COMMENT_REGISTRY.contains_key(".s"));
+        assert!(COMMENT_REGISTRY.contains_key(".ml"));
+        assert!(COMMENT_REGISTRY.contains_key(".erl"));
+        assert!(COMMENT_REGISTRY.contains_key(".jl"));
+        assert!(COMMENT_REGISTRY.contains_key(".f90"));
+        assert!(COMMENT_REGISTRY.contains_key(".pas"));
+        assert!(COMMENT_REGISTRY.contains_key(".dart"));
+        assert!(COMMENT_REGISTRY.contains_key(".proto"));
     }
 }

@@ -197,14 +197,85 @@ fn print_tree_node(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Box & Table Formatting Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn visible_width(s: &str) -> usize {
+    let mut len = 0;
+    let mut in_escape = false;
+    for c in s.chars() {
+        if c == '\x1b' {
+            in_escape = true;
+        } else if in_escape {
+            if c == 'm' {
+                in_escape = false;
+            }
+        } else {
+            len += 1;
+        }
+    }
+    len
+}
+
+fn print_sep(widths: &[usize], left: &str, mid: &str, right: &str) {
+    let parts: Vec<String> = widths.iter().map(|w| "─".repeat(w + 2)).collect();
+    println!(
+        "  {}{}{}",
+        left.bright_black(),
+        parts.join(&mid.bright_black().to_string()),
+        right.bright_black()
+    );
+}
+
+fn print_row(cols: &[(&str, usize, bool)]) {
+    print!("  {}", "│".bright_black());
+    for (text, width, right) in cols {
+        let v_len = visible_width(text);
+        let pad = width.saturating_sub(v_len);
+        if *right {
+            print!(" {}{} {}", " ".repeat(pad), text, "│".bright_black());
+        } else {
+            print!(" {}{} {}", text, " ".repeat(pad), "│".bright_black());
+        }
+    }
+    println!();
+}
+
+fn print_full_width_row(text: &str, total_inner_width: usize, centered: bool) {
+    let v_len = visible_width(text);
+    let total_pad = total_inner_width.saturating_sub(v_len);
+    if centered {
+        let left_pad = total_pad / 2;
+        let right_pad = total_pad.saturating_sub(left_pad);
+        println!(
+            "  {} {}{}{} {}",
+            "│".bright_black(),
+            " ".repeat(left_pad),
+            text,
+            " ".repeat(right_pad),
+            "│".bright_black()
+        );
+    } else {
+        println!(
+            "  {} {}{} {}",
+            "│".bright_black(),
+            text,
+            " ".repeat(total_pad),
+            "│".bright_black()
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Public display functions
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Render summary output, optional tree view, and optional detailed breakdown.
+/// Render summary output, optional tree view, and structured per-language breakdown.
 pub fn display_results(
     result: &ScanResult,
     root: &Path,
-    show_details: bool,
+    _show_details: bool,
     show_binary: bool,
     show_tree: bool,
     warn_size: Option<usize>,
@@ -231,45 +302,91 @@ pub fn display_results(
     }
 
     println!();
-    println!("  {}", "LOC-RS ANALYSIS SUMMARY".bold().cyan());
-    println!("  {}", "─".repeat(76).bright_black());
 
-    println!(
-        "  Total Lines of Code    : {:<16}   Text Files         : {:<16}",
-        fmt_num(total_lines).green().bold(),
-        fmt_num(text_files).blue()
-    );
+    // ── Summary Box ─────────────────────────────────────────────────────────
+    let sum_widths = [30, 25, 13];
+    let top_title = "LOC-RS ANALYSIS SUMMARY".cyan().bold().to_string();
+    println!("  {}", format!("┌{}┐", "─".repeat(76)).bright_black());
+    print_full_width_row(&top_title, 74, true);
+    print_sep(&sum_widths, "├", "┬", "┤");
 
-    println!(
-        "  Code / Comment / Blank : {} / {} / {}",
-        fmt_num(result.total_code()).green(),
-        fmt_num(result.total_comment()).magenta(),
-        fmt_num(result.total_blank()).dimmed()
-    );
+    let h_metric = "Metric".bold().to_string();
+    let h_count = "Count".bold().to_string();
+    let h_share = "Share".bold().to_string();
+    print_row(&[
+        (&h_metric, 30, false),
+        (&h_count, 25, true),
+        (&h_share, 13, true),
+    ]);
+    print_sep(&sum_widths, "├", "┼", "┤");
 
+    let code = result.total_code();
+    let comment = result.total_comment();
+    let blank = result.total_blank();
+
+    let row_code = "Code".green().to_string();
+    let val_code = fmt_num(code).green().to_string();
+    let share_code = fmt_percent(code, total_lines).bright_black().to_string();
+    print_row(&[
+        (&row_code, 30, false),
+        (&val_code, 25, true),
+        (&share_code, 13, true),
+    ]);
+
+    let row_comment = "Comments".magenta().to_string();
+    let val_comment = fmt_num(comment).magenta().to_string();
+    let share_comment = fmt_percent(comment, total_lines).bright_black().to_string();
+    print_row(&[
+        (&row_comment, 30, false),
+        (&val_comment, 25, true),
+        (&share_comment, 13, true),
+    ]);
+
+    let row_blank = "Blank".dimmed().to_string();
+    let val_blank = fmt_num(blank).dimmed().to_string();
+    let share_blank = fmt_percent(blank, total_lines).bright_black().to_string();
+    print_row(&[
+        (&row_blank, 30, false),
+        (&val_blank, 25, true),
+        (&share_blank, 13, true),
+    ]);
+
+    print_sep(&sum_widths, "├", "┼", "┤");
+
+    let row_total = "Total Lines".bold().to_string();
+    let val_total = fmt_num(total_lines).bold().to_string();
+    let share_total = "100.00%".bold().to_string();
+    print_row(&[
+        (&row_total, 30, false),
+        (&val_total, 25, true),
+        (&share_total, 13, true),
+    ]);
+
+    println!("  {}", format!("├{}┤", "─".repeat(76)).bright_black());
+
+    let mut file_parts = vec![format!("{} text", fmt_num(text_files).blue())];
+    if bin_files > 0 {
+        file_parts.push(format!("{} binary", fmt_num(bin_files).yellow()));
+    }
     if lockfile_count > 0 {
-        println!(
-            "  Lockfiles              : {:<16}",
+        file_parts.push(format!(
+            "{} Lockfiles",
             fmt_num(lockfile_count).bright_black()
-        );
+        ));
     }
+    let file_summary = format!("Files: {}", file_parts.join("  │  "));
+    print_full_width_row(&file_summary, 74, false);
 
-    if show_functions {
-        println!(
-            "  Functions        : {:<16}   Binary Files       : {:<16}",
+    if show_functions && (total_fns > 0 || total_cls > 0) {
+        let fn_summary = format!(
+            "Functions: {}  │  Classes/Structs: {}",
             fmt_num(total_fns).magenta(),
-            fmt_num(bin_files).yellow()
-        );
-    } else if bin_files > 0 {
-        println!("  Binary Files       : {:<16}", fmt_num(bin_files).yellow());
-    }
-
-    if show_functions && total_cls > 0 {
-        println!(
-            "  Classes/Structs  : {:<16}   ",
             fmt_num(total_cls).magenta()
         );
+        print_full_width_row(&fn_summary, 74, false);
     }
+
+    println!("  {}", format!("└{}┘", "─".repeat(76)).bright_black());
 
     if let Some(ws) = warn_size {
         let large_files = result.files.iter().filter(|f| f.lines > ws).count();
@@ -287,74 +404,179 @@ pub fn display_results(
         }
     }
 
-    println!("  {}", "─".repeat(76).bright_black());
     println!();
 
-    if show_details {
-        display_breakdown(&result.breakdown, total_lines, show_functions);
-    }
+    // ── Per-Language Breakdown Table ─────────────────────────────────────────
+    display_breakdown(&result.breakdown, total_lines, text_files, show_functions);
 }
 
-fn display_breakdown(breakdown: &Breakdown, total_lines: usize, has_functions: bool) {
-    println!("{}", "Breakdown by Extension:".bold().underline());
-    println!();
-
+fn display_breakdown(
+    breakdown: &Breakdown,
+    total_lines: usize,
+    total_files: usize,
+    has_functions: bool,
+) {
     let mut sorted: Vec<_> = breakdown.iter().collect();
     sorted.sort_by_key(|a| std::cmp::Reverse(a.1.lines));
 
     if has_functions {
-        println!(
-            "  {:<18} {:>10} {:>10} {:>10} {:>10} {:>10}",
-            "Extension".dimmed(),
-            "Code".dimmed(),
-            "Comment".dimmed(),
-            "Blank".dimmed(),
-            "Functions".dimmed(),
-            "Share".dimmed()
-        );
-        println!("  {}", "─".repeat(74).bright_black());
-    } else {
-        println!(
-            "  {:<18} {:>10} {:>10} {:>10} {:>10}",
-            "Extension".dimmed(),
-            "Code".dimmed(),
-            "Comment".dimmed(),
-            "Blank".dimmed(),
-            "Share".dimmed()
-        );
-        println!("  {}", "─".repeat(62).bright_black());
-    }
+        let widths = [18, 8, 11, 10, 9, 10, 8];
+        print_sep(&widths, "┌", "┬", "┐");
 
-    for (ext, stats) in &sorted {
-        let ext_colored = match ext.as_str() {
-            "rs" => ext.green(),
-            "py" => ext.yellow(),
-            "js" | "ts" => ext.cyan(),
-            "go" => ext.blue(),
-            "c" | "cpp" => ext.red(),
-            _ => ext.white(),
-        };
+        let h_ext = "Extension".bold().to_string();
+        let h_files = "Files".bold().to_string();
+        let h_code = "Code".bold().to_string();
+        let h_comm = "Comments".bold().to_string();
+        let h_blank = "Blank".bold().to_string();
+        let h_fns = "Functions".bold().to_string();
+        let h_share = "Share".bold().to_string();
 
-        if has_functions {
-            println!(
-                "  {:<18} {:>10} {:>10} {:>10} {:>10} {:>10}",
-                ext_colored,
-                fmt_num(stats.code).bold(),
-                fmt_num(stats.comment).magenta(),
-                fmt_num(stats.blank).dimmed(),
-                fmt_num(stats.functions),
-                fmt_percent(stats.lines, total_lines).bright_black(),
-            );
-        } else {
-            println!(
-                "  {:<18} {:>10} {:>10} {:>10} {:>10}",
-                ext_colored,
-                fmt_num(stats.code).bold(),
-                fmt_num(stats.comment).magenta(),
-                fmt_num(stats.blank).dimmed(),
-                fmt_percent(stats.lines, total_lines).bright_black(),
-            );
+        print_row(&[
+            (&h_ext, 18, false),
+            (&h_files, 8, true),
+            (&h_code, 11, true),
+            (&h_comm, 10, true),
+            (&h_blank, 9, true),
+            (&h_fns, 10, true),
+            (&h_share, 8, true),
+        ]);
+        print_sep(&widths, "├", "┼", "┤");
+
+        let mut tot_code = 0;
+        let mut tot_comm = 0;
+        let mut tot_blank = 0;
+        let mut tot_fns = 0;
+
+        for (ext, stats) in &sorted {
+            tot_code += stats.code;
+            tot_comm += stats.comment;
+            tot_blank += stats.blank;
+            tot_fns += stats.functions;
+
+            let ext_colored = match ext.as_str() {
+                "rs" => ext.green(),
+                "py" => ext.yellow(),
+                "js" | "ts" | "jsx" | "tsx" => ext.cyan(),
+                "go" => ext.blue(),
+                "c" | "cpp" | "h" | "hpp" => ext.red(),
+                "sh" | "bash" | "zsh" => ext.magenta(),
+                "Makefile" | "Kconfig" | "Dockerfile" => ext.yellow(),
+                _ => ext.white(),
+            };
+            let code_s = fmt_num(stats.code).bold().to_string();
+            let comm_s = fmt_num(stats.comment).magenta().to_string();
+            let blank_s = fmt_num(stats.blank).dimmed().to_string();
+            let files_s = fmt_num(stats.files);
+            let fns_s = fmt_num(stats.functions);
+            let share_s = fmt_percent(stats.lines, total_lines)
+                .bright_black()
+                .to_string();
+
+            print_row(&[
+                (&ext_colored.to_string(), 18, false),
+                (&files_s, 8, true),
+                (&code_s, 11, true),
+                (&comm_s, 10, true),
+                (&blank_s, 9, true),
+                (&fns_s, 10, true),
+                (&share_s, 8, true),
+            ]);
         }
+
+        print_sep(&widths, "├", "┼", "┤");
+        let t_label = "Total".bold().to_string();
+        let t_files = fmt_num(total_files).bold().to_string();
+        let t_code = fmt_num(tot_code).bold().to_string();
+        let t_comm = fmt_num(tot_comm).magenta().to_string();
+        let t_blank = fmt_num(tot_blank).dimmed().to_string();
+        let t_fns = fmt_num(tot_fns).to_string();
+        let t_share = "100.00%".bold().to_string();
+
+        print_row(&[
+            (&t_label, 18, false),
+            (&t_files, 8, true),
+            (&t_code, 11, true),
+            (&t_comm, 10, true),
+            (&t_blank, 9, true),
+            (&t_fns, 10, true),
+            (&t_share, 8, true),
+        ]);
+        print_sep(&widths, "└", "┴", "┘");
+    } else {
+        let widths = [20, 9, 12, 10, 10, 8];
+        print_sep(&widths, "┌", "┬", "┐");
+
+        let h_ext = "Extension".bold().to_string();
+        let h_files = "Files".bold().to_string();
+        let h_code = "Code".bold().to_string();
+        let h_comm = "Comments".bold().to_string();
+        let h_blank = "Blank".bold().to_string();
+        let h_share = "Share".bold().to_string();
+
+        print_row(&[
+            (&h_ext, 20, false),
+            (&h_files, 9, true),
+            (&h_code, 12, true),
+            (&h_comm, 10, true),
+            (&h_blank, 10, true),
+            (&h_share, 8, true),
+        ]);
+        print_sep(&widths, "├", "┼", "┤");
+
+        let mut tot_code = 0;
+        let mut tot_comm = 0;
+        let mut tot_blank = 0;
+
+        for (ext, stats) in &sorted {
+            tot_code += stats.code;
+            tot_comm += stats.comment;
+            tot_blank += stats.blank;
+
+            let ext_colored = match ext.as_str() {
+                "rs" => ext.green(),
+                "py" => ext.yellow(),
+                "js" | "ts" | "jsx" | "tsx" => ext.cyan(),
+                "go" => ext.blue(),
+                "c" | "cpp" | "h" | "hpp" => ext.red(),
+                "sh" | "bash" | "zsh" => ext.magenta(),
+                "Makefile" | "Kconfig" | "Dockerfile" => ext.yellow(),
+                _ => ext.white(),
+            };
+            let code_s = fmt_num(stats.code).bold().to_string();
+            let comm_s = fmt_num(stats.comment).magenta().to_string();
+            let blank_s = fmt_num(stats.blank).dimmed().to_string();
+            let files_s = fmt_num(stats.files);
+            let share_s = fmt_percent(stats.lines, total_lines)
+                .bright_black()
+                .to_string();
+
+            print_row(&[
+                (&ext_colored.to_string(), 20, false),
+                (&files_s, 9, true),
+                (&code_s, 12, true),
+                (&comm_s, 10, true),
+                (&blank_s, 10, true),
+                (&share_s, 8, true),
+            ]);
+        }
+
+        print_sep(&widths, "├", "┼", "┤");
+        let t_label = "Total".bold().to_string();
+        let t_files = fmt_num(total_files).bold().to_string();
+        let t_code = fmt_num(tot_code).bold().to_string();
+        let t_comm = fmt_num(tot_comm).magenta().to_string();
+        let t_blank = fmt_num(tot_blank).dimmed().to_string();
+        let t_share = "100.00%".bold().to_string();
+
+        print_row(&[
+            (&t_label, 20, false),
+            (&t_files, 9, true),
+            (&t_code, 12, true),
+            (&t_comm, 10, true),
+            (&t_blank, 10, true),
+            (&t_share, 8, true),
+        ]);
+        print_sep(&widths, "└", "┴", "┘");
     }
     println!();
 }
