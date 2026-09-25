@@ -216,8 +216,8 @@ pub fn parse_html_embedded(
     }
 
     // Strip bodies from script and style tags to count remaining HTML container lines
-    let stripped = SCRIPT_REGEX.replace_all(content, "<script$attrs></script>");
-    let stripped = STYLE_REGEX.replace_all(&stripped, "<style$attrs></style>");
+    let stripped = strip_block(content, &SCRIPT_REGEX, "script");
+    let stripped = strip_block(&stripped, &STYLE_REGEX, "style");
 
     let html_spec = COMMENT_REGISTRY.get(container_ext);
     let (h_total, h_code, h_comment, h_blank) = analyze_content_with_spec(&stripped, html_spec);
@@ -236,9 +236,23 @@ pub fn parse_html_embedded(
         );
     }
 
-    // Physical file metrics
-    let (phys_total, phys_code, phys_comment, phys_blank) =
-        analyze_content_with_spec(content, html_spec);
+    // Physical file metrics: when embedded blocks exist, aggregate across chunks
+    // so that embedded comments/code are accurately reflected in the file summary.
+    let (phys_total, phys_code, phys_comment, phys_blank) = if !embedded_chunks.is_empty() {
+        let mut total_lines = 0;
+        let mut total_code = 0;
+        let mut total_comment = 0;
+        let mut total_blank = 0;
+        for chunk in &embedded_chunks {
+            total_lines += chunk.lines;
+            total_code += chunk.code;
+            total_comment += chunk.comment;
+            total_blank += chunk.blank;
+        }
+        (total_lines, total_code, total_comment, total_blank)
+    } else {
+        analyze_content_with_spec(content, html_spec)
+    };
 
     (
         phys_total,
@@ -247,4 +261,109 @@ pub fn parse_html_embedded(
         phys_blank,
         embedded_chunks,
     )
+}
+
+/// Strip tag bodies from content while preserving tag lines on their respective lines.
+fn strip_block(content: &str, regex: &Regex, tag_name: &str) -> String {
+    regex
+        .replace_all(content, |caps: &regex::Captures| {
+            let full = caps.get(0).unwrap().as_str();
+            let attrs = caps.name("attrs").map(|m| m.as_str()).unwrap_or("");
+            if full.contains('\n') {
+                format!("<{}{}>\n</{}>", tag_name, attrs, tag_name)
+            } else {
+                format!("<{}{}></{}>", tag_name, attrs, tag_name)
+            }
+        })
+        .into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vue_fixture_investigation() {
+        let vue = r#"<template>
+  <div class="hello">
+    <h1>{{ msg }}</h1>
+  </div>
+</template>
+
+<script>
+// comment
+export default {
+  name: 'HelloWorld',
+  props: {
+    msg: String
+  }
+}
+</script>
+"#;
+        let (phys_t, phys_c, phys_cm, phys_b, chunks) = parse_html_embedded(vue, ".vue");
+        assert_eq!(phys_t, 15);
+        assert_eq!(phys_c, 13);
+        assert_eq!(phys_cm, 1);
+        assert_eq!(phys_b, 1);
+
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].extension, "vue");
+        assert_eq!(
+            (
+                chunks[0].lines,
+                chunks[0].code,
+                chunks[0].comment,
+                chunks[0].blank
+            ),
+            (8, 7, 0, 1)
+        );
+        assert_eq!(chunks[1].extension, "js");
+        assert_eq!(
+            (
+                chunks[1].lines,
+                chunks[1].code,
+                chunks[1].comment,
+                chunks[1].blank
+            ),
+            (7, 6, 1, 0)
+        );
+    }
+
+    #[test]
+    fn test_svelte_fixture_with_script_and_style() {
+        let svelte = r#"<script>
+  // Svelte script comment
+  export let name = 'world';
+</script>
+
+<h1>Hello {name}!</h1>
+
+<style>
+  /* Svelte style comment */
+  h1 {
+    color: purple;
+  }
+</style>
+"#;
+        let (phys_t, phys_c, phys_cm, phys_b, chunks) = parse_html_embedded(svelte, ".svelte");
+        assert_eq!(phys_t, 13);
+        assert_eq!(phys_c, 9);
+        assert_eq!(phys_cm, 2);
+        assert_eq!(phys_b, 2);
+
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0].extension, "svelte");
+        assert_eq!(chunks[1].extension, "js");
+        assert_eq!(chunks[2].extension, "css");
+
+        let sum_lines: usize = chunks.iter().map(|c| c.lines).sum();
+        let sum_code: usize = chunks.iter().map(|c| c.code).sum();
+        let sum_comment: usize = chunks.iter().map(|c| c.comment).sum();
+        let sum_blank: usize = chunks.iter().map(|c| c.blank).sum();
+
+        assert_eq!(sum_lines, phys_t);
+        assert_eq!(sum_code, phys_c);
+        assert_eq!(sum_comment, phys_cm);
+        assert_eq!(sum_blank, phys_b);
+    }
 }

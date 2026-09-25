@@ -5,6 +5,12 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.13] - 2026-09-25
+
+### Fixed
+- Preserved `<script>` and `<style>` tag lines when stripping embedded bodies in HTML, Vue, and Svelte templates (`strip_block`), preventing tag lines from vanishing from the container breakdown.
+- Synchronized top-level summary metrics with embedded chunks in `parse_html_embedded`, ensuring primary code, comment, and blank totals accurately reflect embedded language comments (e.g. `//` inside `<script>`) rather than evaluating entire template files against HTML-only comment rules.
+
 ## [0.2.12] - 2026-09-25
 
 ### Added
