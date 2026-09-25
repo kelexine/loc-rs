@@ -275,7 +275,7 @@ fn print_full_width_row(text: &str, total_inner_width: usize, centered: bool) {
 pub fn display_results(
     result: &ScanResult,
     root: &Path,
-    _show_details: bool,
+    show_details: bool,
     show_binary: bool,
     show_tree: bool,
     warn_size: Option<usize>,
@@ -404,10 +404,13 @@ pub fn display_results(
         }
     }
 
-    println!();
-
     // ── Per-Language Breakdown Table ─────────────────────────────────────────
-    display_breakdown(&result.breakdown, total_lines, text_files, show_functions);
+    if show_details {
+        println!();
+        display_breakdown(&result.breakdown, total_lines, text_files, show_functions);
+    } else {
+        println!();
+    }
 }
 
 fn display_breakdown(

@@ -66,6 +66,27 @@ fn test_detailed_breakdown_flag() {
 }
 
 #[test]
+fn test_plain_scan_omits_breakdown_table() {
+    let fixture = make_fixture(&[
+        ("main.rs", "fn main() {}\n"),
+        ("helpers.rs", "pub fn help() {}\n"),
+    ]);
+
+    let out = run_loc(&[fixture.path().to_str().unwrap(), "--format", "human"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("LOC-RS ANALYSIS SUMMARY"),
+        "Summary box missing in output:\n{}",
+        stdout
+    );
+    assert!(
+        !stdout.contains("Language"),
+        "Breakdown table should not appear without -d in human mode:\n{}",
+        stdout
+    );
+}
+
+#[test]
 fn test_function_extraction_flag() {
     let fixture = make_fixture(&[(
         "lib.rs",
