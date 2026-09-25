@@ -20,12 +20,12 @@ pub enum OutputFormat {
     Quiet,
 }
 
-/// LOC — Advanced Lines of Code counter
+/// loc-rs — Advanced Lines of Code counter
 ///
 /// A fast, feature-rich LOC tool with function extraction, git integration,
-/// parallel processing, and multi-format export.  When run inside a coding
-/// agent (`CLAUDECODE`, `AI_AGENT`, `CODEX_SANDBOX`, … are set), output
-/// switches to agent mode automatically — no flag needed.
+/// cascading .gitignore support, canonical language breakdown, and multi-format export.
+/// When run inside a coding agent (`CLAUDECODE`, `AI_AGENT`, `CODEX_SANDBOX`, … are set),
+/// output switches to agent mode automatically — no flag needed.
 ///
 /// Author: kelexine (<https://github.com/kelexine>)
 #[derive(Parser, Debug)]
@@ -34,7 +34,7 @@ pub enum OutputFormat {
     bin_name = "loc",
     version = env!("CARGO_PKG_VERSION"),
     author = "kelexine <https://github.com/kelexine>",
-    about = "Advanced LOC counter — functions, git dates, parallel scan, multi-format output",
+    about = "loc-rs: Advanced LOC counter — functions, git dates, parallel scan, multi-format output",
     after_help = "\
 EXAMPLES:
   loc                          Count LOC in current directory
@@ -57,7 +57,7 @@ EXAMPLES:
   loc src/ -d -t rust -f -e out.json
 
 OUTPUT MODES:
-  human   Colored terminal output, truncated tables, hints at end [default]
+  human   Colored terminal output, aligned Unicode tables, hints at end [default]
   agent   TSV, no ANSI, nothing truncated — auto-detected from env vars
   json    JSON summary to stdout (same as --json)
   quiet   One matched path per line
@@ -68,10 +68,16 @@ AGENT AUTO-DETECTION:
   (Codex), CURSOR_TRACE_ID (Cursor), AI_AGENT (any agent), and more.
   Override with --format human to force terminal output.
 
-SUPPORTED LANGUAGES:
-  python, javascript, typescript, rust, go, java, kotlin, swift,
-  c, cpp, csharp, ruby, php, html, css, shell, sql, markdown,
-  json, yaml, xml, jsx, vue, svelte, toml, scala, haskell, elixir, lua, zig, nim
+SUPPORTED LANGUAGES (LOC Counting):
+  Rust, C, C Header, C++, C++ Header, Device Tree, Assembly, Python,
+  Shell, Makefile, Kconfig, Config, Dockerfile, CMake, Meson, Bazel,
+  JavaScript, TypeScript, TSX, JSX, Vue, Svelte, HTML, CSS, SCSS, Sass, Less,
+  JSON, YAML, TOML, XML, SVG, SQL, Protobuf, GraphQL, Coccinelle, Bison, Flex,
+  Linker Script, Android Blueprint, Mediatek DWS, reStructuredText, AWK, Sed,
+  ASN.1, Gettext, Graphviz, TeX, Vim Script, Plain Text, Go, Java,
+  Kotlin, Swift, C#, Ruby, PHP, Perl, Lua, Zig, Nim, OCaml, Erlang, Elixir,
+  Scala, Haskell, Clojure, R, Julia, Dart, Fortran, Pascal, V, Odin, CUDA,
+  GLSL Shaders, Jupyter Notebooks
 
 FUNCTION EXTRACTION:
   Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#, PHP, Swift, Ruby"

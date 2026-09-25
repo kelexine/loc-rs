@@ -5,6 +5,11 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.17] - 2026-09-25
+
+### Documentation
+- Updated CLI `--help` menu: expanded the `SUPPORTED LANGUAGES` reference with all newly added languages (Device Tree, C/C++ Headers, Assembly, Linker Scripts, Coccinelle, Bison/Flex, Android Blueprint, Config, Kconfig, Shaders, etc.) and updated the tool identity to `loc-rs`.
+
 ## [0.2.16] - 2026-09-25
 
 ### Changed

@@ -188,41 +188,89 @@ Use static workflow values for `target_dir`, `warn_size`, and `args`; do not pas
 
 ## Supported Languages
 
-| Name | Extensions |
-|---|---|
-| `c` | `.c` `.h` |
-| `csharp` | `.cs` |
-| `cpp` | `.cpp` `.cc` `.cxx` `.hpp` `.hxx` `.h++` |
-| `css` | `.css` `.scss` `.sass` `.less` |
-| `elixir` | `.ex` `.exs` |
-| `go` | `.go` |
-| `haskell` | `.hs` `.lhs` |
-| `html` | `.html` `.htm` |
-| `java` | `.java` |
-| `javascript` | `.js` `.mjs` `.cjs` |
-| `json` | `.json` `.jsonl` `.json5` |
-| `jsx` | `.jsx` |
-| `kotlin` | `.kt` `.kts` |
-| `lua` | `.lua` |
-| `markdown` | `.md` `.markdown` `.mdx` |
-| `nim` | `.nim` `.nims` |
-| `php` | `.php` `.php3` `.php4` `.php5` `.phtml` |
-| `python` | `.py` `.pyw` `.pyi` |
-| `ruby` | `.rb` `.rake` `.gemspec` |
-| `rust` | `.rs` |
-| `scala` | `.scala` `.sc` |
-| `shell` | `.sh` `.bash` `.zsh` `.fish` |
-| `sql` | `.sql` |
-| `svelte` | `.svelte` |
-| `swift` | `.swift` |
-| `toml` | `.toml` |
-| `typescript` | `.ts` `.tsx` `.mts` |
-| `vue` | `.vue` |
-| `xml` | `.xml` `.xsl` `.xslt` |
-| `yaml` | `.yml` `.yaml` |
-| `zig` | `.zig` |
+| Name | Canonical Group | Extensions / Filenames |
+|---|---|---|
+| `c` | `C` | `.c` `.c_shipped` `.i` |
+| `c-header` / `h` | `C Header` | `.h` `.h_shipped` `.inl` |
+| `cpp` | `C++` | `.cpp` `.cc` `.cxx` `.c++` |
+| `cpp-header` / `hpp` | `C++ Header` | `.hpp` `.hxx` `.h++` `.hh` `.tpp` `.ipp` |
+| `dts` | `Device Tree` | `.dts` `.dtso` |
+| `dtsi` | `Device Tree Include` | `.dtsi` |
+| `assembly` | `Assembly` | `.s` `.S` `.asm` `.S_shipped` `.s_shipped` |
+| `rust` | `Rust` | `.rs` |
+| `python` | `Python` | `.py` `.pyw` `.pyi` `.pyx` `.pxd` |
+| `shell` | `Shell` | `.sh` `.bash` `.zsh` `.fish` `.ksh` `.csh` `.tcsh` `.dash` |
+| `makefile` | `Makefile` | `Makefile` `GNUmakefile` `Kbuild` `Android.mk` `Makefile.*` `Kbuild.*` `.mk` `.mak` `.make` |
+| `kconfig` | `Kconfig` | `Kconfig` `Kconfig.*` `Config.in` `Config.src` `.kconfig` |
+| `config` | `Config` | `.conf` `.config` `.cfg` `.ini` `.config` `defconfig` `*_defconfig` |
+| `cmake` | `CMake` | `CMakeLists.txt` `.cmake` |
+| `meson` | `Meson` | `meson.build` `meson_options.txt` `.meson` |
+| `bazel` | `Bazel` | `BUILD` `BUILD.bazel` `WORKSPACE` `.bzl` `.bazel` |
+| `dockerfile` | `Dockerfile` | `Dockerfile` `Containerfile` `Dockerfile.*` `Containerfile.*` `.dockerfile` |
+| `javascript` | `JavaScript` | `.js` `.mjs` `.cjs` |
+| `typescript` | `TypeScript` | `.ts` `.mts` |
+| `tsx` | `TSX` | `.tsx` |
+| `jsx` | `JSX` | `.jsx` |
+| `html` | `HTML` | `.html` `.htm` |
+| `css` | `CSS` | `.css` |
+| `scss` | `SCSS` | `.scss` |
+| `sass` | `Sass` | `.sass` |
+| `less` | `Less` | `.less` |
+| `vue` | `Vue` | `.vue` |
+| `svelte` | `Svelte` | `.svelte` |
+| `json` | `JSON` | `.json` `.jsonl` `.json5` |
+| `yaml` | `YAML` | `.yml` `.yaml` |
+| `toml` | `TOML` | `.toml` |
+| `xml` | `XML` | `.xml` `.xsl` `.xslt` |
+| `svg` | `SVG` | `.svg` |
+| `sql` | `SQL` | `.sql` |
+| `coccinelle` | `Coccinelle` | `.cocci` |
+| `bison` | `Bison` | `.y` `.yacc` `.yy` |
+| `flex` | `Flex` | `.l` `.lex` `.ll` |
+| `linker-script` | `Linker Script` | `.lds` `.ld` |
+| `android-blueprint` | `Android Blueprint` | `Android.bp` `.bp` |
+| `restructuredtext` | `reStructuredText` | `.rst` |
+| `markdown` | `Markdown` | `.md` `.markdown` `.mdx` |
+| `text` | `Plain Text` | `.txt` `.text` |
+| `awk` | `AWK` | `.awk` |
+| `sed` | `Sed` | `.sed` |
+| `asn1` | `ASN.1` | `.asn1` `.asn` |
+| `gettext` | `Gettext` | `.po` `.pot` |
+| `graphviz` | `Graphviz` | `.dot` `.gv` |
+| `tex` | `TeX` | `.tex` `.sty` `.cls` |
+| `vim` | `Vim Script` | `.vim` |
+| `dws` | `Mediatek DWS` | `.dws` |
+| `jupyter` | `Jupyter` | `.ipynb` |
+| `go` | `Go` | `.go` |
+| `java` | `Java` | `.java` |
+| `kotlin` | `Kotlin` | `.kt` `.kts` |
+| `swift` | `Swift` | `.swift` |
+| `csharp` | `C#` | `.cs` |
+| `ruby` | `Ruby` | `.rb` `.rake` `.gemspec` `Rakefile` `Gemfile` |
+| `php` | `PHP` | `.php` `.php3` `.php4` `.php5` `.phtml` |
+| `perl` | `Perl` | `.pl` `.pm` `.t` `.xs` `.PL` |
+| `lua` | `Lua` | `.lua` |
+| `zig` | `Zig` | `.zig` |
+| `nim` | `Nim` | `.nim` `.nims` |
+| `ocaml` | `OCaml` | `.ml` `.mli` |
+| `erlang` | `Erlang` | `.erl` `.hrl` |
+| `elixir` | `Elixir` | `.ex` `.exs` |
+| `scala` | `Scala` | `.scala` `.sc` |
+| `haskell` | `Haskell` | `.hs` `.lhs` |
+| `clojure` | `Clojure` | `.clj` `.cljs` `.cljc` `.edn` |
+| `r` | `R` | `.r` `.R` |
+| `julia` | `Julia` | `.jl` |
+| `dart` | `Dart` | `.dart` |
+| `fortran` | `Fortran` | `.f` `.for` `.f90` `.f95` `.f03` `.f08` |
+| `pascal` | `Pascal` | `.pas` `.pp` `.inc` |
+| `v` | `V` | `.v` |
+| `odin` | `Odin` | `.odin` |
+| `cuda` | `CUDA` | `.cu` `.cuh` |
+| `glsl` | `GLSL` | `.glsl` `.vert` `.frag` `.geom` `.comp` `.hlsl` `.wgsl` |
+| `protobuf` | `Protobuf` | `.proto` |
+| `graphql` | `GraphQL` | `.graphql` `.gql` |
 
-Language aliases are supported for common names such as `py`, `js`, `ts`, `tsx`, `rs`, `rb`, `sh`, `bash`, `zsh`, `md`, `yml`, `kt`, `hs`, `c++`, `cxx`, `cc`, and `cs`.
+Language aliases are supported for common names such as `py`, `js`, `ts`, `tsx`, `rs`, `c`, `h`, `cpp`, `hpp`, `dts`, `dtsi`, `rb`, `sh`, `bash`, `zsh`, `md`, `yml`, `kt`, `hs`, `c++`, `cxx`, `cc`, and `cs`.
 
 ---
 
