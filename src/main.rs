@@ -64,26 +64,42 @@ fn main() {
     match mode {
         // ── JSON (legacy --json or --format json) ─────────────────────────────
         OutputMode::Json => {
+            let mut warnings = Vec::new();
+            let mut hints = Vec::new();
+
             if args.func_analysis {
-                eprintln!(
-                    "{} --func-analysis is not supported with JSON output; \
-                     use -f to embed function data in the JSON",
-                    "[WARN]".yellow().bold()
+                warnings.push(
+                    "--func-analysis is not supported with JSON output; \
+                     use -f to embed function data in the JSON"
+                        .to_string(),
                 );
             }
-            if let Err(e) = export::json::print_json_stats(&result, config.extract_functions) {
+
+            if let Some(ws) = config.warn_size {
+                let large_files = result.files.iter().filter(|f| f.lines > ws).count();
+                if large_files > 0 {
+                    warnings.push(format!(
+                        "{} files exceed the threshold of {} lines",
+                        large_files, ws
+                    ));
+                }
+            }
+
+            if args.export.is_none() {
+                hints.push("Use -e <file>.json to persist these results to disk".to_string());
+            }
+            hints.push("Use --format agent for compact TSV output (lower token cost)".to_string());
+
+            if let Some(agent) = detected_agent.as_deref() {
+                hints.push(format!("Detected agent environment: {agent}"));
+            }
+
+            if let Err(e) =
+                export::json::print_json_stats(&result, config.extract_functions, &warnings, &hints)
+            {
                 eprintln!("{} {}", "[ERROR]".red().bold(), e);
                 process::exit(1);
             }
-            agent::print_hints(
-                mode,
-                args.detailed,
-                args.tree,
-                args.functions,
-                args.func_analysis,
-                args.export.is_some(),
-                detected_agent.as_deref(),
-            );
         }
 
         // ── Agent (TSV, no ANSI) ──────────────────────────────────────────────
@@ -111,15 +127,6 @@ fn main() {
         // ── Quiet (one path per line) ─────────────────────────────────────────
         OutputMode::Quiet => {
             display::display_quiet(&result, &config.target_dir);
-            agent::print_hints(
-                mode,
-                args.detailed,
-                args.tree,
-                args.functions,
-                args.func_analysis,
-                args.export.is_some(),
-                detected_agent.as_deref(),
-            );
         }
 
         // ── Human (coloured terminal) ─────────────────────────────────────────
@@ -136,15 +143,6 @@ fn main() {
             if args.func_analysis {
                 display::display_function_analysis(&result, &config.target_dir);
             }
-            agent::print_hints(
-                mode,
-                args.detailed,
-                args.tree,
-                args.functions,
-                args.func_analysis,
-                args.export.is_some(),
-                detected_agent.as_deref(),
-            );
         }
     }
 

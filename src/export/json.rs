@@ -57,11 +57,19 @@ pub fn build_scan_json(
 
 /// Print a compact JSON summary of the scan to stdout.
 ///
-/// The output shape mirrors the file-export format so scripts can consume
-/// either source interchangeably.  The `--json` flag routes here instead of
-/// the coloured terminal display.
-pub fn print_json_stats(result: &ScanResult, extract_functions: bool) -> Result<()> {
-    let data = build_scan_json(result, extract_functions, None);
+/// In stdout JSON mode (`--json` or `--format json`), all outputs must be a member
+/// of the JSON object — including warnings and hints. No rogue renders or stderr output.
+pub fn print_json_stats(
+    result: &ScanResult,
+    extract_functions: bool,
+    warnings: &[String],
+    hints: &[String],
+) -> Result<()> {
+    let mut data = build_scan_json(result, extract_functions, None);
+    if let serde_json::Value::Object(ref mut map) = data {
+        map.insert("warnings".to_string(), json!(warnings));
+        map.insert("hints".to_string(), json!(hints));
+    }
 
     let stdout = std::io::stdout();
     serde_json::to_writer(stdout.lock(), &data)

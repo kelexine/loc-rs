@@ -98,9 +98,9 @@ pub fn hint(msg: &str) {
 
 /// Emit contextual next-step hints based on which flags were used.
 ///
-/// Human mode emits no hints — `--help` covers feature discovery.
-/// All other modes write to stderr so the stdout data stream is never
-/// polluted.
+/// Hints are strictly emitted in agent mode when an agent is genuinely detected
+/// via environment variables. In human, JSON, quiet, or manual agent modes, no
+/// hints are printed to stderr.
 pub fn print_hints(
     mode: OutputMode,
     used_detailed: bool,
@@ -110,57 +110,43 @@ pub fn print_hints(
     used_export: bool,
     detected_agent: Option<&str>,
 ) {
-    match mode {
-        // ── Human — no hints; --help covers discovery ─────────────────────
-        OutputMode::Human => {}
-
-        // ── Agent (TSV) ───────────────────────────────────────────────────
-        OutputMode::Agent => {
-            // Banner: identifies which harness triggered auto-detection.
-            if let Some(agent) = detected_agent {
-                eprintln!("# Agent-Detected: {agent}");
-            }
-
-            // Suggest flags that would add more data to the current output.
-            if !used_detailed {
-                hint("Use -d to include a per-language breakdown (code / comment / blank)");
-            }
-            if !used_tree {
-                hint("Use --tree to include a flat TSV file list with per-file metrics");
-            }
-
-            // Escalate function hints: neither → combined hint; -f only → suggest --func-analysis.
-            // Note: --func-analysis auto-enables -f, so they are not independent flags.
-            if !used_functions && !used_func_analysis {
-                hint(
-                    "Use --func-analysis for function counts + full cyclomatic-complexity report \
-                      (or just -f for counts only; --func-analysis implies -f)",
-                );
-            } else if used_functions && !used_func_analysis {
-                hint(
-                    "Use --func-analysis for a full cyclomatic-complexity report (implies -f, already active)",
-                );
-            }
-
-            if !used_export {
-                hint("Use -e <file>.tsv to write these results to disk");
-            }
-            hint("Use --format human to switch to Coloured terminal output");
-        }
-
-        // ── JSON ──────────────────────────────────────────────────────────
-        OutputMode::Json => {
-            if !used_export {
-                hint("Use -e <file>.json to persist these results to disk");
-            }
-            hint("Use --format agent for compact TSV output (lower token cost)");
-        }
-
-        // ── Quiet (one path per line) ─────────────────────────────────────
-        OutputMode::Quiet => {
-            hint("Use -d for a per-language summary or --json for the full structured report");
-        }
+    // Only emit terminal hints when an agent was genuinely auto-detected
+    if mode != OutputMode::Agent {
+        return;
     }
+
+    let Some(agent) = detected_agent else {
+        return;
+    };
+
+    // Banner: identifies which harness triggered auto-detection.
+    eprintln!("# Agent-Detected: {agent}");
+
+    // Suggest flags that would add more data to the current output.
+    if !used_detailed {
+        hint("Use -d to include a per-language breakdown (code / comment / blank)");
+    }
+    if !used_tree {
+        hint("Use --tree to include a flat TSV file list with per-file metrics");
+    }
+
+    // Escalate function hints: neither → combined hint; -f only → suggest --func-analysis.
+    // Note: --func-analysis auto-enables -f, so they are not independent flags.
+    if !used_functions && !used_func_analysis {
+        hint(
+            "Use --func-analysis for function counts + full cyclomatic-complexity report \
+              (or just -f for counts only; --func-analysis implies -f)",
+        );
+    } else if used_functions && !used_func_analysis {
+        hint(
+            "Use --func-analysis for a full cyclomatic-complexity report (implies -f, already active)",
+        );
+    }
+
+    if !used_export {
+        hint("Use -e <file>.tsv to write these results to disk");
+    }
+    hint("Use --format human to switch to Coloured terminal output");
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

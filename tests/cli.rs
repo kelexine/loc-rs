@@ -390,10 +390,9 @@ fn test_hints_go_to_stderr_not_stdout() {
     use std::collections::HashMap;
 
     let fixture = make_fixture(&[("main.rs", "fn main() {}\n")]);
-    let out = run_loc_with_env(
-        &[fixture.path().to_str().unwrap(), "--format", "agent"],
-        &HashMap::new(),
-    );
+    let mut env = HashMap::new();
+    env.insert("CLAUDE_CODE", "1");
+    let out = run_loc_with_env(&[fixture.path().to_str().unwrap()], &env);
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
@@ -403,8 +402,88 @@ fn test_hints_go_to_stderr_not_stdout() {
     );
     assert!(
         stderr.contains("Hint:"),
-        "Hints must appear on stderr:\n{}",
+        "Hints must appear on stderr when agent is detected:\n{}",
         stderr
+    );
+    assert!(
+        stderr.contains("# Agent-Detected:"),
+        "Agent banner must appear on stderr:\n{}",
+        stderr
+    );
+}
+
+#[test]
+fn test_no_hints_when_no_agent_detected() {
+    use std::collections::HashMap;
+
+    let fixture = make_fixture(&[("main.rs", "fn main() {}\n")]);
+    let out = run_loc_with_env(
+        &[fixture.path().to_str().unwrap(), "--format", "agent"],
+        &HashMap::new(),
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("Hint:"),
+        "Hints must not appear when no agent is detected:\n{}",
+        stderr
+    );
+    assert!(
+        !stderr.contains("# Agent-Detected:"),
+        "Agent banner must not appear when no agent is detected:\n{}",
+        stderr
+    );
+}
+
+#[test]
+fn test_json_mode_encapsulates_warnings_and_hints_without_stderr() {
+    use std::collections::HashMap;
+
+    let fixture = make_fixture(&[("main.rs", "fn main() {\n    let x = 1;\n}\n")]);
+
+    let out = run_loc_with_env(
+        &[
+            fixture.path().to_str().unwrap(),
+            "--json",
+            "--func-analysis",
+            "--warn-size",
+            "1",
+        ],
+        &HashMap::new(),
+    );
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.is_empty(),
+        "JSON mode must produce zero stderr output, got:\n{}",
+        stderr
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Stdout must be valid JSON");
+
+    let warnings = parsed["warnings"]
+        .as_array()
+        .expect("warnings array must exist");
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.as_str().unwrap_or("").contains("--func-analysis")),
+        "Expected func-analysis warning in warnings array: {:?}",
+        warnings
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.as_str().unwrap_or("").contains("threshold")),
+        "Expected threshold warning in warnings array: {:?}",
+        warnings
+    );
+
+    let hints = parsed["hints"].as_array().expect("hints array must exist");
+    assert!(
+        !hints.is_empty(),
+        "Hints array should be populated in JSON mode"
     );
 }
 

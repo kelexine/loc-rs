@@ -5,6 +5,12 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.19] - 2026-09-26
+
+### Added
+- Strict JSON encapsulation: in JSON mode (`--json` or `--format json`), all warnings and hints are now first-class attributes (`"warnings"` and `"hints"`) of the JSON object, completely eliminating rogue stderr/stdout output.
+- Gated agent hints: terminal hints to stderr are now strictly constrained to invocations where an AI coding agent is genuinely auto-detected from the environment. Plain CLI and manual `--format agent` runs omit hints.
+
 ## [0.2.18] - 2026-09-26
 
 ### Fixed
