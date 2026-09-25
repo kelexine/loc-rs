@@ -203,9 +203,14 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
         last_modified,
     );
 
-    if let Some(lang) = resolved_lang {
-        fi = fi.with_language(lang);
-    }
+    let canonical_lang = if let Some(lang) = resolved_lang {
+        crate::language::canonical_language_name(lang)
+    } else if !ext_str.is_empty() {
+        crate::language::canonical_language_name(ext_str.as_ref())
+    } else {
+        "Unknown"
+    };
+    fi = fi.with_language(canonical_lang);
 
     if !embedded_chunks.is_empty() {
         fi = fi.with_embedded(embedded_chunks);

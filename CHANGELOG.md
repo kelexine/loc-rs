@@ -5,6 +5,14 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.15] - 2026-09-25
+
+### Added
+- Canonical full language names across all reports: breakdown table now reports "Language" (e.g. `Rust`, `C`, `C Header`, `C++`, `C++ Header`, `Device Tree`, `Python`, `Shell`, `Makefile`, etc.) instead of bare extensions.
+- Explicit language separation for source and header files (`.c` $\rightarrow$ `C`, `.h` $\rightarrow$ `C Header`; `.cpp`/`.cc` $\rightarrow$ `C++`, `.hpp` $\rightarrow$ `C++ Header`; `.dts` $\rightarrow$ `Device Tree`, `.dtsi` $\rightarrow$ `Device Tree Include`).
+- Clean `Unknown` category bundling: unidentifiable extensionless files and unrecognized extensions are cleanly categorized under `Unknown` instead of inflating the table with dozens of one-off rows.
+- Deep Linux kernel & systems file support: classification and comment parsing for Device Tree (`.dts`, `.dtsi`), kernel build scripts (`Makefile.*`, `Kbuild.*`, `Android.mk`), kernel configs (`.config`, `defconfig`, `*_defconfig`), Coccinelle (`.cocci`), Bison/Flex (`.y`, `.l`), Linker Scripts (`.lds`, `.ld`), Android Blueprint (`.bp`, `Android.bp`), AWK, Sed, ASN.1, Gettext PO, Graphviz DOT, TeX, and Mediatek DWS.
+
 ## [0.2.14] - 2026-09-25
 
 ### Added

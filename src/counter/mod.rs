@@ -219,7 +219,9 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
             breakdown.entry(container_ext).or_default().files += 1;
 
             for chunk in &fi.embedded {
-                let stats = breakdown.entry(chunk.extension.clone()).or_default();
+                let chunk_lang =
+                    crate::language::canonical_language_name(&chunk.extension).to_string();
+                let stats = breakdown.entry(chunk_lang).or_default();
                 stats.lines += chunk.lines;
                 stats.code += chunk.code;
                 stats.comment += chunk.comment;
@@ -522,16 +524,16 @@ fn main() {
         };
 
         let result = super::run_scan(&config).unwrap();
-        assert!(result.breakdown.contains_key("html"));
-        assert!(result.breakdown.contains_key("js"));
-        assert!(result.breakdown.contains_key("css"));
+        assert!(result.breakdown.contains_key("HTML"));
+        assert!(result.breakdown.contains_key("JavaScript"));
+        assert!(result.breakdown.contains_key("CSS"));
 
-        let js_stats = &result.breakdown["js"];
+        let js_stats = &result.breakdown["JavaScript"];
         assert_eq!(js_stats.code, 2);
         assert_eq!(js_stats.comment, 1);
         assert_eq!(js_stats.blank, 0);
 
-        let css_stats = &result.breakdown["css"];
+        let css_stats = &result.breakdown["CSS"];
         assert_eq!(css_stats.code, 1);
         assert_eq!(css_stats.comment, 1);
         assert_eq!(css_stats.blank, 0);
@@ -591,15 +593,15 @@ fn main() {
         };
 
         let result = super::run_scan(&config).unwrap();
-        assert!(result.breakdown.contains_key("ipynb"));
-        assert!(result.breakdown.contains_key("py"));
-        assert!(result.breakdown.contains_key("md"));
+        assert!(result.breakdown.contains_key("Jupyter"));
+        assert!(result.breakdown.contains_key("Python"));
+        assert!(result.breakdown.contains_key("Markdown"));
 
-        let py_stats = &result.breakdown["py"];
+        let py_stats = &result.breakdown["Python"];
         assert_eq!(py_stats.code, 2);
         assert_eq!(py_stats.comment, 1);
 
-        let md_stats = &result.breakdown["md"];
+        let md_stats = &result.breakdown["Markdown"];
         assert_eq!(md_stats.code, 2);
     }
 

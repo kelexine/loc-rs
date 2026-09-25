@@ -41,10 +41,10 @@ fn test_type_filter_rust_only() {
         "Markdown extension should be filtered out:\n{}",
         stdout
     );
-    // The "rs" extension row must appear in the detailed breakdown
+    // The "Rust" language row must appear in the detailed breakdown
     assert!(
-        stdout.contains("rs"),
-        "Rust extension should appear in breakdown:\n{}",
+        stdout.contains("Rust") || stdout.contains("rs"),
+        "Rust language should appear in breakdown:\n{}",
         stdout
     );
 }
@@ -59,7 +59,7 @@ fn test_detailed_breakdown_flag() {
     let out = run_loc(&[fixture.path().to_str().unwrap(), "-d"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
-        stdout.contains("Extension") || stdout.contains("rs"),
+        stdout.contains("Language") || stdout.contains("Rust") || stdout.contains("rs"),
         "Detailed breakdown missing in output:\n{}",
         stdout
     );
@@ -112,8 +112,14 @@ fn test_multilingual_summary() {
     ]);
     let out = run_loc(&[fixture.path().to_str().unwrap(), "-d"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("rs"), "Summary missing Rust");
-    assert!(stdout.contains("py"), "Summary missing Python");
+    assert!(
+        stdout.contains("Rust") || stdout.contains("rs"),
+        "Summary missing Rust"
+    );
+    assert!(
+        stdout.contains("Python") || stdout.contains("py"),
+        "Summary missing Python"
+    );
 }
 
 // ─── Agent / format mode tests ────────────────────────────────────────────────
@@ -166,7 +172,7 @@ fn test_format_agent_with_detailed_produces_breakdown_section() {
         stdout
     );
     assert!(
-        stdout.contains("extension\tfiles\t"),
+        stdout.contains("language\tfiles\t") || stdout.contains("extension\tfiles\t"),
         "Missing breakdown header:\n{}",
         stdout
     );
@@ -431,9 +437,9 @@ fn test_multiple_file_arguments() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid json output");
     assert_eq!(json["metadata"]["total_files"], 2);
-    assert!(json["breakdown"].get("rs").is_some());
-    assert!(json["breakdown"].get("py").is_some());
-    assert!(json["breakdown"].get("md").is_none());
+    assert!(json["breakdown"].get("Rust").is_some() || json["breakdown"].get("rs").is_some());
+    assert!(json["breakdown"].get("Python").is_some() || json["breakdown"].get("py").is_some());
+    assert!(json["breakdown"].get("Markdown").is_none() && json["breakdown"].get("md").is_none());
 }
 
 #[test]

@@ -7,28 +7,45 @@ use std::collections::HashMap;
 /// Static map from language name → list of file extensions (with leading dot).
 pub static LANGUAGE_MAP: Lazy<HashMap<&'static str, Vec<&'static str>>> = Lazy::new(|| {
     let mut m = HashMap::new();
-    m.insert("python", vec![".py", ".pyw", ".pyi"]);
+    m.insert("python", vec![".py", ".pyw", ".pyi", ".pyx", ".pxd"]);
     m.insert("javascript", vec![".js", ".mjs", ".cjs"]);
-    m.insert("typescript", vec![".ts", ".tsx", ".mts"]);
+    m.insert("typescript", vec![".ts", ".mts"]);
+    m.insert("tsx", vec![".tsx"]);
+    m.insert("jsx", vec![".jsx"]);
     m.insert("rust", vec![".rs"]);
     m.insert("go", vec![".go"]);
     m.insert("java", vec![".java"]);
     m.insert("kotlin", vec![".kt", ".kts"]);
     m.insert("swift", vec![".swift"]);
-    m.insert("c", vec![".c", ".h"]);
-    m.insert("cpp", vec![".cpp", ".cc", ".cxx", ".hpp", ".hxx", ".h++"]);
+    m.insert("c", vec![".c", ".c_shipped", ".i"]);
+    m.insert("c-header", vec![".h", ".h_shipped", ".inl"]);
+    m.insert("cpp", vec![".cpp", ".cc", ".cxx", ".c++"]);
+    m.insert(
+        "cpp-header",
+        vec![".hpp", ".hxx", ".h++", ".hh", ".tpp", ".ipp"],
+    );
+    m.insert("dts", vec![".dts", ".dtso"]);
+    m.insert("dtsi", vec![".dtsi"]);
     m.insert("csharp", vec![".cs"]);
     m.insert("ruby", vec![".rb", ".rake", ".gemspec"]);
     m.insert("php", vec![".php", ".php3", ".php4", ".php5", ".phtml"]);
     m.insert("html", vec![".html", ".htm"]);
-    m.insert("css", vec![".css", ".scss", ".sass", ".less"]);
-    m.insert("shell", vec![".sh", ".bash", ".zsh", ".fish"]);
+    m.insert("css", vec![".css"]);
+    m.insert("scss", vec![".scss"]);
+    m.insert("sass", vec![".sass"]);
+    m.insert("less", vec![".less"]);
+    m.insert(
+        "shell",
+        vec![
+            ".sh", ".bash", ".zsh", ".fish", ".ksh", ".csh", ".tcsh", ".dash",
+        ],
+    );
     m.insert("sql", vec![".sql"]);
     m.insert("markdown", vec![".md", ".markdown", ".mdx"]);
     m.insert("json", vec![".json", ".jsonl", ".json5"]);
     m.insert("yaml", vec![".yml", ".yaml"]);
     m.insert("xml", vec![".xml", ".xsl", ".xslt"]);
-    m.insert("jsx", vec![".jsx"]);
+    m.insert("svg", vec![".svg"]);
     m.insert("vue", vec![".vue"]);
     m.insert("svelte", vec![".svelte"]);
     m.insert("toml", vec![".toml"]);
@@ -39,8 +56,11 @@ pub static LANGUAGE_MAP: Lazy<HashMap<&'static str, Vec<&'static str>>> = Lazy::
     m.insert("zig", vec![".zig"]);
     m.insert("nim", vec![".nim", ".nims"]);
     m.insert("jupyter", vec![".ipynb"]);
-    m.insert("assembly", vec![".s", ".asm", ".S"]);
-    m.insert("perl", vec![".pl", ".pm", ".t"]);
+    m.insert(
+        "assembly",
+        vec![".s", ".asm", ".S", ".S_shipped", ".s_shipped"],
+    );
+    m.insert("perl", vec![".pl", ".pm", ".t", ".xs", ".PL"]);
     m.insert("ocaml", vec![".ml", ".mli"]);
     m.insert("erlang", vec![".erl", ".hrl"]);
     m.insert("dart", vec![".dart"]);
@@ -64,10 +84,26 @@ pub static LANGUAGE_MAP: Lazy<HashMap<&'static str, Vec<&'static str>>> = Lazy::
     m.insert("protobuf", vec![".proto"]);
     m.insert("graphql", vec![".graphql", ".gql"]);
     m.insert("cmake", vec![".cmake"]);
-    m.insert("makefile", vec![".mk"]);
+    m.insert("makefile", vec![".mk", ".mak", ".make"]);
     m.insert("meson", vec![".meson"]);
     m.insert("kconfig", vec![".kconfig"]);
     m.insert("dockerfile", vec![".dockerfile"]);
+    m.insert("coccinelle", vec![".cocci"]);
+    m.insert("bison", vec![".y", ".yacc", ".yy"]);
+    m.insert("flex", vec![".l", ".lex", ".ll"]);
+    m.insert("linker-script", vec![".lds", ".ld"]);
+    m.insert("android-blueprint", vec![".bp"]);
+    m.insert("config", vec![".conf", ".config", ".cfg", ".ini"]);
+    m.insert("restructuredtext", vec![".rst"]);
+    m.insert("awk", vec![".awk"]);
+    m.insert("sed", vec![".sed"]);
+    m.insert("asn1", vec![".asn1", ".asn"]);
+    m.insert("gettext", vec![".po", ".pot"]);
+    m.insert("graphviz", vec![".dot", ".gv"]);
+    m.insert("tex", vec![".tex", ".sty", ".cls"]);
+    m.insert("vim", vec![".vim"]);
+    m.insert("text", vec![".txt", ".text"]);
+    m.insert("dws", vec![".dws"]);
     m
 });
 
@@ -77,11 +113,18 @@ static ALIASES: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     m.insert("py", "python");
     m.insert("js", "javascript");
     m.insert("ts", "typescript");
-    m.insert("tsx", "typescript");
     m.insert("rs", "rust");
+    m.insert("c", "c");
+    m.insert("h", "c-header");
+    m.insert("header", "c-header");
     m.insert("c++", "cpp");
     m.insert("cxx", "cpp");
     m.insert("cc", "cpp");
+    m.insert("hpp", "cpp-header");
+    m.insert("hxx", "cpp-header");
+    m.insert("dts", "dts");
+    m.insert("dtsi", "dtsi");
+    m.insert("devicetree", "dts");
     m.insert("cs", "csharp");
     m.insert("rb", "ruby");
     m.insert("sh", "shell");
@@ -105,6 +148,12 @@ static ALIASES: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     m.insert("gql", "graphql");
     m.insert("make", "makefile");
     m.insert("docker", "dockerfile");
+    m.insert("rst", "restructuredtext");
+    m.insert("bp", "android-blueprint");
+    m.insert("conf", "config");
+    m.insert("cfg", "config");
+    m.insert("ini", "config");
+    m.insert("txt", "text");
     m
 });
 
@@ -315,25 +364,99 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
         supports_nesting: false,
     };
 
+    let rst_style = CommentSpec {
+        single: Some(".."),
+        multi: None,
+        supports_nesting: false,
+    };
+    let vim_style = CommentSpec {
+        single: Some("\""),
+        multi: None,
+        supports_nesting: false,
+    };
+    let lds_style = CommentSpec {
+        single: None,
+        multi: Some(("/*", "*/")),
+        supports_nesting: false,
+    };
+
     // Mapping
     let mappings = [
         (
             vec![
-                ".go", ".java", ".kt", ".kts", ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hxx",
-                ".h++", ".cs", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".php", ".scala",
-                ".sc", ".zig", ".dart", ".v", ".odin", ".cu", ".cuh", ".glsl", ".vert", ".frag",
-                ".geom", ".comp", ".hlsl", ".wgsl", ".proto",
+                ".go",
+                ".java",
+                ".kt",
+                ".kts",
+                ".c",
+                ".c_shipped",
+                ".i",
+                ".h",
+                ".h_shipped",
+                ".inl",
+                ".cpp",
+                ".cc",
+                ".cxx",
+                ".c++",
+                ".hpp",
+                ".hxx",
+                ".h++",
+                ".hh",
+                ".tpp",
+                ".ipp",
+                ".cs",
+                ".js",
+                ".mjs",
+                ".cjs",
+                ".ts",
+                ".tsx",
+                ".mts",
+                ".php",
+                ".scala",
+                ".sc",
+                ".zig",
+                ".dart",
+                ".v",
+                ".odin",
+                ".cu",
+                ".cuh",
+                ".glsl",
+                ".vert",
+                ".frag",
+                ".geom",
+                ".comp",
+                ".hlsl",
+                ".wgsl",
+                ".proto",
+                ".dts",
+                ".dtsi",
+                ".dtso",
+                ".S",
+                ".S_shipped",
+                ".s_shipped",
+                ".cocci",
+                ".y",
+                ".yacc",
+                ".yy",
+                ".l",
+                ".lex",
+                ".ll",
+                ".bp",
             ],
             c_style,
         ),
         (vec![".rs", ".swift"], c_style_nested),
-        (vec![".py", ".pyw", ".pyi"], py_style),
+        (vec![".py", ".pyw", ".pyi", ".pyx", ".pxd"], py_style),
         (
             vec![
                 ".sh",
                 ".bash",
                 ".zsh",
                 ".fish",
+                ".ksh",
+                ".csh",
+                ".tcsh",
+                ".dash",
                 ".rb",
                 ".rake",
                 ".gemspec",
@@ -350,34 +473,49 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
                 ".gql",
                 ".cmake",
                 ".mk",
+                ".mak",
+                ".make",
                 ".kconfig",
                 ".dockerfile",
                 ".meson",
+                ".conf",
+                ".config",
+                ".cfg",
+                ".ini",
+                ".awk",
+                ".sed",
+                ".po",
+                ".pot",
             ],
             bash_style,
         ),
         (
-            vec![".html", ".htm", ".xml", ".xsl", ".xslt", ".vue", ".svelte"],
+            vec![
+                ".html", ".htm", ".xml", ".xsl", ".xslt", ".svg", ".vue", ".svelte",
+            ],
             html_style,
         ),
         (vec![".css", ".scss", ".sass", ".less"], css_style),
-        (vec![".sql"], sql_style),
+        (vec![".sql", ".asn1", ".asn"], sql_style),
         (vec![".lua"], lua_style),
         (vec![".hs", ".lhs"], haskell_style),
         (vec![".rb"], ruby_style), // Overwrite for block comments
         (
-            vec![".s", ".asm", ".S", ".clj", ".cljs", ".cljc", ".edn"],
+            vec![".s", ".asm", ".clj", ".cljs", ".cljc", ".edn"],
             semicolon_style,
         ),
         (vec![".ml", ".mli"], ocaml_style),
-        (vec![".erl", ".hrl"], erlang_style),
+        (vec![".erl", ".hrl", ".tex", ".sty", ".cls"], erlang_style),
         (
             vec![".f", ".for", ".f90", ".f95", ".f03", ".f08"],
             fortran_style,
         ),
         (vec![".pas", ".pp", ".inc"], pascal_style),
         (vec![".jl"], julia_style),
-        (vec![".pl", ".pm", ".t"], perl_style),
+        (vec![".pl", ".pm", ".t", ".xs", ".PL"], perl_style),
+        (vec![".rst"], rst_style),
+        (vec![".vim"], vim_style),
+        (vec![".lds", ".ld"], lds_style),
     ];
 
     for (exts, spec) in mappings {
@@ -415,7 +553,14 @@ pub fn detect_known_filename(path: &std::path::Path) -> Option<KnownFileSpec> {
         supports_nesting: false,
     };
 
-    if name == "Makefile" || name == "makefile" || name == "GNUmakefile" || name == "Kbuild" {
+    if name == "Makefile"
+        || name == "makefile"
+        || name == "GNUmakefile"
+        || name == "Kbuild"
+        || name == "Android.mk"
+        || name.starts_with("Makefile.")
+        || name.starts_with("Kbuild.")
+    {
         return Some(KnownFileSpec {
             language: "Makefile",
             breakdown_key: "Makefile",
@@ -435,7 +580,11 @@ pub fn detect_known_filename(path: &std::path::Path) -> Option<KnownFileSpec> {
         });
     }
 
-    if name == "Kconfig" || name.starts_with("Kconfig.") {
+    if name == "Kconfig"
+        || name.starts_with("Kconfig.")
+        || name == "Config.in"
+        || name == "Config.src"
+    {
         return Some(KnownFileSpec {
             language: "Kconfig",
             breakdown_key: "Kconfig",
@@ -443,10 +592,30 @@ pub fn detect_known_filename(path: &std::path::Path) -> Option<KnownFileSpec> {
         });
     }
 
+    if name == ".config"
+        || name == "defconfig"
+        || name.ends_with("_defconfig")
+        || name.ends_with(".config")
+    {
+        return Some(KnownFileSpec {
+            language: "Config",
+            breakdown_key: "Config",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == "Android.bp" {
+        return Some(KnownFileSpec {
+            language: "Android Blueprint",
+            breakdown_key: "Android Blueprint",
+            comment_spec: c_comment,
+        });
+    }
+
     if name == "CMakeLists.txt" {
         return Some(KnownFileSpec {
             language: "CMake",
-            breakdown_key: "cmake",
+            breakdown_key: "CMake",
             comment_spec: bash_comment,
         });
     }
@@ -454,7 +623,7 @@ pub fn detect_known_filename(path: &std::path::Path) -> Option<KnownFileSpec> {
     if name == "meson.build" || name == "meson_options.txt" {
         return Some(KnownFileSpec {
             language: "Meson",
-            breakdown_key: "meson",
+            breakdown_key: "Meson",
             comment_spec: bash_comment,
         });
     }
@@ -470,7 +639,7 @@ pub fn detect_known_filename(path: &std::path::Path) -> Option<KnownFileSpec> {
     if name == "Rakefile" || name == "Gemfile" {
         return Some(KnownFileSpec {
             language: "Ruby",
-            breakdown_key: "rb",
+            breakdown_key: "Ruby",
             comment_spec: bash_comment,
         });
     }
@@ -486,7 +655,7 @@ pub fn detect_known_filename(path: &std::path::Path) -> Option<KnownFileSpec> {
     if name == "BUILD" || name == "BUILD.bazel" || name == "WORKSPACE" {
         return Some(KnownFileSpec {
             language: "Bazel",
-            breakdown_key: "bzl",
+            breakdown_key: "Bazel",
             comment_spec: bash_comment,
         });
     }
@@ -516,7 +685,7 @@ pub fn detect_shebang(first_line: &str) -> Option<KnownFileSpec> {
     if line.contains("python") {
         return Some(KnownFileSpec {
             language: "Python",
-            breakdown_key: "py",
+            breakdown_key: "Python",
             comment_spec: CommentSpec {
                 single: Some("#"),
                 multi: Some(("\"\"\"", "\"\"\"")),
@@ -535,7 +704,7 @@ pub fn detect_shebang(first_line: &str) -> Option<KnownFileSpec> {
     {
         return Some(KnownFileSpec {
             language: "Shell",
-            breakdown_key: "sh",
+            breakdown_key: "Shell",
             comment_spec: bash_comment,
         });
     }
@@ -543,7 +712,7 @@ pub fn detect_shebang(first_line: &str) -> Option<KnownFileSpec> {
     if line.contains("perl") {
         return Some(KnownFileSpec {
             language: "Perl",
-            breakdown_key: "pl",
+            breakdown_key: "Perl",
             comment_spec: bash_comment,
         });
     }
@@ -551,7 +720,7 @@ pub fn detect_shebang(first_line: &str) -> Option<KnownFileSpec> {
     if line.contains("ruby") {
         return Some(KnownFileSpec {
             language: "Ruby",
-            breakdown_key: "rb",
+            breakdown_key: "Ruby",
             comment_spec: bash_comment,
         });
     }
@@ -559,7 +728,7 @@ pub fn detect_shebang(first_line: &str) -> Option<KnownFileSpec> {
     if line.contains("node") || line.contains("bun") || line.contains("deno") {
         return Some(KnownFileSpec {
             language: "JavaScript",
-            breakdown_key: "js",
+            breakdown_key: "JavaScript",
             comment_spec: c_comment,
         });
     }
@@ -567,12 +736,212 @@ pub fn detect_shebang(first_line: &str) -> Option<KnownFileSpec> {
     if line.contains("php") {
         return Some(KnownFileSpec {
             language: "PHP",
-            breakdown_key: "php",
+            breakdown_key: "PHP",
             comment_spec: c_comment,
         });
     }
 
     None
+}
+
+/// Canonical language name for reporting and categorization.
+///
+/// Returns canonical display names such as "C", "C Header", "C++", "C++ Header",
+/// "Device Tree", "Rust", "Python", etc. Unrecognized or unidentifiable extensions
+/// resolve to `"Unknown"` rather than inflating breakdown metrics.
+pub fn canonical_language_name(input: &str) -> &'static str {
+    let lower = input.trim_start_matches('.').to_ascii_lowercase();
+    match lower.as_str() {
+        // C & C Header
+        "c" | "c_shipped" | "i" => "C",
+        "h" | "h_shipped" | "inl" => "C Header",
+
+        // C++ & C++ Header
+        "cpp" | "cc" | "cxx" | "c++" => "C++",
+        "hpp" | "hxx" | "h++" | "hh" | "tpp" | "ipp" => "C++ Header",
+
+        // Device Tree
+        "dts" | "dtso" => "Device Tree",
+        "dtsi" => "Device Tree Include",
+
+        // Assembly
+        "s" | "asm" | "s_shipped" | "assembly" => "Assembly",
+
+        // Rust
+        "rs" | "rust" => "Rust",
+
+        // Python
+        "py" | "pyw" | "pyi" | "pyx" | "pxd" | "python" => "Python",
+
+        // Shell
+        "sh" | "bash" | "zsh" | "fish" | "ksh" | "csh" | "tcsh" | "dash" | "shell" => "Shell",
+
+        // Makefiles and Build scripts
+        "makefile" | "mk" | "mak" | "make" | "kbuild" => "Makefile",
+        "kconfig" => "Kconfig",
+        "cmake" => "CMake",
+        "meson" => "Meson",
+        "dockerfile" | "docker" => "Dockerfile",
+        "bazel" | "bzl" => "Bazel",
+        "justfile" => "Justfile",
+        "jenkinsfile" => "Jenkinsfile",
+        "bp" | "android blueprint" => "Android Blueprint",
+
+        // Web & Frontend
+        "js" | "mjs" | "cjs" | "javascript" => "JavaScript",
+        "ts" | "mts" | "typescript" => "TypeScript",
+        "tsx" => "TSX",
+        "jsx" => "JSX",
+        "vue" => "Vue",
+        "svelte" => "Svelte",
+        "html" | "htm" => "HTML",
+        "css" => "CSS",
+        "scss" => "SCSS",
+        "sass" => "Sass",
+        "less" => "Less",
+
+        // Config & Data formats
+        "conf" | "config" | "cfg" | "ini" => "Config",
+        "json" | "jsonl" | "json5" => "JSON",
+        "yml" | "yaml" => "YAML",
+        "toml" => "TOML",
+        "xml" | "xsl" | "xslt" => "XML",
+        "svg" => "SVG",
+        "sql" => "SQL",
+        "proto" | "protobuf" => "Protobuf",
+        "graphql" | "gql" => "GraphQL",
+
+        // System & Kernel specific tools
+        "cocci" => "Coccinelle",
+        "y" | "yacc" | "yy" => "Bison",
+        "l" | "lex" | "ll" => "Flex",
+        "lds" | "ld" => "Linker Script",
+        "dws" => "Mediatek DWS",
+        "rst" => "reStructuredText",
+        "awk" => "AWK",
+        "sed" => "Sed",
+        "asn1" | "asn" => "ASN.1",
+        "po" | "pot" => "Gettext",
+        "dot" | "gv" => "Graphviz",
+        "tex" | "sty" | "cls" => "TeX",
+        "vim" => "Vim Script",
+        "txt" | "text" => "Plain Text",
+
+        // General purpose languages
+        "go" => "Go",
+        "java" => "Java",
+        "kt" | "kts" | "kotlin" => "Kotlin",
+        "swift" => "Swift",
+        "cs" | "csharp" => "C#",
+        "rb" | "rake" | "gemspec" | "ruby" => "Ruby",
+        "php" | "php3" | "php4" | "php5" | "phtml" => "PHP",
+        "pl" | "pm" | "perl" => "Perl",
+        "lua" => "Lua",
+        "zig" => "Zig",
+        "nim" | "nims" => "Nim",
+        "ocaml" | "ml" | "mli" => "OCaml",
+        "erlang" | "erl" | "hrl" => "Erlang",
+        "elixir" | "ex" | "exs" => "Elixir",
+        "scala" | "sc" => "Scala",
+        "haskell" | "hs" | "lhs" => "Haskell",
+        "clojure" | "clj" | "cljs" | "cljc" | "edn" => "Clojure",
+        "r" => "R",
+        "julia" | "jl" => "Julia",
+        "dart" => "Dart",
+        "fortran" | "for" | "f90" | "f95" | "f03" | "f08" => "Fortran",
+        "pascal" | "pp" | "pas" | "inc" => "Pascal",
+        "v" => "V",
+        "odin" => "Odin",
+        "cuda" | "cu" | "cuh" => "CUDA",
+        "glsl" | "vert" | "frag" | "geom" | "comp" | "hlsl" | "wgsl" => "GLSL",
+        "md" | "markdown" | "mdx" => "Markdown",
+        "ipynb" | "jupyter" => "Jupyter",
+
+        _ => match input {
+            "C" => "C",
+            "C Header" => "C Header",
+            "C++" => "C++",
+            "C++ Header" => "C++ Header",
+            "Device Tree" => "Device Tree",
+            "Device Tree Include" => "Device Tree Include",
+            "Assembly" => "Assembly",
+            "Rust" => "Rust",
+            "Python" => "Python",
+            "Shell" => "Shell",
+            "Makefile" => "Makefile",
+            "Kconfig" => "Kconfig",
+            "Config" => "Config",
+            "JavaScript" => "JavaScript",
+            "TypeScript" => "TypeScript",
+            "TSX" => "TSX",
+            "JSX" => "JSX",
+            "Vue" => "Vue",
+            "Svelte" => "Svelte",
+            "HTML" => "HTML",
+            "CSS" => "CSS",
+            "SCSS" => "SCSS",
+            "Sass" => "Sass",
+            "Less" => "Less",
+            "JSON" => "JSON",
+            "YAML" => "YAML",
+            "TOML" => "TOML",
+            "XML" => "XML",
+            "SVG" => "SVG",
+            "SQL" => "SQL",
+            "Protobuf" => "Protobuf",
+            "GraphQL" => "GraphQL",
+            "Coccinelle" => "Coccinelle",
+            "Bison" => "Bison",
+            "Flex" => "Flex",
+            "Linker Script" => "Linker Script",
+            "Android Blueprint" => "Android Blueprint",
+            "Mediatek DWS" => "Mediatek DWS",
+            "reStructuredText" => "reStructuredText",
+            "AWK" => "AWK",
+            "Sed" => "Sed",
+            "ASN.1" => "ASN.1",
+            "Gettext" => "Gettext",
+            "Graphviz" => "Graphviz",
+            "TeX" => "TeX",
+            "Vim Script" => "Vim Script",
+            "Plain Text" => "Plain Text",
+            "Go" => "Go",
+            "Java" => "Java",
+            "Kotlin" => "Kotlin",
+            "Swift" => "Swift",
+            "C#" => "C#",
+            "Ruby" => "Ruby",
+            "PHP" => "PHP",
+            "Perl" => "Perl",
+            "Lua" => "Lua",
+            "Zig" => "Zig",
+            "Nim" => "Nim",
+            "OCaml" => "OCaml",
+            "Erlang" => "Erlang",
+            "Elixir" => "Elixir",
+            "Scala" => "Scala",
+            "Haskell" => "Haskell",
+            "Clojure" => "Clojure",
+            "R" => "R",
+            "Julia" => "Julia",
+            "Dart" => "Dart",
+            "Fortran" => "Fortran",
+            "Pascal" => "Pascal",
+            "V" => "V",
+            "Odin" => "Odin",
+            "CUDA" => "CUDA",
+            "GLSL" => "GLSL",
+            "CMake" => "CMake",
+            "Meson" => "Meson",
+            "Dockerfile" => "Dockerfile",
+            "Bazel" => "Bazel",
+            "Justfile" => "Justfile",
+            "Jenkinsfile" => "Jenkinsfile",
+            "Markdown" => "Markdown",
+            "Jupyter" => "Jupyter",
+            _ => "Unknown",
+        },
+    }
 }
 
 /// Directories excluded by default in non-git mode.
@@ -631,7 +1000,7 @@ mod tests {
     fn test_resolve_extensions_aliases() {
         assert_eq!(
             resolve_extensions("py"),
-            [".py", ".pyw", ".pyi"]
+            [".py", ".pyw", ".pyi", ".pyx", ".pxd"]
                 .iter()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>()
@@ -657,7 +1026,7 @@ mod tests {
         assert_eq!(resolve_extensions("RUST"), vec![".rs".to_string()]);
         assert_eq!(
             resolve_extensions("Py"),
-            [".py", ".pyw", ".pyi"]
+            [".py", ".pyw", ".pyi", ".pyx", ".pxd"]
                 .iter()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>()
@@ -763,7 +1132,7 @@ mod tests {
 
         let cmake = detect_known_filename(Path::new("CMakeLists.txt")).unwrap();
         assert_eq!(cmake.language, "CMake");
-        assert_eq!(cmake.breakdown_key, "cmake");
+        assert_eq!(cmake.breakdown_key, "CMake");
 
         let jenkins = detect_known_filename(Path::new("Jenkinsfile")).unwrap();
         assert_eq!(jenkins.language, "Jenkinsfile");
@@ -776,24 +1145,24 @@ mod tests {
     fn test_detect_shebang() {
         let bash = detect_shebang("#!/usr/bin/env bash").unwrap();
         assert_eq!(bash.language, "Shell");
-        assert_eq!(bash.breakdown_key, "sh");
+        assert_eq!(bash.breakdown_key, "Shell");
         assert_eq!(bash.comment_spec.single, Some("#"));
 
         let sh = detect_shebang("#!/bin/sh").unwrap();
-        assert_eq!(sh.breakdown_key, "sh");
+        assert_eq!(sh.breakdown_key, "Shell");
 
         let python = detect_shebang("#!/usr/bin/env python3").unwrap();
         assert_eq!(python.language, "Python");
-        assert_eq!(python.breakdown_key, "py");
+        assert_eq!(python.breakdown_key, "Python");
         assert_eq!(python.comment_spec.single, Some("#"));
 
         let perl = detect_shebang("#!/usr/bin/perl").unwrap();
         assert_eq!(perl.language, "Perl");
-        assert_eq!(perl.breakdown_key, "pl");
+        assert_eq!(perl.breakdown_key, "Perl");
 
         let node = detect_shebang("#!/usr/bin/env node").unwrap();
         assert_eq!(node.language, "JavaScript");
-        assert_eq!(node.breakdown_key, "js");
+        assert_eq!(node.breakdown_key, "JavaScript");
 
         assert!(detect_shebang("echo 'not a shebang'").is_none());
         assert!(detect_shebang("# plain comment").is_none());
@@ -801,8 +1170,11 @@ mod tests {
 
     #[test]
     fn test_expanded_languages_and_aliases() {
-        assert_eq!(resolve_extensions("asm"), vec![".s", ".asm", ".S"]);
-        assert_eq!(resolve_extensions("make"), vec![".mk"]);
+        assert_eq!(
+            resolve_extensions("asm"),
+            vec![".s", ".asm", ".S", ".S_shipped", ".s_shipped"]
+        );
+        assert_eq!(resolve_extensions("make"), vec![".mk", ".mak", ".make"]);
         assert_eq!(
             resolve_extensions("f90"),
             vec![".f", ".for", ".f90", ".f95", ".f03", ".f08"]
@@ -817,5 +1189,21 @@ mod tests {
         assert!(COMMENT_REGISTRY.contains_key(".pas"));
         assert!(COMMENT_REGISTRY.contains_key(".dart"));
         assert!(COMMENT_REGISTRY.contains_key(".proto"));
+    }
+
+    #[test]
+    fn test_canonical_language_name() {
+        assert_eq!(canonical_language_name("c"), "C");
+        assert_eq!(canonical_language_name("h"), "C Header");
+        assert_eq!(canonical_language_name("cpp"), "C++");
+        assert_eq!(canonical_language_name("hpp"), "C++ Header");
+        assert_eq!(canonical_language_name("dts"), "Device Tree");
+        assert_eq!(canonical_language_name("dtsi"), "Device Tree Include");
+        assert_eq!(canonical_language_name("rs"), "Rust");
+        assert_eq!(canonical_language_name("py"), "Python");
+        assert_eq!(canonical_language_name("sh"), "Shell");
+        assert_eq!(canonical_language_name("Makefile"), "Makefile");
+        assert_eq!(canonical_language_name("unknown_ext_123"), "Unknown");
+        assert_eq!(canonical_language_name(""), "Unknown");
     }
 }

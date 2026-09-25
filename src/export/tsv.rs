@@ -114,13 +114,10 @@ pub fn write_breakdown_section<W: Write>(
     if include_functions {
         writeln!(
             w,
-            "extension\tfiles\tlines\tcode\tcomment\tblank\tfunctions\tpct_lines"
+            "language\tfiles\tlines\tcode\tcomment\tblank\tfunctions\tpct_lines"
         )?;
     } else {
-        writeln!(
-            w,
-            "extension\tfiles\tlines\tcode\tcomment\tblank\tpct_lines"
-        )?;
+        writeln!(w, "language\tfiles\tlines\tcode\tcomment\tblank\tpct_lines")?;
     }
 
     let total_lines = result.total_lines();
@@ -526,7 +523,7 @@ mod tests {
         let header = out.lines().nth(1).unwrap();
         assert_eq!(
             header,
-            "extension\tfiles\tlines\tcode\tcomment\tblank\tfunctions\tpct_lines"
+            "language\tfiles\tlines\tcode\tcomment\tblank\tfunctions\tpct_lines"
         );
         // rs row: files=2, lines=100, code=80, comment=10, blank=10, functions=5
         assert!(

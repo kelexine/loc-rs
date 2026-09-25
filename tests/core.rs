@@ -213,19 +213,19 @@ fn test_extensionless_shebang_script_classification_and_comments() {
 
     let breakdown = &parsed["breakdown"];
     assert!(
-        breakdown.get("sh").is_some(),
-        "bash shebang script must be classified under 'sh'"
+        breakdown.get("Shell").is_some(),
+        "bash shebang script must be classified under 'Shell'"
     );
     assert!(
-        breakdown.get("py").is_some(),
-        "python shebang script must be classified under 'py'"
+        breakdown.get("Python").is_some(),
+        "python shebang script must be classified under 'Python'"
     );
 
-    let sh_stats = &breakdown["sh"];
+    let sh_stats = &breakdown["Shell"];
     assert_eq!(sh_stats["comment"].as_u64().unwrap(), 2); // shebang + comment line
     assert_eq!(sh_stats["code"].as_u64().unwrap(), 1);
 
-    let py_stats = &breakdown["py"];
+    let py_stats = &breakdown["Python"];
     assert_eq!(py_stats["comment"].as_u64().unwrap(), 2);
     assert_eq!(py_stats["code"].as_u64().unwrap(), 1);
 }

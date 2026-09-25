@@ -420,10 +420,10 @@ fn display_breakdown(
     sorted.sort_by_key(|a| std::cmp::Reverse(a.1.lines));
 
     if has_functions {
-        let widths = [18, 8, 11, 10, 9, 10, 8];
+        let widths = [22, 7, 10, 10, 9, 10, 8];
         print_sep(&widths, "┌", "┬", "┐");
 
-        let h_ext = "Extension".bold().to_string();
+        let h_lang = "Language".bold().to_string();
         let h_files = "Files".bold().to_string();
         let h_code = "Code".bold().to_string();
         let h_comm = "Comments".bold().to_string();
@@ -432,9 +432,9 @@ fn display_breakdown(
         let h_share = "Share".bold().to_string();
 
         print_row(&[
-            (&h_ext, 18, false),
-            (&h_files, 8, true),
-            (&h_code, 11, true),
+            (&h_lang, 22, false),
+            (&h_files, 7, true),
+            (&h_code, 10, true),
             (&h_comm, 10, true),
             (&h_blank, 9, true),
             (&h_fns, 10, true),
@@ -454,13 +454,22 @@ fn display_breakdown(
             tot_fns += stats.functions;
 
             let ext_colored = match ext.as_str() {
-                "rs" => ext.green(),
-                "py" => ext.yellow(),
-                "js" | "ts" | "jsx" | "tsx" => ext.cyan(),
-                "go" => ext.blue(),
-                "c" | "cpp" | "h" | "hpp" => ext.red(),
-                "sh" | "bash" | "zsh" => ext.magenta(),
-                "Makefile" | "Kconfig" | "Dockerfile" => ext.yellow(),
+                "Rust" | "rs" => ext.green(),
+                "Python" | "py" => ext.yellow(),
+                "JavaScript" | "TypeScript" | "TSX" | "JSX" | "js" | "ts" | "jsx" | "tsx" => {
+                    ext.cyan()
+                }
+                "Go" | "go" => ext.blue(),
+                "C" | "C Header" | "C++" | "C++ Header" | "c" | "cpp" | "h" | "hpp" => ext.red(),
+                "Shell" | "sh" | "bash" | "zsh" => ext.magenta(),
+                "Makefile" | "Kconfig" | "Dockerfile" | "CMake" | "Meson" | "Bazel"
+                | "Justfile" | "Config" => ext.yellow(),
+                "Device Tree" | "Device Tree Include" => ext.blue().bold(),
+                "HTML" | "Vue" | "Svelte" | "CSS" | "SCSS" | "Sass" | "Less" => ext.blue(),
+                "Markdown" => ext.white().bold(),
+                "JSON" | "YAML" | "TOML" => ext.cyan(),
+                "Assembly" => ext.green().bold(),
+                "Unknown" => ext.dimmed(),
                 _ => ext.white(),
             };
             let code_s = fmt_num(stats.code).bold().to_string();
@@ -473,9 +482,9 @@ fn display_breakdown(
                 .to_string();
 
             print_row(&[
-                (&ext_colored.to_string(), 18, false),
-                (&files_s, 8, true),
-                (&code_s, 11, true),
+                (&ext_colored.to_string(), 22, false),
+                (&files_s, 7, true),
+                (&code_s, 10, true),
                 (&comm_s, 10, true),
                 (&blank_s, 9, true),
                 (&fns_s, 10, true),
@@ -493,9 +502,9 @@ fn display_breakdown(
         let t_share = "100.00%".bold().to_string();
 
         print_row(&[
-            (&t_label, 18, false),
-            (&t_files, 8, true),
-            (&t_code, 11, true),
+            (&t_label, 22, false),
+            (&t_files, 7, true),
+            (&t_code, 10, true),
             (&t_comm, 10, true),
             (&t_blank, 9, true),
             (&t_fns, 10, true),
@@ -503,10 +512,10 @@ fn display_breakdown(
         ]);
         print_sep(&widths, "└", "┴", "┘");
     } else {
-        let widths = [20, 9, 12, 10, 10, 8];
+        let widths = [24, 8, 12, 11, 11, 8];
         print_sep(&widths, "┌", "┬", "┐");
 
-        let h_ext = "Extension".bold().to_string();
+        let h_lang = "Language".bold().to_string();
         let h_files = "Files".bold().to_string();
         let h_code = "Code".bold().to_string();
         let h_comm = "Comments".bold().to_string();
@@ -514,11 +523,11 @@ fn display_breakdown(
         let h_share = "Share".bold().to_string();
 
         print_row(&[
-            (&h_ext, 20, false),
-            (&h_files, 9, true),
+            (&h_lang, 24, false),
+            (&h_files, 8, true),
             (&h_code, 12, true),
-            (&h_comm, 10, true),
-            (&h_blank, 10, true),
+            (&h_comm, 11, true),
+            (&h_blank, 11, true),
             (&h_share, 8, true),
         ]);
         print_sep(&widths, "├", "┼", "┤");
@@ -533,13 +542,22 @@ fn display_breakdown(
             tot_blank += stats.blank;
 
             let ext_colored = match ext.as_str() {
-                "rs" => ext.green(),
-                "py" => ext.yellow(),
-                "js" | "ts" | "jsx" | "tsx" => ext.cyan(),
-                "go" => ext.blue(),
-                "c" | "cpp" | "h" | "hpp" => ext.red(),
-                "sh" | "bash" | "zsh" => ext.magenta(),
-                "Makefile" | "Kconfig" | "Dockerfile" => ext.yellow(),
+                "Rust" | "rs" => ext.green(),
+                "Python" | "py" => ext.yellow(),
+                "JavaScript" | "TypeScript" | "TSX" | "JSX" | "js" | "ts" | "jsx" | "tsx" => {
+                    ext.cyan()
+                }
+                "Go" | "go" => ext.blue(),
+                "C" | "C Header" | "C++" | "C++ Header" | "c" | "cpp" | "h" | "hpp" => ext.red(),
+                "Shell" | "sh" | "bash" | "zsh" => ext.magenta(),
+                "Makefile" | "Kconfig" | "Dockerfile" | "CMake" | "Meson" | "Bazel"
+                | "Justfile" | "Config" => ext.yellow(),
+                "Device Tree" | "Device Tree Include" => ext.blue().bold(),
+                "HTML" | "Vue" | "Svelte" | "CSS" | "SCSS" | "Sass" | "Less" => ext.blue(),
+                "Markdown" => ext.white().bold(),
+                "JSON" | "YAML" | "TOML" => ext.cyan(),
+                "Assembly" => ext.green().bold(),
+                "Unknown" => ext.dimmed(),
                 _ => ext.white(),
             };
             let code_s = fmt_num(stats.code).bold().to_string();
@@ -551,11 +569,11 @@ fn display_breakdown(
                 .to_string();
 
             print_row(&[
-                (&ext_colored.to_string(), 20, false),
-                (&files_s, 9, true),
+                (&ext_colored.to_string(), 24, false),
+                (&files_s, 8, true),
                 (&code_s, 12, true),
-                (&comm_s, 10, true),
-                (&blank_s, 10, true),
+                (&comm_s, 11, true),
+                (&blank_s, 11, true),
                 (&share_s, 8, true),
             ]);
         }
@@ -569,11 +587,11 @@ fn display_breakdown(
         let t_share = "100.00%".bold().to_string();
 
         print_row(&[
-            (&t_label, 20, false),
-            (&t_files, 9, true),
+            (&t_label, 24, false),
+            (&t_files, 8, true),
             (&t_code, 12, true),
-            (&t_comm, 10, true),
-            (&t_blank, 10, true),
+            (&t_comm, 11, true),
+            (&t_blank, 11, true),
             (&t_share, 8, true),
         ]);
         print_sep(&widths, "└", "┴", "┘");

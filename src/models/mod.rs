@@ -156,9 +156,9 @@ impl FileInfo {
         if let Some(ref lang) = self.language {
             lang.as_str()
         } else if self.extension().is_empty() {
-            "(no ext)"
+            "Unknown"
         } else {
-            self.extension()
+            crate::language::canonical_language_name(self.extension())
         }
     }
 }
