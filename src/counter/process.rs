@@ -8,7 +8,6 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 
 use super::ScanConfig;
-use super::discovery::get_fs_last_modified;
 use super::embedded::{
     is_html_or_template, is_jupyter_notebook, parse_html_embedded, parse_jupyter_notebook,
 };
@@ -26,21 +25,11 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
 
     // ── Lockfile fast-path ────────────────────────────────────────────────────
     // Recognised lockfiles are shown in the tree but never line-counted.
-    // We resolve last-modified when --git-dates is active, then return without
-    // reading any file content. This also bypasses the extension filter so
-    // that lockfiles always show up in the tree even when -t is specified.
+    // This also bypasses the extension filter so that lockfiles always show up
+    // in the tree even when -t is specified.
     if crate::language::is_lockfile(path) {
-        let last_modified = if config.use_git_dates {
-            if let Some(ref cache) = config.git_dates_cache {
-                cache.get(path).copied()
-            } else {
-                get_fs_last_modified(path)
-            }
-        } else {
-            None
-        };
         return Ok(Some(
-            FileInfo::new(path.to_path_buf(), 0, 0, 0, 0, false, last_modified).mark_as_lockfile(),
+            FileInfo::new(path.to_path_buf(), 0, 0, 0, 0, false, None).mark_as_lockfile(),
         ));
     }
 
@@ -182,16 +171,7 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
         None => (0, 0, 0, 0),
     };
 
-    // Only populate last_modified when --git-dates is active.
-    let last_modified: Option<DateTime<Utc>> = if config.use_git_dates {
-        if let Some(ref cache) = config.git_dates_cache {
-            cache.get(path).copied()
-        } else {
-            get_fs_last_modified(path)
-        }
-    } else {
-        None
-    };
+    let last_modified: Option<DateTime<Utc>> = None;
 
     let mut fi = FileInfo::new(
         path.to_path_buf(),

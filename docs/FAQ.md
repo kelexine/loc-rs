@@ -31,9 +31,9 @@ dist
 generated
 ```
 
-## Why is `--git-dates` slower?
+## What happened to `--git-dates`?
 
-It traverses commit history via `git2` revwalk for file timestamps. Omit `--git-dates` when speed matters.
+`--git-dates` has been deprecated and disabled. Traversing commit history via `git2` revwalk caused extreme latency and hangs on repositories with large histories (such as Linux kernel or monorepos). `loc-rs` now operates as a pure Rust binary with zero C library dependencies.
 
 ## How does `loc-rs` handle multi-language files like HTML and Jupyter notebooks?
 

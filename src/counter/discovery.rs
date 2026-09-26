@@ -2,9 +2,7 @@
 // counter/discovery.rs — Filesystem traversal and manual file discovery
 
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
 
-use chrono::{DateTime, TimeZone, Utc};
 use walkdir::WalkDir;
 
 use crate::language::EXCLUDED_DIRS;
@@ -53,12 +51,4 @@ pub fn get_manual_files(dir: &Path, locignore: &LocIgnore, include_hidden: bool)
         .filter(|e| !locignore.is_excluded(e.path()))
         .map(|e| e.path().to_path_buf())
         .collect()
-}
-
-pub fn get_fs_last_modified(path: &Path) -> Option<DateTime<Utc>> {
-    path.metadata()
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .and_then(|d| Utc.timestamp_opt(d.as_secs() as i64, 0).single())
 }

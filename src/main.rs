@@ -60,6 +60,13 @@ fn main() {
         }
     };
 
+    if args.git_dates && mode != OutputMode::Json {
+        eprintln!(
+            "{} --git-dates is deprecated and disabled; git history traversal has been removed",
+            "[WARNING]".yellow().bold()
+        );
+    }
+
     // ── Dispatch by mode ──────────────────────────────────────────────────────
     match mode {
         // ── JSON (legacy --json or --format json) ─────────────────────────────
@@ -71,6 +78,13 @@ fn main() {
                 warnings.push(
                     "--func-analysis is not supported with JSON output; \
                      use -f to embed function data in the JSON"
+                        .to_string(),
+                );
+            }
+
+            if args.git_dates {
+                warnings.push(
+                    "--git-dates is deprecated and disabled; git history traversal has been removed"
                         .to_string(),
                 );
             }

@@ -24,7 +24,7 @@ This document explains how `loc-rs` is organized and how data flows through the 
   - `counter/lines.rs`: Byte and string line analysis, stateful quote tracking, string comment masking, nested block comment tracking.
   - `counter/embedded.rs`: HTML `<script>`/`<style>` extraction and Jupyter notebook (`.ipynb`) cell JSON extraction.
   - `counter/discovery.rs`: Filesystem directory walking with ignore rules.
-  - `counter/git.rs`: Git2 index enumeration, worktree status, commit history revwalk.
+  - `counter/git.rs`: Fast-path git worktree detection (parent-walk checking for .git).
 - `src/agent/mod.rs`
   - Environment-based auto-detection of AI coding agents (Claude Code, Gemini CLI, etc.).
   - Orchestration of token-efficient "Agent Mode" (TSV) output.
@@ -39,9 +39,8 @@ This document explains how `loc-rs` is organized and how data flows through the 
 
 ## Discovery Strategy
 
-- In git repos (default): uses native `git2` integration (`git2::Repository` index and statuses) to align with tracked and unignored files without shelling out to git.
-- Outside git: uses recursive filesystem walk with exclusion sets.
-- `.locignore` allows project-specific ignores.
+- Filesystem discovery: uses high-performance `WalkDir` coupled with precompiled `LocIgnore` rules (`.gitignore` + `.locignore` cascading precedence). Pure Rust with zero libgit2 dependency.
+- `.locignore` allows project-specific ignores with priority over `.gitignore`.
 - Hidden files are skipped by default unless `--include-hidden` is used.
 - **Lockfile Fast-Path:** Known lockfiles are identified by name before their contents are read, bypassing disk I/O and explicitly excluding them from line metrics while preserving them for directory tree rendering.
 

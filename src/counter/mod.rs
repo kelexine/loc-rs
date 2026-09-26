@@ -7,12 +7,10 @@ pub mod git;
 pub mod lines;
 pub mod process;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use rayon::prelude::*;
 
 use crate::cli::Args;
@@ -20,13 +18,9 @@ use crate::locignore::LocIgnore;
 use crate::models::{Breakdown, FileInfo, ScanResult};
 
 use self::discovery::get_manual_files;
-use self::git::{check_git_repo, get_all_git_dates};
 use self::process::process_file;
 
 /// Configuration for a scan run.
-///
-/// `git_dates_cache` is wrapped in `Arc` so that `clone()` is O(1) regardless
-/// of how many files are tracked — the heavy HashMap is shared, not copied.
 #[derive(Clone)]
 pub struct ScanConfig {
     /// Canonicalized base directory for relative path display and git repo checks.
@@ -37,21 +31,15 @@ pub struct ScanConfig {
     pub allowed_extensions: Option<HashSet<String>>,
     /// Optional line threshold for "large file" warnings.
     pub warn_size: Option<usize>,
-    /// Whether git commit dates should be resolved for each file.
-    pub use_git_dates: bool,
     /// Whether parallel file processing is enabled.
     pub parallel: bool,
     /// Whether function extraction is enabled.
     pub extract_functions: bool,
-    /// Whether the target directory is inside a git work tree.
-    pub is_git_repo: bool,
     /// Compiled `.locignore` ruleset — glob-capable, per-directory, with negation.
     /// Takes precedence over `.gitignore` rules.
     pub locignore: LocIgnore,
     /// Whether hidden files/directories should be included.
     pub include_hidden: bool,
-    /// Optional precomputed git date map for fast file timestamp lookups.
-    pub git_dates_cache: Option<Arc<HashMap<PathBuf, DateTime<Utc>>>>,
 }
 
 impl ScanConfig {
@@ -80,7 +68,6 @@ impl ScanConfig {
             })
         };
 
-        let is_git_repo = check_git_repo(&target_dir);
         let global_config = crate::config::GlobalConfig::load();
 
         // Build allowed extension set from language filter flags
@@ -118,13 +105,10 @@ impl ScanConfig {
             target_paths,
             allowed_extensions,
             warn_size,
-            use_git_dates: args.git_dates,
             parallel: !args.no_parallel,
             extract_functions,
-            is_git_repo,
             locignore,
             include_hidden: args.include_hidden,
-            git_dates_cache: None,
         })
     }
 }
@@ -155,21 +139,10 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
         }
     }
 
-    // Populate git dates cache *before* cloning config into runner_config.
-    let git_dates_cache: Option<Arc<HashMap<PathBuf, DateTime<Utc>>>> =
-        if config.use_git_dates && config.is_git_repo {
-            Some(Arc::new(get_all_git_dates(&config.target_dir)))
-        } else {
-            None
-        };
-
-    let mut runner_config = config.clone();
-    runner_config.git_dates_cache = git_dates_cache;
-
-    let mut file_infos: Vec<FileInfo> = if runner_config.parallel && files.len() > 50 {
+    let mut file_infos: Vec<FileInfo> = if config.parallel && files.len() > 50 {
         files
             .par_iter()
-            .filter_map(|path| match process_file(path, &runner_config) {
+            .filter_map(|path| match process_file(path, config) {
                 Ok(opt) => opt,
                 Err(e) => {
                     eprintln!("[WARN] Skipped {}: {}", path.display(), e);
@@ -180,7 +153,7 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
     } else {
         files
             .iter()
-            .filter_map(|path| match process_file(path, &runner_config) {
+            .filter_map(|path| match process_file(path, config) {
                 Ok(opt) => opt,
                 Err(e) => {
                     eprintln!("[WARN] Skipped {}: {}", path.display(), e);
@@ -234,7 +207,7 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
 #[cfg(test)]
 mod tests {
     use super::discovery::get_manual_files;
-    use super::git::{check_git_repo, get_all_git_dates, get_git_files};
+    use super::git::check_git_repo;
     use super::lines::analyze_file;
     use super::process::is_binary_file;
     use std::collections::HashSet;
@@ -418,62 +391,30 @@ fn main() {
         assert_eq!(code, 3);
     }
 
-    // ── Git integration (git2) ───────────────────────────────────────────────
+    // ── Git integration ──────────────────────────────────────────────────────
 
     #[test]
-    fn test_git2_check_repo_and_discovery() {
+    fn test_check_git_repo() {
         let dir = tempdir().unwrap();
         let path = dir.path();
 
         // Not a repo initially
         assert!(!check_git_repo(path));
 
-        // Init repo with git2
-        let repo = git2::Repository::init(path).unwrap();
+        // Create .git directory
+        let git_dir = path.join(".git");
+        fs::create_dir(&git_dir).unwrap();
         assert!(check_git_repo(path));
 
-        // Create tracked file, untracked file, and ignored file
-        let tracked_file = path.join("tracked.rs");
-        fs::write(&tracked_file, "fn main() {}\n").unwrap();
+        // Subdirectories should also detect the parent git repo
+        let subdir = path.join("src").join("nested");
+        fs::create_dir_all(&subdir).unwrap();
+        assert!(check_git_repo(&subdir));
 
-        let untracked_file = path.join("untracked.rs");
-        fs::write(&untracked_file, "fn untracked() {}\n").unwrap();
-
-        let gitignore = path.join(".gitignore");
-        fs::write(&gitignore, "ignored.rs\n").unwrap();
-
-        let ignored_file = path.join("ignored.rs");
-        fs::write(&ignored_file, "fn ignored() {}\n").unwrap();
-
-        // Stage and commit tracked.rs
-        let mut index = repo.index().unwrap();
-        index.add_path(Path::new("tracked.rs")).unwrap();
-        index.write().unwrap();
-
-        let tree_id = index.write_tree().unwrap();
-        let tree = repo.find_tree(tree_id).unwrap();
-        let sig = git2::Signature::now("Test", "test@example.com").unwrap();
-        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
-            .unwrap();
-
-        // 1. Without negation: tracked and untracked found; ignored excluded
-        let locignore_none = crate::locignore::LocIgnore::build(path);
-        let files = get_git_files(path, &locignore_none);
-        assert!(files.contains(&tracked_file));
-        assert!(files.contains(&untracked_file));
-        assert!(!files.contains(&ignored_file));
-
-        // 2. With negation in .locignore (!ignored.rs), ignored file is re-included
-        fs::write(path.join(".locignore"), "!ignored.rs\n").unwrap();
-        let locignore_neg = crate::locignore::LocIgnore::build(path);
-        let files_neg = get_git_files(path, &locignore_neg);
-        assert!(files_neg.contains(&tracked_file));
-        assert!(files_neg.contains(&untracked_file));
-        assert!(files_neg.contains(&ignored_file));
-
-        // 3. Git commit dates lookup
-        let dates = get_all_git_dates(path);
-        assert!(dates.contains_key(&tracked_file));
+        // Files within the repo should detect the git repo
+        let file = subdir.join("main.rs");
+        fs::write(&file, "fn main() {}\n").unwrap();
+        assert!(check_git_repo(&file));
     }
 
     // ── Embedded Languages & Jupyter Notebooks ────────────────────────────────
@@ -509,13 +450,10 @@ fn main() {
             target_paths: Vec::new(),
             allowed_extensions: None,
             warn_size: None,
-            use_git_dates: false,
             parallel: false,
             extract_functions: false,
-            is_git_repo: false,
             locignore: crate::locignore::LocIgnore::build(dir.path()),
             include_hidden: false,
-            git_dates_cache: None,
         };
 
         let result = super::run_scan(&config).unwrap();
@@ -578,13 +516,10 @@ fn main() {
             target_paths: Vec::new(),
             allowed_extensions: None,
             warn_size: None,
-            use_git_dates: false,
             parallel: false,
             extract_functions: false,
-            is_git_repo: false,
             locignore: crate::locignore::LocIgnore::build(dir.path()),
             include_hidden: false,
-            git_dates_cache: None,
         };
 
         let result = super::run_scan(&config).unwrap();
@@ -613,13 +548,10 @@ fn main() {
             target_paths: Vec::new(),
             allowed_extensions: None,
             warn_size: None,
-            use_git_dates: false,
             parallel: false,
             extract_functions: false,
-            is_git_repo: false,
             locignore: crate::locignore::LocIgnore::build(dir.path()),
             include_hidden: false,
-            git_dates_cache: None,
         };
 
         // 1. UTF-8 with BOM

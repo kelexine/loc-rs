@@ -48,7 +48,6 @@ EXAMPLES:
   loc -e stats.csv -f          Export CSV with function data
   loc -e report.html           Export interactive HTML dashboard
   loc --warn-size 500          Warn about files > 500 lines
-  loc --git-dates              Use git log for last-modified dates
   loc --tree                   Show directory tree (flat TSV in agent mode)
   loc --format agent           Force machine-readable TSV output
   loc --format agent -d -f     Full TSV output with breakdown + functions
@@ -115,8 +114,8 @@ pub struct Args {
     #[arg(long = "warn-size", value_name = "LINES")]
     pub warn_size: Option<usize>,
 
-    /// Use `git log` for last-modified dates (more accurate, slightly slower)
-    #[arg(long = "git-dates")]
+    /// [DEPRECATED] Previously used for git history last-modified dates; disabled to prevent history traversal hangs.
+    #[arg(long = "git-dates", hide = true)]
     pub git_dates: bool,
 
     /// Disable parallel file processing

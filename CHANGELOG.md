@@ -5,6 +5,15 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.21] - 2026-09-26
+
+### Removed
+- Deprecated and disabled `--git-dates`: eliminated git history `revwalk` traversal and tree diffing that caused severe hangs and unbounded latency on repositories with deep commit histories (e.g. Linux kernel, Android monorepos).
+- Completely removed `git2` / `libgit2` dependency: `loc-rs` is now a 100% pure Rust crate with zero C library dependencies, yielding faster compilation times, smaller binary footprint, and no external C bindings.
+
+### Changed
+- CLI `--git-dates` flag is now hidden and emits a clean deprecation warning if supplied.
+
 ## [0.2.20] - 2026-09-26
 
 ### Performance
