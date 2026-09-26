@@ -34,7 +34,7 @@ pub enum OutputFormat {
     bin_name = "loc",
     version = env!("CARGO_PKG_VERSION"),
     author = "kelexine <https://github.com/kelexine>",
-    about = "loc-rs: Advanced LOC counter — functions, git dates, parallel scan, multi-format output",
+    about = "loc-rs: Advanced LOC counter — functions, complexity, parallel scan, multi-format output",
     after_help = "\
 EXAMPLES:
   loc                          Count LOC in current directory
