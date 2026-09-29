@@ -1,25 +1,26 @@
-# loc - Advanced Lines of Code Counter
+# loc-rs - Advanced Lines of Code Counter
 
-> A fast, feature-rich LOC tool written in Rust.  
+> A fast, feature-rich Line-Of-Code (LOC) tool written in Rust.  
 > **Author:** [kelexine](https://github.com/kelexine)
 
+> DISCLAIMER
+> This tool is no where affliated with `loc` by [cgag](https://github.com/cgag/loc)
 ---
 
 ## Features
 
-- **Fast project scanning**: Counts text files across a target directory with optional Rayon-powered parallel processing.
+- **Fast project scanning**: Counts text files across a target directory with Rayon-powered parallel processing.
 - **Code/comment/blank split**: Classifies source lines using language-aware single-line, block-comment, and stateful string masking rules.
 - **Nested comment support**: Handles nested block comments (e.g. `/* /* nested */ */` in Rust and Swift, `{- {- ... -} -}` in Haskell).
 - **Embedded-language analysis**: Accurately extracts and credits embedded code blocks inside HTML, Vue, and Svelte templates (`<script>` to JS/TS, `<style>` to CSS/SCSS).
 - **Jupyter Notebook (`.ipynb`) support**: Deserializes notebook JSON, identifies the active kernel language, and parses code and markdown cells into respective language statistics.
 - **Tree view**: Renders a recursive project tree when `--tree` is enabled, with optional binary-file display.
-- **Function extraction**: Uses Tree-sitter-backed extractors for Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#/Scala, PHP, Swift, and Ruby.
+- **Function extraction and Analysis**: Uses Tree-sitter-backed extractors for Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#/Scala, PHP, Swift, and Ruby.
 - **Complexity analysis**: Reports function length and a branch-count cyclomatic complexity estimate.
-- **Git-aware discovery**: Uses native `git2` in repositories and can attach last-modified dates via revwalk commit history.
-- **Agent mode auto-detection**: Switches to token-efficient TSV output when run inside AI coding agents (Claude Code, Gemini CLI, etc.).
+- **Agent detection**: Switches to token-efficient TSV output when run inside AI coding agents (Claude Code, Codex, Antigravity, Gemini CLI, etc.).
 - **Lockfile awareness**: Automatically detects dependency lockfiles (Cargo.lock, package-lock.json, etc.), excluding them from line metrics to prevent skewed stats.
 - **Machine-readable outputs**: Supports direct-to-stdout JSON (`--json`), TSV (`--format agent`), and pipe-friendly raw path lists (`-q`).
-- **Multi-format export**: Writes JSON, JSONL, CSV, TSV, and HTML reports.
+- **Multi-format export**: Writes JSON, JSONL, CSV, TSV, and HTML reports to disk.
 - **Global configuration**: Reads defaults from `~/.config/loc-rs/config.toml` through the platform config directory.
 - **Size warnings**: Flags files above a configured line threshold.
 - **Resilient text loading**: Single-pass byte loading with BOM detection and lossy UTF-8 fallback (`String::from_utf8_lossy`) for files with legacy encodings (Latin-1/ISO-8859).
@@ -46,7 +47,7 @@ cargo build --release
 cargo install --path .
 ```
 
-The release binary is built at `./target/release/loc`.
+The release binary is built at `./target/release/loc` or simply `loc` after installation.
 
 ---
 
@@ -113,7 +114,6 @@ loc [OPTIONS] [PATHS]...
 | Show function complexity analysis | `loc --func-analysis` |
 | Scan only selected languages | `loc -t rust python typescript` |
 | Warn for files above 500 lines | `loc --warn-size 500` |
-| Use Git commit dates | `loc --git-dates` |
 | Include hidden files and directories | `loc --include-hidden` |
 | Disable parallel processing | `loc --no-parallel` |
 
@@ -125,22 +125,6 @@ loc -e results.jsonl
 loc -e stats.csv -f
 loc -e report.html -f
 ```
-
-### All Flags
-
-| Flag | Short | Description |
-|---|---|---|
-| `--detailed` | `-d` | Per-extension breakdown (Code, Comment, Blank) |
-| `--tree` | | Show recursive directory tree (hidden by default) |
-| `--binary` | `-b` | Show binary files in tree |
-| `--functions` | `-f` | Extract functions, methods, classes |
-| `--func-analysis` | | Full analysis report (auto-enables `-f`) |
-| `--type LANG...` | `-t` | Filter by language(s) |
-| `--export FILE` | `-e` | Export results to `.json`, `.jsonl`, `.csv`, or `.html` |
-| `--warn-size N` | | Warn for files exceeding N lines |
-| `--git-dates` | | Use `git log` for last-modified dates |
-| `--include-hidden` | `-H` | Include hidden files and directories |
-| `--no-parallel` | | Disable Rayon parallelism |
 
 ---
 
@@ -161,28 +145,6 @@ always_extract_functions = true
 snapshots
 *.min.js
 ```
-
----
-
-## GitHub Action Integration
-
-The repository includes a comprehensive composite GitHub Action for CI line-count and complexity checks. The action features sub-second installs via pre-built binaries, GitHub Step Summary integration, and automated artifact uploads.
-
-```yaml
-steps:
-  - uses: actions/checkout@v4
-  - uses: kelexine/loc-rs/.github/actions/loc-rs@main
-    with:
-      target_dir: .
-      warn_size: 500
-      functions: true
-      fail_on_warn: true     # Fails the build if any files exceed warn_size
-      export_html: true      # Automatically uploads HTML report to artifacts
-      export_json: true      # Automatically uploads JSON report to artifacts
-      version: latest        # Uses pre-built binaries for instant execution
-```
-
-Use static workflow values for `target_dir`, `warn_size`, and `args`; do not pass untrusted pull request, issue, or comment text into shell-backed action inputs.
 
 ---
 
@@ -303,19 +265,6 @@ Function extraction is available when `-f` or `--func-analysis` is enabled. The 
 
 ---
 
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| `Functions: 0` in summary | Function extraction not enabled | Run with `-f` or `--func-analysis` |
-| Unknown language warning (for example `dart`) | Language not in resolver map | Use a supported language or direct extension via `-t .ext` |
-| Non-UTF-8 or UTF-16/32 encoding | File is encoded in UTF-16, UTF-32, or legacy 8-bit text | Native decoders automatically handle UTF-16/32 and BOMs; non-UTF-8 uses lossy fallback |
-| Missing untracked files in output | Running inside a git repo with default git-based discovery | Check `.gitignore`, or run with `--include-hidden` / adjust ignore rules |
-| `--git-dates` appears slow | Traverses git commit history via git2 revwalk | Omit `--git-dates` for faster scans |
-| HTML report not opening as expected | Output path/extension mismatch | Export with `.html` or `.htm` extension |
-
----
-
 ## License
 
-MIT © [kelexine](https://github.com/kelexine)
+[MIT](LICENSE) © [kelexine](https://github.com/kelexine)

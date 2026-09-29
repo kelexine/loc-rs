@@ -39,7 +39,7 @@ This document explains how `loc-rs` is organized and how data flows through the 
 
 ## Discovery Strategy
 
-- Filesystem discovery: uses high-performance `WalkDir` coupled with precompiled `LocIgnore` rules (`.gitignore` + `.locignore` cascading precedence). Pure Rust with zero libgit2 dependency.
+- Filesystem discovery: uses high-performance `WalkDir` coupled with precompiled `LocIgnore` rules (`.gitignore` + `.locignore` cascading precedence).
 - `.locignore` allows project-specific ignores with priority over `.gitignore`.
 - Hidden files are skipped by default unless `--include-hidden` is used.
 - **Lockfile Fast-Path:** Known lockfiles are identified by name before their contents are read, bypassing disk I/O and explicitly excluding them from line metrics while preserving them for directory tree rendering.

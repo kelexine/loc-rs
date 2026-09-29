@@ -16,13 +16,13 @@ loc --func-analysis
 
 ## Why do I see unknown language warnings?
 
-The language name is not mapped in resolver aliases. Use a supported language or a direct extension:
+The language name is not mapped in resolver aliases. Language might not be supported yet, use a supported language or a direct extension:
 
 ```bash
 loc -t .rs .py
 ```
 
-## How do I ignore project-specific paths?
+## How do I ignore project-specific paths without messing with .gitignore rules?
 
 Create `.locignore` in project root:
 
@@ -33,7 +33,7 @@ generated
 
 ## What happened to `--git-dates`?
 
-`--git-dates` has been deprecated and disabled. Traversing commit history via `git2` revwalk caused extreme latency and hangs on repositories with large histories (such as Linux kernel or monorepos). `loc-rs` now operates as a pure Rust binary with zero C library dependencies.
+`--git-dates` has been deprecated and disabled. Traversing commit history via `git2` revwalk caused extreme latency and hangs on repositories with large histories (such as Linux kernel or large monorepos). `loc-rs` now operates as a pure Rust binary.
 
 ## How does `loc-rs` handle multi-language files like HTML and Jupyter notebooks?
 
@@ -46,7 +46,7 @@ Binary files are detected and excluded from line metrics. They can be shown in t
 
 ## Why are my lockfiles showing 0 lines?
 
-`loc-rs` automatically detects over 30 common dependency lockfiles (like `Cargo.lock`, `package-lock.json`, `go.sum`). These files are tagged as `[lockfile]` in the tree view but are explicitly excluded from all line-count statistics to prevent them from skewing your codebase metrics.
+`loc-rs` automatically detects over 30 common dependency lockfiles (like `Cargo.lock`, `package-lock.json`, `go.sum`). These files are tagged as `[lockfile]` in the tree view but are explicitly excluded from all line-count statistics to prevent them from skewing codebase metrics.
 
 ## Which formats can I export?
 
