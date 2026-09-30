@@ -37,8 +37,8 @@ use std::path::Path;
 /// ...
 ///
 /// # FILES
-/// path\tlines\tcode\tcomment\tblank\textension\tis_binary\tis_lockfile\tfunctions\tclasses\tavg_fn_length\tlast_modified
-/// src/main.rs\t97\t80\t5\t12\trs\tfalse\tfalse\t3\t0\t18.50\t2025-01-01T00:00:00Z
+/// path\tlines\tcode\tcomment\tblank\textension\tis_binary\tis_lockfile\tfunctions\tclasses\tavg_fn_length
+/// src/main.rs\t97\t80\t5\t12\trs\tfalse\tfalse\t3\t0\t18.50
 /// ...
 ///
 /// # FUNCTION_STATS
@@ -121,7 +121,17 @@ pub fn write_breakdown_section<W: Write>(
     }
 
     let total_lines = result.total_lines();
-    let mut entries: Vec<_> = result.breakdown.iter().collect();
+    let mut entries: Vec<_> = result
+        .breakdown
+        .iter()
+        .filter(|(_, stats)| {
+            !(total_lines > 0
+                && stats.lines == 0
+                && stats.code == 0
+                && stats.comment == 0
+                && stats.blank == 0)
+        })
+        .collect();
     entries.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.lines));
 
     for (ext, stats) in &entries {
@@ -172,12 +182,12 @@ pub fn write_files_section<W: Write>(
     if include_functions {
         writeln!(
             w,
-            "path\tlines\tcode\tcomment\tblank\textension\tis_binary\tis_lockfile\tfunctions\tclasses\tavg_fn_length\tlast_modified"
+            "path\tlines\tcode\tcomment\tblank\textension\tis_binary\tis_lockfile\tfunctions\tclasses\tavg_fn_length"
         )?;
     } else {
         writeln!(
             w,
-            "path\tlines\tcode\tcomment\tblank\textension\tis_binary\tis_lockfile\tlast_modified"
+            "path\tlines\tcode\tcomment\tblank\textension\tis_binary\tis_lockfile"
         )?;
     }
 
@@ -187,12 +197,11 @@ pub fn write_files_section<W: Write>(
             .strip_prefix(root)
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| fi.path.display().to_string());
-        let modified = fi.last_modified.map(|d| d.to_rfc3339()).unwrap_or_default();
 
         if include_functions {
             writeln!(
                 w,
-                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.2}\t{}",
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.2}",
                 rel,
                 fi.lines,
                 fi.code,
@@ -204,12 +213,11 @@ pub fn write_files_section<W: Write>(
                 fi.function_count(),
                 fi.class_count(),
                 fi.avg_function_length(),
-                modified,
             )?;
         } else {
             writeln!(
                 w,
-                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                 rel,
                 fi.lines,
                 fi.code,
@@ -218,7 +226,6 @@ pub fn write_files_section<W: Write>(
                 fi.extension(),
                 fi.is_binary,
                 fi.is_lockfile,
-                modified,
             )?;
         }
     }
@@ -373,27 +380,19 @@ mod tests {
                 functions: 1,
             },
         );
-        let file = FileInfo::new(
-            PathBuf::from("/repo/src/main.rs"),
-            100,
-            80,
-            10,
-            10,
-            false,
-            None,
-        )
-        .with_functions(vec![FunctionInfo {
-            name: "main".to_string(),
-            line_start: 1,
-            line_end: 20,
-            parameters: vec![],
-            is_async: false,
-            is_method: false,
-            is_class: false,
-            docstring: None,
-            decorators: vec![],
-            complexity: 15,
-        }]);
+        let file = FileInfo::new(PathBuf::from("/repo/src/main.rs"), 100, 80, 10, 10, false)
+            .with_functions(vec![FunctionInfo {
+                name: "main".to_string(),
+                line_start: 1,
+                line_end: 20,
+                parameters: vec![],
+                is_async: false,
+                is_method: false,
+                is_class: false,
+                docstring: None,
+                decorators: vec![],
+                complexity: 15,
+            }]);
         (
             ScanResult {
                 files: vec![file],
@@ -424,7 +423,6 @@ mod tests {
                 10,
                 10,
                 false,
-                None,
             )],
             breakdown,
         }
@@ -533,23 +531,23 @@ mod tests {
     }
 
     #[test]
-    fn files_section_no_functions_has_9_columns() {
+    fn files_section_no_functions_has_8_columns() {
         let result = make_result();
         let mut buf = Vec::new();
         write_files_section(&mut buf, &result, Path::new(""), false).unwrap();
         let out = String::from_utf8(buf).unwrap();
         let header = out.lines().nth(1).unwrap();
-        assert_eq!(header.split('\t').count(), 9);
+        assert_eq!(header.split('\t').count(), 8);
     }
 
     #[test]
-    fn files_section_with_functions_has_12_columns() {
+    fn files_section_with_functions_has_11_columns() {
         let result = make_result();
         let mut buf = Vec::new();
         write_files_section(&mut buf, &result, Path::new(""), true).unwrap();
         let out = String::from_utf8(buf).unwrap();
         let header = out.lines().nth(1).unwrap();
-        assert_eq!(header.split('\t').count(), 12);
+        assert_eq!(header.split('\t').count(), 11);
     }
 
     #[test]

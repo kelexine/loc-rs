@@ -147,11 +147,6 @@ fn print_tree_node(
                 String::new()
             };
 
-            let date_tag = fi
-                .last_modified
-                .map(|d| format!(" {}", format!("[{}]", d.format("%Y-%m-%d")).dimmed()))
-                .unwrap_or_default();
-
             // Lockfiles show no line count — their lines are not tracked.
             let lines_tag = if fi.is_binary || fi.is_lockfile {
                 String::new()
@@ -160,14 +155,13 @@ fn print_tree_node(
             };
 
             println!(
-                "{}{}{}{}{}{}{}{}{}",
+                "{}{}{}{}{}{}{}{}",
                 prefix,
                 connector,
                 name_colored,
                 lines_tag,
                 lockfile_tag,
                 func_tag,
-                date_tag,
                 binary_tag,
                 warn_tag
             );
@@ -419,7 +413,16 @@ fn display_breakdown(
     total_files: usize,
     has_functions: bool,
 ) {
-    let mut sorted: Vec<_> = breakdown.iter().collect();
+    let mut sorted: Vec<_> = breakdown
+        .iter()
+        .filter(|(_, stats)| {
+            !(total_lines > 0
+                && stats.lines == 0
+                && stats.code == 0
+                && stats.comment == 0
+                && stats.blank == 0)
+        })
+        .collect();
     sorted.sort_by_key(|a| std::cmp::Reverse(a.1.lines));
 
     if has_functions {
@@ -802,12 +805,22 @@ fn display_top_files(files_with_fns: &[&FileInfo], root: &Path) {
 // Utility
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Truncate `s` from the left, prefixing an ellipsis, keeping the result within
+/// `max` bytes.
+///
+/// The cut point is walked forward to the nearest UTF-8 character boundary, so
+/// multi-byte input (non-ASCII file or function names) can never split a
+/// character — slicing at an arbitrary byte index would panic.
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
-        s.to_string()
-    } else {
-        format!("...{}", &s[s.len().saturating_sub(max - 3)..])
+        return s.to_string();
     }
+    let keep = max.saturating_sub("...".len());
+    let mut start = s.len().saturating_sub(keep);
+    while start < s.len() && !s.is_char_boundary(start) {
+        start += 1;
+    }
+    format!("...{}", &s[start..])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -904,7 +917,6 @@ mod tests {
             0,
             0,
             false,
-            None,
         );
 
         insert_into_tree(&mut tree, &path_parts, &info);
@@ -924,5 +936,53 @@ mod tests {
             TreeNode::File(fi) => assert_eq!(fi.lines, 10),
             _ => panic!("Expected file at the leaf"),
         }
+    }
+
+    // ── truncate() ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_truncate_short_string_untouched() {
+        assert_eq!(truncate("main.rs", 30), "main.rs");
+        assert_eq!(truncate("abc", 3), "abc");
+    }
+
+    #[test]
+    fn test_truncate_ascii_keeps_tail() {
+        let s = "abcdefghijklmnopqrstuvwxyz";
+        // Keeps the last (max - 3) bytes and prefixes an ellipsis.
+        assert_eq!(truncate(s, 10), "...tuvwxyz");
+    }
+
+    #[test]
+    fn test_truncate_multibyte_does_not_panic() {
+        // Regression: truncate() used to slice at a raw byte offset, which
+        // panicked with "start byte index N is not a char boundary" whenever
+        // the cut landed inside a multi-byte character.
+        for n in 1..40usize {
+            let s = "é".repeat(n);
+            let out = truncate(&s, 30);
+            assert!(out.len() <= 30, "n={n} produced {} bytes", out.len());
+            if s.len() > 30 {
+                assert!(out.starts_with("..."), "n={n} was not truncated");
+            }
+        }
+    }
+
+    #[test]
+    fn test_truncate_multibyte_mixed_with_ascii() {
+        // The exact shape that crashed: 44-byte name cut at 30.
+        let s = format!("{}a.rs", "é".repeat(20));
+        let out = truncate(&s, 30);
+        assert!(out.len() <= 30, "produced {} bytes", out.len());
+        assert!(out.ends_with("a.rs"));
+    }
+
+    #[test]
+    fn test_truncate_tiny_max_does_not_underflow() {
+        // `max - 3` used to underflow for max < 3.
+        assert_eq!(truncate("hello", 0), "...");
+        assert_eq!(truncate("hello", 1), "...");
+        assert_eq!(truncate("hello", 2), "...");
+        assert_eq!(truncate("hello", 3), "...");
     }
 }

@@ -20,18 +20,12 @@ pub fn export_csv(result: &ScanResult, path: &Path, include_functions: bool) -> 
             "Functions",
             "Classes",
             "Avg Fn Length",
-            "Last Modified",
         ])?;
     } else {
-        wtr.write_record(["Path", "Lines", "Extension", "Last Modified"])?;
+        wtr.write_record(["Path", "Lines", "Extension"])?;
     }
 
     for fi in result.files.iter().filter(|f| !f.is_binary) {
-        let last_mod = fi
-            .last_modified
-            .map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string())
-            .unwrap_or_default();
-
         if include_functions {
             wtr.write_record([
                 fi.path.to_string_lossy().as_ref(),
@@ -40,14 +34,12 @@ pub fn export_csv(result: &ScanResult, path: &Path, include_functions: bool) -> 
                 &fi.function_count().to_string(),
                 &fi.class_count().to_string(),
                 &format!("{:.2}", fi.avg_function_length()),
-                &last_mod,
             ])?;
         } else {
             wtr.write_record([
                 fi.path.to_string_lossy().as_ref(),
                 &fi.lines.to_string(),
                 fi.extension(),
-                &last_mod,
             ])?;
         }
     }

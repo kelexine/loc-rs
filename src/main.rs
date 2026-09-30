@@ -11,7 +11,6 @@
 //   • Zero-copy byte-level line counting
 //   • Pre-compiled regex patterns via once_cell::Lazy
 //   • Richer function extraction (Rust structs/impls, Python decorators/docstrings)
-//   • Filesystem mtime fallback when git is unavailable
 //   • walkdir traversal (faster than os.walk)
 //   • Typed errors via anyhow — no silent panics
 //   • Agent-aware output: auto-detects coding agents and switches to TSV
@@ -60,13 +59,6 @@ fn main() {
         }
     };
 
-    if args.git_dates && mode != OutputMode::Json {
-        eprintln!(
-            "{} --git-dates is deprecated and disabled; git history traversal has been removed",
-            "[WARNING]".yellow().bold()
-        );
-    }
-
     // ── Dispatch by mode ──────────────────────────────────────────────────────
     match mode {
         // ── JSON (legacy --json or --format json) ─────────────────────────────
@@ -78,13 +70,6 @@ fn main() {
                 warnings.push(
                     "--func-analysis is not supported with JSON output; \
                      use -f to embed function data in the JSON"
-                        .to_string(),
-                );
-            }
-
-            if args.git_dates {
-                warnings.push(
-                    "--git-dates is deprecated and disabled; git history traversal has been removed"
                         .to_string(),
                 );
             }

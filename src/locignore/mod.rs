@@ -25,47 +25,73 @@ use std::path::{Path, PathBuf};
 /// | `dist/`               | Match the `dist/` directory and all its contents     |
 /// | `src/**/*.min.js`     | Match as a root-relative glob from containing dir    |
 /// | `!keep.rs`            | Re-include `keep.rs` anywhere (override any exclude) |
+#[derive(Clone, Copy, Debug)]
+struct RuleMeta {
+    rule_id: usize,
+    is_negation: bool,
+}
+
 #[derive(Clone)]
 pub struct LocIgnore {
-    /// Compiled .locignore patterns that exclude files.
-    loc_exclude: GlobSet,
-    /// Compiled .locignore patterns that force-include files.
-    loc_include: GlobSet,
-    /// Compiled .gitignore patterns that exclude files.
-    git_exclude: GlobSet,
-    /// Compiled .gitignore patterns that force-include files.
-    git_include: GlobSet,
+    /// Compiled .locignore globset.
+    loc_set: GlobSet,
+    /// Metadata for each glob in loc_set, in registration order.
+    loc_rules: Vec<RuleMeta>,
+    /// Compiled .gitignore globset.
+    git_set: GlobSet,
+    /// Metadata for each glob in git_set, in registration order.
+    git_rules: Vec<RuleMeta>,
     /// Absolute path to the scan root.
     root: PathBuf,
     /// Set to `true` when any `!` negation pattern was loaded.
     has_negations: bool,
 }
 
+struct IgnoreBuilder {
+    builder: GlobSetBuilder,
+    rules: Vec<RuleMeta>,
+    next_rule_id: usize,
+}
+
+impl IgnoreBuilder {
+    fn new() -> Self {
+        Self {
+            builder: GlobSetBuilder::new(),
+            rules: Vec::new(),
+            next_rule_id: 0,
+        }
+    }
+}
+
 impl LocIgnore {
+    /// Creates an empty LocIgnore ruleset.
+    #[allow(dead_code)]
+    #[must_use]
+    pub fn empty() -> Self {
+        Self {
+            loc_set: GlobSet::empty(),
+            loc_rules: Vec::new(),
+            git_set: GlobSet::empty(),
+            git_rules: Vec::new(),
+            root: PathBuf::new(),
+            has_negations: false,
+        }
+    }
+
     /// Build a `LocIgnore` by recursively scanning `root` for `.locignore`
     /// and `.gitignore` files, compiling their patterns into prioritized sets.
     pub fn build(root: &Path) -> Self {
-        let mut loc_excl = GlobSetBuilder::new();
-        let mut loc_incl = GlobSetBuilder::new();
-        let mut git_excl = GlobSetBuilder::new();
-        let mut git_incl = GlobSetBuilder::new();
+        let mut loc = IgnoreBuilder::new();
+        let mut git = IgnoreBuilder::new();
         let mut has_negations = false;
 
-        Self::collect(
-            root,
-            root,
-            &mut loc_excl,
-            &mut loc_incl,
-            &mut git_excl,
-            &mut git_incl,
-            &mut has_negations,
-        );
+        Self::collect(root, root, &mut loc, &mut git, &mut has_negations);
 
         Self {
-            loc_exclude: loc_excl.build().unwrap_or_else(|_| GlobSet::empty()),
-            loc_include: loc_incl.build().unwrap_or_else(|_| GlobSet::empty()),
-            git_exclude: git_excl.build().unwrap_or_else(|_| GlobSet::empty()),
-            git_include: git_incl.build().unwrap_or_else(|_| GlobSet::empty()),
+            loc_set: loc.builder.build().unwrap_or_else(|_| GlobSet::empty()),
+            loc_rules: loc.rules,
+            git_set: git.builder.build().unwrap_or_else(|_| GlobSet::empty()),
+            git_rules: git.rules,
             root: root.to_path_buf(),
             has_negations,
         }
@@ -76,20 +102,36 @@ impl LocIgnore {
         self.has_negations
     }
 
+    /// Evaluate a GlobSet against a path, respecting file order (last match wins).
+    ///
+    /// Returns `Some(true)` if the winning rule excludes the path,
+    /// `Some(false)` if the winning rule re-includes the path via negation (`!`),
+    /// or `None` if no rules matched.
+    fn evaluate(set: &GlobSet, rules: &[RuleMeta], path: &str) -> Option<bool> {
+        if set.is_empty() {
+            return None;
+        }
+        let matches = set.matches(path);
+        if matches.is_empty() {
+            return None;
+        }
+
+        let best = matches
+            .into_iter()
+            .map(|idx| rules[idx])
+            .max_by_key(|r| r.rule_id)?;
+
+        Some(!best.is_negation)
+    }
+
     /// Returns `true` if `path` should be **excluded** from the scan.
     ///
     /// Priority hierarchy:
-    /// 1. `.locignore` inclusion (`!pattern`) -> **include** (highest priority, overrides all)
-    /// 2. `.locignore` exclusion -> **exclude** (overrides .gitignore)
-    /// 3. `.gitignore` inclusion (`!pattern`) -> **include**
-    /// 4. `.gitignore` exclusion -> **exclude**
-    /// 5. Default -> **include**
+    /// 1. `.locignore` rule evaluation (last matching pattern in file order wins)
+    /// 2. `.gitignore` rule evaluation (last matching pattern in file order wins, if no .locignore match)
+    /// 3. Default -> **include** (not excluded)
     pub fn is_excluded(&self, path: &Path) -> bool {
-        if self.loc_include.is_empty()
-            && self.loc_exclude.is_empty()
-            && self.git_include.is_empty()
-            && self.git_exclude.is_empty()
-        {
+        if self.loc_set.is_empty() && self.git_set.is_empty() {
             return false;
         }
 
@@ -101,23 +143,17 @@ impl LocIgnore {
             lossy
         };
 
-        // 1. .locignore negation takes highest precedence
-        if !self.loc_include.is_empty() && self.loc_include.is_match(s.as_ref()) {
-            return false;
+        // 1. .locignore takes highest precedence
+        if let Some(excluded) = Self::evaluate(&self.loc_set, &self.loc_rules, s.as_ref()) {
+            return excluded;
         }
 
-        // 2. .locignore exclude overrides .gitignore
-        if !self.loc_exclude.is_empty() && self.loc_exclude.is_match(s.as_ref()) {
-            return true;
+        // 2. .gitignore takes second precedence
+        if let Some(excluded) = Self::evaluate(&self.git_set, &self.git_rules, s.as_ref()) {
+            return excluded;
         }
 
-        // 3. .gitignore negation
-        if !self.git_include.is_empty() && self.git_include.is_match(s.as_ref()) {
-            return false;
-        }
-
-        // 4. .gitignore exclude
-        !self.git_exclude.is_empty() && self.git_exclude.is_match(s.as_ref())
+        false
     }
 
     /// Compute path relative to the scan root (for matching).
@@ -129,12 +165,11 @@ impl LocIgnore {
         }
     }
 
-    /// Parse pattern lines from ignore file content into exclude / include builders.
+    /// Parse pattern lines from ignore file content into glob builder and rule list.
     fn parse_patterns(
         content: &str,
         dir_rel: &str,
-        excl: &mut GlobSetBuilder,
-        incl: &mut GlobSetBuilder,
+        builder: &mut IgnoreBuilder,
         has_negations: &mut bool,
     ) {
         for raw in content.lines() {
@@ -143,15 +178,24 @@ impl LocIgnore {
                 continue;
             }
 
-            let (builder, pattern): (&mut GlobSetBuilder, &str) =
-                if let Some(rest) = line.strip_prefix('!') {
-                    *has_negations = true;
-                    (incl, rest)
-                } else {
-                    (excl, line)
-                };
+            let (is_negation, pattern) = if let Some(rest) = line.strip_prefix('!') {
+                *has_negations = true;
+                (true, rest)
+            } else {
+                (false, line)
+            };
 
-            Self::add_pattern(builder, pattern, dir_rel);
+            let rule_id = builder.next_rule_id;
+            builder.next_rule_id += 1;
+
+            Self::add_pattern(
+                &mut builder.builder,
+                &mut builder.rules,
+                pattern,
+                dir_rel,
+                rule_id,
+                is_negation,
+            );
         }
     }
 
@@ -160,10 +204,8 @@ impl LocIgnore {
     fn collect(
         dir: &Path,
         root: &Path,
-        loc_excl: &mut GlobSetBuilder,
-        loc_incl: &mut GlobSetBuilder,
-        git_excl: &mut GlobSetBuilder,
-        git_incl: &mut GlobSetBuilder,
+        loc: &mut IgnoreBuilder,
+        git: &mut IgnoreBuilder,
         has_negations: &mut bool,
     ) {
         let dir_rel = dir
@@ -175,13 +217,13 @@ impl LocIgnore {
         // 1. Load .gitignore for this directory, if present.
         let gitignore_path = dir.join(".gitignore");
         if let Ok(content) = std::fs::read_to_string(&gitignore_path) {
-            Self::parse_patterns(&content, &dir_rel, git_excl, git_incl, has_negations);
+            Self::parse_patterns(&content, &dir_rel, git, has_negations);
         }
 
         // 2. Load .locignore for this directory, if present.
         let locignore_path = dir.join(".locignore");
         if let Ok(content) = std::fs::read_to_string(&locignore_path) {
-            Self::parse_patterns(&content, &dir_rel, loc_excl, loc_incl, has_negations);
+            Self::parse_patterns(&content, &dir_rel, loc, has_negations);
         }
 
         // 3. Recurse into subdirectories — skip heavy / hidden dirs for speed.
@@ -202,24 +244,27 @@ impl LocIgnore {
             if n.starts_with('.') || matches!(n, "target" | "node_modules" | "vendor") {
                 continue;
             }
-            Self::collect(
-                &entry.path(),
-                root,
-                loc_excl,
-                loc_incl,
-                git_excl,
-                git_incl,
-                has_negations,
-            );
+            Self::collect(&entry.path(), root, loc, git, has_negations);
         }
     }
 
     /// Expand `pattern` (from a `.locignore` at relative path `dir_rel`) into
     /// one or more concrete glob strings and register them on `builder`.
-    fn add_pattern(builder: &mut GlobSetBuilder, pattern: &str, dir_rel: &str) {
+    fn add_pattern(
+        builder: &mut GlobSetBuilder,
+        rules: &mut Vec<RuleMeta>,
+        pattern: &str,
+        dir_rel: &str,
+        rule_id: usize,
+        is_negation: bool,
+    ) {
         for expanded in Self::expand(pattern, dir_rel) {
             if let Ok(g) = Glob::new(&expanded) {
                 builder.add(g);
+                rules.push(RuleMeta {
+                    rule_id,
+                    is_negation,
+                });
             }
             // Silently skip malformed patterns — don't crash on user typos.
         }
@@ -492,5 +537,39 @@ mod tests {
         assert!(li.is_excluded(&dir.path().join("test.root_ignored")));
         assert!(li.is_excluded(&dir.path().join("nested/test.nested_ignored")));
         assert!(!li.is_excluded(&dir.path().join("test.nested_ignored")));
+    }
+
+    #[test]
+    fn gitignore_last_match_wins_exclude_overrides_negation() {
+        let dir = TempDir::new().unwrap();
+        // Earlier negation, followed by broader exclude -> file is EXCLUDED (last match wins)
+        write(dir.path(), ".gitignore", "!keep.txt\n*.txt\n");
+        write(dir.path(), "keep.txt", "content");
+
+        let li = LocIgnore::build(dir.path());
+        assert!(li.is_excluded(&dir.path().join("keep.txt")));
+    }
+
+    #[test]
+    fn gitignore_last_match_wins_negation_overrides_exclude() {
+        let dir = TempDir::new().unwrap();
+        // Earlier exclude, followed by negation -> file is INCLUDED (last match wins)
+        write(dir.path(), ".gitignore", "*.txt\n!keep.txt\n");
+        write(dir.path(), "keep.txt", "content");
+        write(dir.path(), "other.txt", "content");
+
+        let li = LocIgnore::build(dir.path());
+        assert!(!li.is_excluded(&dir.path().join("keep.txt")));
+        assert!(li.is_excluded(&dir.path().join("other.txt")));
+    }
+
+    #[test]
+    fn locignore_last_match_wins_exclude_overrides_negation() {
+        let dir = TempDir::new().unwrap();
+        write(dir.path(), ".locignore", "!keep.txt\n*.txt\n");
+        write(dir.path(), "keep.txt", "content");
+
+        let li = LocIgnore::build(dir.path());
+        assert!(li.is_excluded(&dir.path().join("keep.txt")));
     }
 }

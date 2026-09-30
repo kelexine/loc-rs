@@ -3,7 +3,6 @@
 
 pub mod discovery;
 pub mod embedded;
-pub mod git;
 pub mod lines;
 pub mod process;
 
@@ -19,6 +18,12 @@ use crate::models::{Breakdown, FileInfo, ScanResult};
 
 use self::discovery::get_manual_files;
 use self::process::process_file;
+
+/// Minimum file count required before dispatching work across the Rayon thread pool.
+///
+/// For small batches (≤ 50 files), thread-pool scheduling overhead, work-stealing coordination,
+/// and cache invalidation outweigh the gains of parallel processing.
+pub const PARALLEL_FILE_THRESHOLD: usize = 50;
 
 /// Configuration for a scan run.
 #[derive(Clone)]
@@ -94,7 +99,12 @@ impl ScanConfig {
             Some(exts)
         };
 
-        let locignore = LocIgnore::build(&target_dir);
+        let has_directories = target_paths.is_empty() || target_paths.iter().any(|p| p.is_dir());
+        let locignore = if has_directories {
+            LocIgnore::build(&target_dir)
+        } else {
+            LocIgnore::empty()
+        };
         let warn_size = args.warn_size.or(global_config.warn_size);
         let extract_functions = args.functions
             || args.func_analysis
@@ -139,7 +149,13 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
         }
     }
 
-    let mut file_infos: Vec<FileInfo> = if config.parallel && files.len() > 50 {
+    let mut file_infos: Vec<FileInfo> = if config.parallel && files.len() > PARALLEL_FILE_THRESHOLD
+    {
+        // F6: Large-file-first scheduling (Longest Processing Time first rule).
+        // Sorting files descending by size before distributing to worker threads ensures
+        // large, resource-intensive files begin processing early. This prevents tail stragglers
+        // where a single huge file stalls one core while other threads sit idle.
+        files.sort_by_cached_key(|p| std::cmp::Reverse(p.metadata().map(|m| m.len()).unwrap_or(0)));
         files
             .par_iter()
             .filter_map(|path| match process_file(path, config) {
@@ -183,17 +199,30 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
             stats.files += 1;
             stats.functions += fi.function_count();
         } else {
-            // Container file count
-            breakdown.entry(container_ext).or_default().files += 1;
+            let mut seen_chunk_langs = HashSet::new();
+            let mut container_has_chunk = false;
 
             for chunk in &fi.embedded {
                 let chunk_lang =
                     crate::language::canonical_language_name(&chunk.extension).to_string();
-                let stats = breakdown.entry(chunk_lang).or_default();
+                if chunk_lang == container_ext {
+                    container_has_chunk = true;
+                }
+                let stats = breakdown.entry(chunk_lang.clone()).or_default();
                 stats.lines += chunk.lines;
                 stats.code += chunk.code;
                 stats.comment += chunk.comment;
                 stats.blank += chunk.blank;
+                if seen_chunk_langs.insert(chunk_lang) {
+                    stats.files += 1;
+                }
+            }
+
+            // For pure container formats where no chunk matches the container
+            // (e.g. Jupyter notebook containing only Python/Markdown cells),
+            // record the container file count.
+            if !container_has_chunk {
+                breakdown.entry(container_ext).or_default().files += 1;
             }
         }
     }
@@ -207,9 +236,9 @@ pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
 #[cfg(test)]
 mod tests {
     use super::discovery::get_manual_files;
-    use super::git::check_git_repo;
     use super::lines::analyze_file;
     use super::process::is_binary_file;
+    use super::*;
     use std::collections::HashSet;
     use std::fs;
     use std::path::Path;
@@ -391,32 +420,6 @@ fn main() {
         assert_eq!(code, 3);
     }
 
-    // ── Git integration ──────────────────────────────────────────────────────
-
-    #[test]
-    fn test_check_git_repo() {
-        let dir = tempdir().unwrap();
-        let path = dir.path();
-
-        // Not a repo initially
-        assert!(!check_git_repo(path));
-
-        // Create .git directory
-        let git_dir = path.join(".git");
-        fs::create_dir(&git_dir).unwrap();
-        assert!(check_git_repo(path));
-
-        // Subdirectories should also detect the parent git repo
-        let subdir = path.join("src").join("nested");
-        fs::create_dir_all(&subdir).unwrap();
-        assert!(check_git_repo(&subdir));
-
-        // Files within the repo should detect the git repo
-        let file = subdir.join("main.rs");
-        fs::write(&file, "fn main() {}\n").unwrap();
-        assert!(check_git_repo(&file));
-    }
-
     // ── Embedded Languages & Jupyter Notebooks ────────────────────────────────
 
     #[test]
@@ -530,9 +533,18 @@ fn main() {
         let py_stats = &result.breakdown["Python"];
         assert_eq!(py_stats.code, 2);
         assert_eq!(py_stats.comment, 1);
+        assert_eq!(py_stats.files, 1);
 
         let md_stats = &result.breakdown["Markdown"];
         assert_eq!(md_stats.code, 2);
+        assert_eq!(md_stats.files, 1);
+
+        let mut tsv_out = Vec::new();
+        crate::export::tsv::write_breakdown_section(&mut tsv_out, &result, false).unwrap();
+        let tsv_str = String::from_utf8(tsv_out).unwrap();
+        assert!(tsv_str.contains("Python\t1\t"));
+        assert!(tsv_str.contains("Markdown\t1\t"));
+        assert!(!tsv_str.contains("Jupyter\t"));
     }
 
     #[test]
@@ -642,5 +654,93 @@ fn main() {
         let fixture_nested = "/* outer\n   /* nested */\n   still comment\n*/\nfn main() {}";
         let (total, code, comment, blank) = analyze_content_with_spec(fixture_nested, rs_spec);
         assert_eq!((code, comment, blank, total), (1, 4, 0, 5));
+    }
+
+    #[test]
+    fn test_parallel_file_threshold_scan() {
+        let dir = tempfile::tempdir().unwrap();
+        for i in 0..3 {
+            let p = dir.path().join(format!("file_{i}.rs"));
+            fs::write(&p, "fn main() {}\n").unwrap();
+        }
+
+        let config = ScanConfig {
+            target_dir: dir.path().to_path_buf(),
+            target_paths: vec![dir.path().to_path_buf()],
+            allowed_extensions: None,
+            warn_size: None,
+            parallel: true,
+            extract_functions: false,
+            locignore: LocIgnore::build(dir.path()),
+            include_hidden: false,
+        };
+
+        let result = run_scan(&config).unwrap();
+        assert_eq!(result.files.len(), 3);
+        assert_eq!(result.total_lines(), 3);
+    }
+
+    #[test]
+    fn test_file_only_targets_skips_locignore_build() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("main.rs");
+        fs::write(&file_path, "fn main() {}\n").unwrap();
+
+        let args = crate::cli::Args {
+            paths: vec![file_path.to_str().unwrap().to_string()],
+            detailed: false,
+            binary: false,
+            functions: false,
+            func_analysis: false,
+            file_types: Vec::new(),
+            export: None,
+            warn_size: None,
+            no_parallel: true,
+            include_hidden: false,
+            tree: false,
+            json: false,
+            format: None,
+            quiet: false,
+        };
+
+        let config = ScanConfig::from_args(&args).unwrap();
+        assert!(!config.locignore.has_negations());
+        let result = run_scan(&config).unwrap();
+        assert_eq!(result.files.len(), 1);
+        assert_eq!(result.total_lines(), 1);
+    }
+
+    #[test]
+    fn test_large_file_first_parallel_scheduling() {
+        let dir = tempdir().unwrap();
+        // Create 60 files to exceed PARALLEL_FILE_THRESHOLD (50)
+        for i in 0..60 {
+            let file_path = dir.path().join(format!("file_{:03}.rs", i));
+            // One large file, rest are small
+            let content = if i == 42 {
+                "fn main() {}\n".repeat(200)
+            } else {
+                "fn main() {}\n".to_string()
+            };
+            fs::write(&file_path, content).unwrap();
+        }
+
+        let config = ScanConfig {
+            target_dir: dir.path().to_path_buf(),
+            target_paths: vec![dir.path().to_path_buf()],
+            allowed_extensions: None,
+            warn_size: None,
+            parallel: true,
+            extract_functions: false,
+            locignore: LocIgnore::empty(),
+            include_hidden: false,
+        };
+
+        let result = run_scan(&config).unwrap();
+        assert_eq!(result.files.len(), 60);
+        // Ensure final output remains alphabetically sorted by path
+        for i in 1..result.files.len() {
+            assert!(result.files[i - 1].path <= result.files[i].path);
+        }
     }
 }

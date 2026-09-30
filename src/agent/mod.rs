@@ -32,10 +32,10 @@ pub enum OutputMode {
     Quiet,
 }
 
-/// Resolve the output mode and optionally the detected agent name.
+/// Resolve the output mode and optionally the detected agent name with a custom env lookup closure.
 ///
 /// Returns `(mode, detected_agent)` where `detected_agent` is `Some` when the
-/// Resolve the output mode and optionally the detected agent name with a custom env lookup closure.
+/// mode was auto-detected from env vars (used in the startup hint).
 pub fn resolve_output_mode_with<F>(
     format: Option<OutputFormat>,
     json_flag: bool,

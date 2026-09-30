@@ -2,7 +2,7 @@
 // extractors/python.rs — Python function/class extraction via Tree-sitter
 
 use super::Extractor;
-use super::tree_sitter::ast_complexity;
+use super::tree_sitter::ComplexityIndex;
 use crate::models::FunctionInfo;
 use tree_sitter::Node;
 
@@ -11,8 +11,16 @@ pub struct PythonExtractor;
 impl Extractor for PythonExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
         super::with_parsed_tree(tree_sitter_python::LANGUAGE.into(), content, |tree| {
+            let index = ComplexityIndex::build(tree.root_node(), content.as_bytes());
             let mut functions = Vec::new();
-            traverse(tree.root_node(), content, &mut functions, false, Vec::new());
+            traverse(
+                tree.root_node(),
+                content,
+                &mut functions,
+                false,
+                Vec::new(),
+                &index,
+            );
             functions.sort_by_key(|f| f.line_start);
             functions
         })
@@ -20,74 +28,90 @@ impl Extractor for PythonExtractor {
     }
 }
 
+/// Explicit-stack DFS — see `rust.rs::traverse` for why this is not a
+/// recursive walk: extraction runs on rayon worker threads with 2 MiB stacks.
+///
+/// `pending_decorators` is threaded through the stack exactly as the recursive
+/// walk threaded it by value, so the `decorator` branch's "accumulate then
+/// return" behaviour — which discards the list — is preserved unchanged.
 fn traverse(
     node: Node,
     content: &str,
     functions: &mut Vec<FunctionInfo>,
     in_class: bool,
-    mut pending_decorators: Vec<String>,
+    pending_decorators: Vec<String>,
+    index: &ComplexityIndex,
 ) {
-    let kind = node.kind();
+    let mut stack: Vec<(Node, bool, Vec<String>)> = vec![(node, in_class, pending_decorators)];
+    let mut children: Vec<Node> = Vec::new();
 
-    if kind == "decorator" {
-        let dec_text = node.utf8_text(content.as_bytes()).unwrap_or("");
-        pending_decorators.push(dec_text.trim_start_matches('@').to_string());
-        return;
-    } else if kind == "decorated_definition" {
-        // Collect all decorator children, then parse the function/class child
-        // with those decorators.  We cannot use the sibling-based pending_decorators
-        // mechanism here because siblings have independent call frames.
-        let mut decorators: Vec<String> = Vec::new();
-        let mut def_node = None;
+    while let Some((node, in_class, mut pending_decorators)) = stack.pop() {
+        let kind = node.kind();
 
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            match child.kind() {
-                "decorator" => {
-                    let dec_text = child.utf8_text(content.as_bytes()).unwrap_or("");
-                    decorators.push(dec_text.trim_start_matches('@').to_string());
-                }
-                "function_definition" | "class_definition" => {
-                    def_node = Some(child);
-                }
-                _ => {}
+        if kind == "decorator" {
+            let dec_text = node.utf8_text(content.as_bytes()).unwrap_or("");
+            pending_decorators.push(dec_text.trim_start_matches('@').to_string());
+            continue;
+        } else if kind == "decorated_definition" {
+            // Collect all decorator children, then parse the function/class child
+            // with those decorators.  We cannot use the sibling-based pending_decorators
+            // mechanism here because siblings have independent call frames.
+            let mut decorators: Vec<String> = Vec::new();
+            let mut def_node = None;
+
+            children.clear();
+            {
+                let mut cursor = node.walk();
+                children.extend(node.children(&mut cursor));
             }
+            for &child in &children {
+                match child.kind() {
+                    "decorator" => {
+                        let dec_text = child.utf8_text(content.as_bytes()).unwrap_or("");
+                        decorators.push(dec_text.trim_start_matches('@').to_string());
+                    }
+                    "function_definition" | "class_definition" => {
+                        def_node = Some(child);
+                    }
+                    _ => {}
+                }
+            }
+
+            if let Some(def) = def_node {
+                if def.kind() == "function_definition" {
+                    functions.push(parse_function(def, content, in_class, decorators, index));
+                } else {
+                    functions.push(parse_class(def, content, decorators));
+                }
+            }
+            continue;
         }
 
-        if let Some(def) = def_node {
-            if def.kind() == "function_definition" {
-                functions.push(parse_function(def, content, in_class, decorators));
-            } else {
-                functions.push(parse_class(def, content, decorators));
-            }
+        if kind == "function_definition" {
+            functions.push(parse_function(
+                node,
+                content,
+                in_class,
+                pending_decorators.clone(),
+                index,
+            ));
+            pending_decorators.clear();
+        } else if kind == "class_definition" {
+            functions.push(parse_class(node, content, pending_decorators.clone()));
+            pending_decorators.clear();
         }
-        return;
-    }
 
-    if kind == "function_definition" {
-        functions.push(parse_function(
-            node,
-            content,
-            in_class,
-            pending_decorators.clone(),
-        ));
-        pending_decorators.clear();
-    } else if kind == "class_definition" {
-        functions.push(parse_class(node, content, pending_decorators.clone()));
-        pending_decorators.clear();
-    }
+        let is_class_body = kind == "class_definition";
 
-    let is_class_body = kind == "class_definition";
-
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        traverse(
-            child,
-            content,
-            functions,
-            in_class || is_class_body,
-            Vec::new(),
-        );
+        children.clear();
+        {
+            let mut cursor = node.walk();
+            children.extend(node.children(&mut cursor));
+        }
+        // Reverse push preserves the pre-order a recursive walk would produce.
+        for &child in children.iter().rev() {
+            stack.push((child, in_class || is_class_body, Vec::new()));
+        }
     }
 }
 
@@ -96,6 +120,7 @@ fn parse_function(
     content: &str,
     is_method: bool,
     decorators: Vec<String>,
+    index: &ComplexityIndex,
 ) -> FunctionInfo {
     let mut name = String::new();
     let mut is_async = false;
@@ -136,7 +161,7 @@ fn parse_function(
     let start_line = node.start_position().row + 1;
     let end_line = node.end_position().row + 1;
 
-    let complexity = ast_complexity(node, content.as_bytes());
+    let complexity = index.get(node);
 
     let mut parameters = Vec::new();
     let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');

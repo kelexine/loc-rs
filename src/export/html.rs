@@ -175,7 +175,9 @@ pub fn export_html(
     });
 
     let json_data = serde_json::to_string(&data)?;
-    let html_content = render_html(&json_data);
+    // Prevent </script> breakout in inline <script> block
+    let safe_json_data = json_data.replace('<', "\\u003c");
+    let html_content = render_html(&safe_json_data);
 
     let f = File::create(path).with_context(|| format!("Cannot create {}", path.display()))?;
     let mut writer = BufWriter::new(f);
@@ -539,8 +541,7 @@ const fnCols = [
     {{ key: 'avg_function_length', label: 'Avg Fn Len' }},
     {{ key: 'max_complexity', label: 'Max Complexity' }},
 ];
-const tailCols = [{{ key: 'last_modified', label: 'Last Modified' }}];
-const columns = fnEnabled ? baseCols.concat(fnCols, tailCols) : baseCols.concat(tailCols);
+const columns = fnEnabled ? baseCols.concat(fnCols) : baseCols;
 
 let sortKey = 'lines';
 let sortDir = 'desc';
@@ -567,6 +568,16 @@ function renderFilesHead() {{
             renderFilesBody(document.getElementById('fileSearch').value);
         }});
     }});
+}}
+
+function escapeHtml(s) {{
+    if (s == null) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }}
 
 function complexityBadge(v) {{
@@ -599,13 +610,15 @@ function renderFilesBody(filter) {{
     }}
     body.innerHTML = rows.slice(0, 200).map(f => {{
         const isLarge = warnSize != null && f.lines > warnSize;
+        const escPath = escapeHtml(f.path);
+        const escExt = escapeHtml(f.extension || '-');
         let cells = `
-            <td title="${{f.path}}">${{f.path}}</td>
+            <td title="${{escPath}}">${{escPath}}</td>
             <td>${{f.lines.toLocaleString()}}</td>
             <td>${{f.code.toLocaleString()}}</td>
             <td>${{f.comment.toLocaleString()}}</td>
             <td>${{f.blank.toLocaleString()}}</td>
-            <td>${{f.extension || '-'}}</td>
+            <td>${{escExt}}</td>
             <td>${{boolBadge(f.is_binary)}}</td>
             <td>${{boolBadge(f.is_lockfile)}}</td>
         `;
@@ -617,7 +630,6 @@ function renderFilesBody(filter) {{
                 <td>${{complexityBadge(f.max_complexity)}}</td>
             `;
         }}
-        cells += `<td>${{f.last_modified ? new Date(f.last_modified).toLocaleDateString() : '-'}}</td>`;
         return `<tr class="${{isLarge ? 'large-file' : ''}}">${{cells}}</tr>`;
     }}).join('');
 }}
@@ -634,32 +646,44 @@ if (faEnabled && reportData.function_analysis) {{
         statCard(fa.total_classes, 'Total Classes') +
         statCard(Math.round(fa.avg_function_length * 100) / 100, 'Avg Fn Length');
 
-    document.getElementById('largestFnBody').innerHTML = fa.largest_functions.map(f => `
+    document.getElementById('largestFnBody').innerHTML = fa.largest_functions.map(f => {{
+        const escName = escapeHtml(f.name);
+        const escFile = escapeHtml(f.file);
+        const params = (f.parameters || []).map(p => escapeHtml(p)).join(', ');
+        return `
         <tr>
-            <td>${{f.name}}</td>
-            <td title="${{f.file}}">${{f.file}}</td>
+            <td class="fn-name" title="${{escName}}">${{escName}}</td>
+            <td class="file-name" title="${{escFile}}">${{escFile}}</td>
             <td>${{f.lines}}</td>
             <td>${{complexityBadge(f.complexity)}}</td>
-            <td>${{(f.parameters || []).join(', ') || '-'}}</td>
+            <td title="${{params}}">${{params || '-'}}</td>
         </tr>
-    `).join('') || `<tr><td colspan="5"><div class="empty-state">No data.</div></td></tr>`;
+    `;
+    }}).join('') || `<tr><td colspan="5"><div class="empty-state">No data.</div></td></tr>`;
 
-    document.getElementById('highComplexityBody').innerHTML = fa.high_complexity.map(f => `
+    document.getElementById('highComplexityBody').innerHTML = fa.high_complexity.map(f => {{
+        const escName = escapeHtml(f.name);
+        const escFile = escapeHtml(f.file);
+        return `
         <tr>
-            <td>${{f.name}}</td>
-            <td title="${{f.file}}">${{f.file}}</td>
+            <td class="fn-name" title="${{escName}}">${{escName}}</td>
+            <td class="file-name" title="${{escFile}}">${{escFile}}</td>
             <td>${{complexityBadge(f.complexity)}}</td>
         </tr>
-    `).join('') || `<tr><td colspan="3"><div class="empty-state">No functions exceed complexity 10.</div></td></tr>`;
+    `;
+    }}).join('') || `<tr><td colspan="3"><div class="empty-state">No functions exceed complexity 10.</div></td></tr>`;
 
-    document.getElementById('topFilesBody').innerHTML = fa.top_files.map(f => `
+    document.getElementById('topFilesBody').innerHTML = fa.top_files.map(f => {{
+        const escFile = escapeHtml(f.file);
+        return `
         <tr>
-            <td title="${{f.file}}">${{f.file}}</td>
+            <td class="file-name" title="${{escFile}}">${{escFile}}</td>
             <td>${{f.functions}}</td>
             <td>${{f.classes}}</td>
             <td>${{f.avg_fn_length.toFixed(2)}}</td>
         </tr>
-    `).join('') || `<tr><td colspan="4"><div class="empty-state">No data.</div></td></tr>`;
+    `;
+    }}).join('') || `<tr><td colspan="4"><div class="empty-state">No data.</div></td></tr>`;
 }}
 </script>
 </body>
@@ -692,27 +716,19 @@ mod tests {
                 functions: 1,
             },
         );
-        let file = FileInfo::new(
-            PathBuf::from("/repo/src/main.rs"),
-            100,
-            80,
-            10,
-            10,
-            false,
-            None,
-        )
-        .with_functions(vec![FunctionInfo {
-            name: "main".to_string(),
-            line_start: 1,
-            line_end: 20,
-            parameters: vec![],
-            is_async: false,
-            is_method: false,
-            is_class: false,
-            docstring: None,
-            decorators: vec![],
-            complexity: 15,
-        }]);
+        let file = FileInfo::new(PathBuf::from("/repo/src/main.rs"), 100, 80, 10, 10, false)
+            .with_functions(vec![FunctionInfo {
+                name: "main".to_string(),
+                line_start: 1,
+                line_end: 20,
+                parameters: vec![],
+                is_async: false,
+                is_method: false,
+                is_class: false,
+                docstring: None,
+                decorators: vec![],
+                complexity: 15,
+            }]);
         (
             ScanResult {
                 files: vec![file],
@@ -745,7 +761,6 @@ mod tests {
                     5,
                     5,
                     false,
-                    None,
                 )],
                 breakdown,
             },
@@ -809,10 +824,9 @@ mod tests {
             0,
             0,
             true,
-            None,
         ));
         result.files.push(
-            FileInfo::new(PathBuf::from("/repo/Cargo.lock"), 500, 0, 0, 0, false, None)
+            FileInfo::new(PathBuf::from("/repo/Cargo.lock"), 500, 0, 0, 0, false)
                 .mark_as_lockfile(),
         );
         let dir = tempfile::tempdir().unwrap();
@@ -821,5 +835,60 @@ mod tests {
         let contents = std::fs::read_to_string(&path).unwrap();
         assert!(contents.contains("\"is_binary\":true"));
         assert!(contents.contains("\"is_lockfile\":true"));
+    }
+
+    #[test]
+    fn export_html_escapes_script_tags_and_html_injection() {
+        let root = PathBuf::from("/repo");
+        let mut breakdown = HashMap::new();
+        breakdown.insert(
+            "rs".to_string(),
+            ExtensionStats {
+                lines: 10,
+                code: 8,
+                comment: 1,
+                blank: 1,
+                files: 1,
+                functions: 1,
+            },
+        );
+
+        let malicious_path = PathBuf::from("/repo/src/<script>alert('xss')</script>.rs");
+        let file =
+            FileInfo::new(malicious_path, 10, 8, 1, 1, false).with_functions(vec![FunctionInfo {
+                name: "<img src=x onerror=alert(1)>".to_string(),
+                line_start: 1,
+                line_end: 5,
+                parameters: vec!["<script>".to_string()],
+                is_async: false,
+                is_method: false,
+                is_class: false,
+                docstring: None,
+                decorators: vec![],
+                complexity: 12,
+            }]);
+
+        let result = ScanResult {
+            files: vec![file],
+            breakdown,
+        };
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("out.html");
+        export_html(&result, &path, &root, true, true, None).unwrap();
+        let contents = std::fs::read_to_string(&path).unwrap();
+
+        // 1. Raw </script> must not appear within the injected JSON payload
+        assert!(
+            !contents.contains("</script>.rs"),
+            "un-escaped </script> tag found in HTML export output"
+        );
+        assert!(
+            contents.contains(r"\u003c/script>.rs"),
+            "expected \\u003c escaped tag in JSON embedding"
+        );
+
+        // 2. Client-side escape helper must be present
+        assert!(contents.contains("function escapeHtml(s)"));
     }
 }

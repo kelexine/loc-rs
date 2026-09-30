@@ -2,7 +2,7 @@
 // extractors/go.rs — Go function extraction via Tree-sitter
 
 use super::Extractor;
-use super::tree_sitter::ast_complexity;
+use super::tree_sitter::ComplexityIndex;
 use crate::models::FunctionInfo;
 use tree_sitter::Node;
 
@@ -11,8 +11,9 @@ pub struct GoExtractor;
 impl Extractor for GoExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
         super::with_parsed_tree(tree_sitter_go::LANGUAGE.into(), content, |tree| {
+            let index = ComplexityIndex::build(tree.root_node(), content.as_bytes());
             let mut functions = Vec::new();
-            traverse(tree.root_node(), content, &mut functions);
+            traverse(tree.root_node(), content, &mut functions, &index);
             functions.sort_by_key(|f| f.line_start);
             functions
         })
@@ -20,26 +21,43 @@ impl Extractor for GoExtractor {
     }
 }
 
-fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>) {
-    let kind = node.kind();
+/// Explicit-stack DFS — see `rust.rs::traverse` for why this is not a
+/// recursive walk: extraction runs on rayon worker threads with 2 MiB stacks.
+fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>, index: &ComplexityIndex) {
+    let mut stack: Vec<Node> = vec![node];
+    let mut children: Vec<Node> = Vec::new();
 
-    if kind == "function_declaration"
-        && let Some(info) = parse_function(node, content, false)
-    {
-        functions.push(info);
-    } else if kind == "method_declaration"
-        && let Some(info) = parse_function(node, content, true)
-    {
-        functions.push(info);
-    }
+    while let Some(node) = stack.pop() {
+        let kind = node.kind();
 
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        traverse(child, content, functions);
+        if kind == "function_declaration"
+            && let Some(info) = parse_function(node, content, false, index)
+        {
+            functions.push(info);
+        } else if kind == "method_declaration"
+            && let Some(info) = parse_function(node, content, true, index)
+        {
+            functions.push(info);
+        }
+
+        children.clear();
+        {
+            let mut cursor = node.walk();
+            children.extend(node.children(&mut cursor));
+        }
+        // Reverse push preserves the pre-order a recursive walk would produce.
+        for &child in children.iter().rev() {
+            stack.push(child);
+        }
     }
 }
 
-fn parse_function(node: Node, content: &str, is_method: bool) -> Option<FunctionInfo> {
+fn parse_function(
+    node: Node,
+    content: &str,
+    is_method: bool,
+    index: &ComplexityIndex,
+) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut params_str = String::new();
 
@@ -66,7 +84,7 @@ fn parse_function(node: Node, content: &str, is_method: bool) -> Option<Function
     let start_line = node.start_position().row + 1;
     let end_line = node.end_position().row + 1;
 
-    let complexity = ast_complexity(node, content.as_bytes());
+    let complexity = index.get(node);
 
     let mut parameters = Vec::new();
     let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');

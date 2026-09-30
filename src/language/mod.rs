@@ -328,6 +328,13 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
         multi: Some(("/*", "*/")),
         supports_nesting: false,
     };
+    // SCSS, Sass (indented) and Less all accept `//` line comments in addition
+    // to `/* */`. Plain CSS does not, so the two families need separate specs.
+    let css_preprocessor_style = CommentSpec {
+        single: Some("//"),
+        multi: Some(("/*", "*/")),
+        supports_nesting: false,
+    };
     let semicolon_style = CommentSpec {
         single: Some(";"),
         multi: None,
@@ -495,7 +502,8 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
             ],
             html_style,
         ),
-        (vec![".css", ".scss", ".sass", ".less"], css_style),
+        (vec![".css"], css_style),
+        (vec![".scss", ".sass", ".less"], css_preprocessor_style),
         (vec![".sql", ".asn1", ".asn"], sql_style),
         (vec![".lua"], lua_style),
         (vec![".hs", ".lhs"], haskell_style),

@@ -297,7 +297,7 @@ pub fn analyze_content_with_spec(
 pub fn analyze_content(content: &str, path: &Path) -> (usize, usize, usize, usize) {
     let spec = path.extension().and_then(|e| e.to_str()).and_then(|e| {
         let len = e.len();
-        if len <= 15 {
+        if e.is_ascii() && len <= 15 {
             let mut buf = [0u8; 16];
             buf[0] = b'.';
             for (i, b) in e.bytes().enumerate() {
@@ -307,7 +307,7 @@ pub fn analyze_content(content: &str, path: &Path) -> (usize, usize, usize, usiz
                 .ok()
                 .and_then(|s| crate::language::COMMENT_REGISTRY.get(s))
         } else {
-            let lower = format!(".{}", e.to_ascii_lowercase());
+            let lower = format!(".{}", e.to_lowercase());
             crate::language::COMMENT_REGISTRY.get(lower.as_str())
         }
     });

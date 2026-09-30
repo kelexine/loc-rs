@@ -141,7 +141,6 @@ pub fn file_to_value(
         "is_binary": fi.is_binary,
         "is_lockfile": fi.is_lockfile,
         "extension": fi.extension(),
-        "last_modified": fi.last_modified.map(|d| d.to_rfc3339()),
     });
 
     if include_functions {
@@ -183,7 +182,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn make_file(path: &str) -> FileInfo {
-        FileInfo::new(PathBuf::from(path), 100, 80, 10, 10, false, None)
+        FileInfo::new(PathBuf::from(path), 100, 80, 10, 10, false)
     }
 
     fn make_result() -> ScanResult {

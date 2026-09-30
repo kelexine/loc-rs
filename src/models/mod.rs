@@ -1,7 +1,6 @@
 // Author: kelexine (https://github.com/kelexine)
 // models.rs — Core data structures for the LOC counter
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -67,8 +66,6 @@ pub struct FileInfo {
     /// excluded from all line-count totals and the extension breakdown.
     #[serde(default)]
     pub is_lockfile: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_modified: Option<DateTime<Utc>>,
     pub functions: Vec<FunctionInfo>,
     /// Embedded language breakdown for multi-language containers (HTML, Jupyter Notebooks).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -86,7 +83,6 @@ impl FileInfo {
         comment: usize,
         blank: usize,
         is_binary: bool,
-        last_modified: Option<DateTime<Utc>>,
     ) -> Self {
         Self {
             path,
@@ -96,7 +92,6 @@ impl FileInfo {
             blank,
             is_binary,
             is_lockfile: false,
-            last_modified,
             functions: Vec::new(),
             embedded: Vec::new(),
             language: None,

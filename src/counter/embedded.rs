@@ -167,9 +167,16 @@ pub fn parse_html_embedded(
     let js_spec = COMMENT_REGISTRY.get(".js");
     let ts_spec = COMMENT_REGISTRY.get(".ts");
     let css_spec = COMMENT_REGISTRY.get(".css");
+    // SCSS/Sass/Less accept `//` line comments; plain CSS does not.
+    let scss_spec = COMMENT_REGISTRY.get(".scss");
 
-    // Process scripts
+    // Process scripts (only multi-line blocks are carved out into separate language chunks;
+    // single-line inline blocks remain part of the container to prevent double-counting).
     for cap in SCRIPT_REGEX.captures_iter(content) {
+        let full = cap.get(0).unwrap().as_str();
+        if !full.contains('\n') {
+            continue;
+        }
         let attrs = cap.name("attrs").map(|m| m.as_str()).unwrap_or("");
         let raw_body = cap.name("body").map(|m| m.as_str()).unwrap_or("");
         let body = trim_tag_newlines(raw_body);
@@ -194,8 +201,13 @@ pub fn parse_html_embedded(
         }
     }
 
-    // Process styles
+    // Process styles (only multi-line blocks are carved out into separate language chunks;
+    // single-line inline blocks remain part of the container to prevent double-counting).
     for cap in STYLE_REGEX.captures_iter(content) {
+        let full = cap.get(0).unwrap().as_str();
+        if !full.contains('\n') {
+            continue;
+        }
         let attrs = cap.name("attrs").map(|m| m.as_str()).unwrap_or("");
         let raw_body = cap.name("body").map(|m| m.as_str()).unwrap_or("");
         let body = trim_tag_newlines(raw_body);
@@ -203,7 +215,8 @@ pub fn parse_html_embedded(
         let is_scss = attrs.contains("lang=\"scss\"") || attrs.contains("lang='scss'");
         let target_ext = if is_scss { "scss" } else { "css" };
 
-        let (t, c, cm, b) = analyze_content_with_spec(body, css_spec);
+        let (t, c, cm, b) =
+            analyze_content_with_spec(body, if is_scss { scss_spec } else { css_spec });
         if t > 0 {
             embedded_chunks.push(EmbeddedChunk {
                 extension: target_ext.to_string(),
@@ -365,5 +378,31 @@ export default {
         assert_eq!(sum_code, phys_c);
         assert_eq!(sum_comment, phys_cm);
         assert_eq!(sum_blank, phys_b);
+    }
+
+    #[test]
+    fn test_single_line_html_script_and_style_no_double_count() {
+        // FIXME #3: Single-line `<script>` or `<style>` blocks must not double-count lines.
+        let html = "<!DOCTYPE html>\n<html>\n<head>\n<script>var x=1;</script>\n</head>\n</html>\n";
+        let (phys_t, phys_c, phys_cm, phys_b, chunks) = parse_html_embedded(html, ".html");
+        assert_eq!(phys_t, 6, "Expected exactly 6 lines, got {}", phys_t);
+        assert_eq!(phys_c, 6);
+        assert_eq!(phys_cm, 0);
+        assert_eq!(phys_b, 0);
+        assert!(
+            chunks.is_empty(),
+            "Single-line scripts remain part of the container"
+        );
+
+        let html_with_style = "<!DOCTYPE html>\n<html>\n<head>\n<style>body { color: red; }</style>\n</head>\n</html>\n";
+        let (phys_t, phys_c, _phys_cm, _phys_b, chunks) =
+            parse_html_embedded(html_with_style, ".html");
+        assert_eq!(
+            phys_t, 6,
+            "Expected exactly 6 lines for single-line style, got {}",
+            phys_t
+        );
+        assert_eq!(phys_c, 6);
+        assert!(chunks.is_empty());
     }
 }

@@ -5,7 +5,6 @@ use std::borrow::Cow;
 use std::path::Path;
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 
 use super::ScanConfig;
 use super::embedded::{
@@ -29,7 +28,7 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
     // in the tree even when -t is specified.
     if crate::language::is_lockfile(path) {
         return Ok(Some(
-            FileInfo::new(path.to_path_buf(), 0, 0, 0, 0, false, None).mark_as_lockfile(),
+            FileInfo::new(path.to_path_buf(), 0, 0, 0, 0, false).mark_as_lockfile(),
         ));
     }
 
@@ -38,8 +37,16 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
         Some(e) => {
             let mut s = String::with_capacity(e.len() + 1);
             s.push('.');
-            for b in e.bytes() {
-                s.push(b.to_ascii_lowercase() as char);
+            if e.is_ascii() {
+                for b in e.bytes() {
+                    s.push(b.to_ascii_lowercase() as char);
+                }
+            } else {
+                for c in e.chars() {
+                    for lc in c.to_lowercase() {
+                        s.push(lc);
+                    }
+                }
             }
             Cow::Owned(s)
         }
@@ -171,17 +178,7 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
         None => (0, 0, 0, 0),
     };
 
-    let last_modified: Option<DateTime<Utc>> = None;
-
-    let mut fi = FileInfo::new(
-        path.to_path_buf(),
-        total,
-        code,
-        comment,
-        blank,
-        is_binary,
-        last_modified,
-    );
+    let mut fi = FileInfo::new(path.to_path_buf(), total, code, comment, blank, is_binary);
 
     let canonical_lang = if let Some(lang) = resolved_lang {
         crate::language::canonical_language_name(lang)
@@ -196,8 +193,23 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
         fi = fi.with_embedded(embedded_chunks);
     }
 
-    if config.extract_functions
+    // Maximum file size for AST function extraction (2 MiB).
+    const MAX_EXTRACTION_FILE_SIZE: usize = 2 * 1024 * 1024;
+    // Maximum single-line length for AST function extraction (10,000 characters).
+    // Minified files with extremely long lines cause massive parse/AST overhead.
+    const MAX_EXTRACTION_LINE_LENGTH: usize = 10_000;
+
+    let should_extract = config.extract_functions
         && !is_binary
+        && content
+            .as_ref()
+            .map(|s| {
+                s.len() <= MAX_EXTRACTION_FILE_SIZE
+                    && !s.lines().any(|l| l.len() > MAX_EXTRACTION_LINE_LENGTH)
+            })
+            .unwrap_or(false);
+
+    if should_extract
         && let Some(ref s) = content
         && let Some(extractor) = extractors::get_extractor(path)
     {
@@ -383,5 +395,103 @@ pub fn is_binary_file(path: &Path) -> bool {
     match std::fs::read(path) {
         Ok(buf) => is_binary_buffer(&buf),
         Err(_) => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::locignore::LocIgnore;
+    use std::collections::HashSet;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_non_ascii_extension_lowercasing() {
+        let dir = tempdir().unwrap();
+        // Cyrillic uppercase extension .ТЕСТ -> lowercase .тест
+        let file_path = dir.path().join("code.ТЕСТ");
+        fs::write(&file_path, "hello world\nline 2\n").unwrap();
+
+        let mut allowed = HashSet::new();
+        allowed.insert(".тест".to_string());
+
+        let config = ScanConfig {
+            target_dir: dir.path().to_path_buf(),
+            target_paths: vec![dir.path().to_path_buf()],
+            allowed_extensions: Some(allowed),
+            warn_size: None,
+            parallel: false,
+            extract_functions: false,
+            locignore: LocIgnore::build(dir.path()),
+            include_hidden: false,
+        };
+
+        let result = process_file(&file_path, &config).unwrap();
+        assert!(
+            result.is_some(),
+            "Uppercase non-ASCII extension should match lowercase allowed extension"
+        );
+        let info = result.unwrap();
+        assert_eq!(info.code, 2);
+    }
+
+    #[test]
+    fn test_extraction_skipped_for_minified_lines() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("bundle.min.js");
+        // Line with > 10,000 characters
+        let long_line = format!(
+            "function minified() {{ let s = '{}'; }}\n",
+            "x".repeat(12_000)
+        );
+        fs::write(&file_path, &long_line).unwrap();
+
+        let config = ScanConfig {
+            target_dir: dir.path().to_path_buf(),
+            target_paths: vec![dir.path().to_path_buf()],
+            allowed_extensions: None,
+            warn_size: None,
+            parallel: false,
+            extract_functions: true,
+            locignore: LocIgnore::empty(),
+            include_hidden: false,
+        };
+
+        let result = process_file(&file_path, &config).unwrap();
+        assert!(result.is_some());
+        let info = result.unwrap();
+        assert_eq!(info.code, 1);
+        // Function extraction should be skipped due to minified line guard
+        assert_eq!(info.function_count(), 0);
+    }
+
+    #[test]
+    fn test_extraction_skipped_for_files_exceeding_size_cap() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("huge.py");
+        // 2.1 MiB file (exceeds 2 MiB cap)
+        let chunk = "def normal_fn():\n    pass\n";
+        let repeat_count = (2 * 1024 * 1024 / chunk.len()) + 100;
+        let content = chunk.repeat(repeat_count);
+        fs::write(&file_path, &content).unwrap();
+
+        let config = ScanConfig {
+            target_dir: dir.path().to_path_buf(),
+            target_paths: vec![dir.path().to_path_buf()],
+            allowed_extensions: None,
+            warn_size: None,
+            parallel: false,
+            extract_functions: true,
+            locignore: LocIgnore::empty(),
+            include_hidden: false,
+        };
+
+        let result = process_file(&file_path, &config).unwrap();
+        assert!(result.is_some());
+        let info = result.unwrap();
+        assert!(info.code > 0);
+        // Function extraction should be skipped due to size cap
+        assert_eq!(info.function_count(), 0);
     }
 }

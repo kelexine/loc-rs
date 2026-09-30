@@ -5,6 +5,34 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-30
+
+### Removed (Breaking)
+- Completely removed vestigial git integration surface: deleted the `--git-dates` CLI flag, dropped `last_modified` from internal data models (`FileInfo`), and removed the unused column from CSV, TSV, JSON, and HTML exports.
+- Deleted `src/counter/git.rs` and removed git integration claim from the crate description.
+
+### Fixed
+- Fixed UTF-8 boundary slicing in path truncation (`src/display/mod.rs`), preventing hard runtime aborts on non-ASCII paths (e.g. `ééé.rs`, `日本語.rs`) under `--func-analysis`.
+- Fixed HTML report markup injection (XSS): escaped `\u003c` in serialized JSON payloads to prevent script breakout and added HTML entity escaping via `escapeHtml()` in the client template for filenames, paths, and function signatures (`src/export/html.rs`).
+- Fixed line double-counting for single-line HTML `<script>` and `<style>` blocks (`src/counter/embedded.rs`).
+- Fixed comment classification for SCSS/Sass/Less by introducing `css_preprocessor_style` recognizing `//` line comments in addition to `/* */` (`src/language/mod.rs`).
+- Fixed ignore pattern evaluation order: implemented `rule_id` ordered matching with last-match-wins semantics in `LocIgnore` matching standard `git check-ignore` behavior (`src/locignore/mod.rs`).
+- Fixed notebook breakdown display: embedded chunks now increment language file counts, and pure 0-line container rows are omitted from the breakdown table (`src/counter/mod.rs`, `src/display/mod.rs`, `src/export/tsv.rs`).
+- Fixed non-ASCII extension lowercasing: use Unicode-aware `char::to_lowercase` instead of ASCII-only transforms (`src/counter/process.rs`, `src/counter/lines.rs`).
+- Fixed truncated doc comment on `resolve_output_mode_with` (`src/agent/mod.rs`).
+- Corrected `docs/ARCHITECTURE.md` to accurately document shared Tree-sitter AST complexity.
+
+### Performance
+- Single-pass cyclomatic complexity: replaced $O(N \times \text{depth})$ AST re-walks with an iterative post-order `ComplexityIndex` in `src/extractors/tree_sitter.rs`, eliminating quadratic slowdown on deeply nested functions across all 9 language extractors.
+- Extraction size and line guards: added `MAX_EXTRACTION_FILE_SIZE` (2 MiB) and `MAX_EXTRACTION_LINE_LENGTH` (10,000 chars) in `src/counter/process.rs`, skipping AST extraction for oversized or minified files while preserving raw line counts.
+- AST parse timeout: introduced a 2-second timeout via `tree_sitter::ParseOptions::progress_callback` in `src/extractors/mod.rs` to guarantee scans never stall indefinitely on pathological inputs.
+- Large-file-first parallel scheduling: sorted files descending by size before distributing to worker threads in `run_scan`, eliminating tail latency where one large file straggles on a single thread.
+- File-only scan fast-path: bypassed recursive `LocIgnore::build` directory walk when scan targets contain only individual files.
+- Threading threshold: established `PARALLEL_FILE_THRESHOLD = 50` to eliminate parallel scheduling overhead for small file sets.
+
+### Added
+- Expanded Criterion benchmark suite: added `extractors/nested` (JavaScript depth sweeps 50, 200, 500) and `extractors/minified_guard` (minified one-liner skip benchmark) in `benches/groups/extractors.rs`.
+
 ## [0.2.21] - 2026-09-26
 
 ### Removed

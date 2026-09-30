@@ -24,7 +24,6 @@ This document explains how `loc-rs` is organized and how data flows through the 
   - `counter/lines.rs`: Byte and string line analysis, stateful quote tracking, string comment masking, nested block comment tracking.
   - `counter/embedded.rs`: HTML `<script>`/`<style>` extraction and Jupyter notebook (`.ipynb`) cell JSON extraction.
   - `counter/discovery.rs`: Filesystem directory walking with ignore rules.
-  - `counter/git.rs`: Fast-path git worktree detection (parent-walk checking for .git).
 - `src/agent/mod.rs`
   - Environment-based auto-detection of AI coding agents (Claude Code, Gemini CLI, etc.).
   - Orchestration of token-efficient "Agent Mode" (TSV) output.
@@ -49,7 +48,7 @@ This document explains how `loc-rs` is organized and how data flows through the 
 - Extraction is opt-in (`-f` or `--func-analysis`, or config default).
 - Extractors parse ASTs via Tree-sitter grammar crates.
 - Output includes name, line range, method/class flags, and complexity estimate.
-- Complexity is a keyword-based cyclomatic approximation used consistently across extractors.
+- Complexity is a cyclomatic approximation computed over the Tree-sitter AST, shared by every language extractor via `extractors::tree_sitter::ast_complexity`.
 
 ## Output Model & Agent Integration
 

@@ -1,10 +1,10 @@
 [package]
 name = "loc-rs"
-version = "0.2.21"
+version = "0.3.0"
 rust-version = "1.92.0"
 edition = "2024"
 authors = ["kelexine <https://github.com/kelexine>"]
-description = "Advanced Lines of Code counter with function extraction, git integration, and parallel processing"
+description = "Advanced Lines of Code counter with function extraction, complexity analysis, and parallel processing"
 license = "MIT"
 repository = "https://github.com/kelexine/loc-rs"
 readme = "README.md"

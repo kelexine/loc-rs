@@ -75,7 +75,20 @@ where
         if parser.set_language(&language).is_err() {
             return None;
         }
-        parser.parse(content, None).map(f)
+
+        let bytes = content.as_bytes();
+        let len = bytes.len();
+        let mut read_cb = |i: usize, _| if i < len { &bytes[i..] } else { &[] };
+
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(2);
+        let mut progress_cb =
+            |_state: &::tree_sitter::ParseState| -> bool { start.elapsed() >= timeout };
+
+        let options = ::tree_sitter::ParseOptions::new().progress_callback(&mut progress_cb);
+        parser
+            .parse_with_options(&mut read_cb, None, Some(options))
+            .map(f)
     })
 }
 

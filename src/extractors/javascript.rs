@@ -2,7 +2,7 @@
 // extractors/javascript.rs — JavaScript/TypeScript function/class extraction via Tree-sitter
 
 use super::Extractor;
-use super::tree_sitter::ast_complexity;
+use super::tree_sitter::ComplexityIndex;
 use crate::models::FunctionInfo;
 use tree_sitter::{Language, Node};
 
@@ -19,8 +19,9 @@ impl JavascriptExtractor {
 impl Extractor for JavascriptExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
         super::with_parsed_tree(self.language.clone(), content, |tree| {
+            let index = ComplexityIndex::build(tree.root_node(), content.as_bytes());
             let mut functions = Vec::new();
-            traverse(tree.root_node(), content, &mut functions, false);
+            traverse(tree.root_node(), content, &mut functions, false, &index);
             functions.retain(|f| f.name != "?");
             functions.sort_by_key(|f| f.line_start);
             functions
@@ -29,44 +30,72 @@ impl Extractor for JavascriptExtractor {
     }
 }
 
-fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>, in_class: bool) {
-    let kind = node.kind();
+/// Explicit-stack DFS — see `rust.rs::traverse` for why this is not a
+/// recursive walk: extraction runs on rayon worker threads with 2 MiB stacks.
+fn traverse(
+    node: Node,
+    content: &str,
+    functions: &mut Vec<FunctionInfo>,
+    in_class: bool,
+    index: &ComplexityIndex,
+) {
+    let mut stack: Vec<(Node, bool)> = vec![(node, in_class)];
+    let mut children: Vec<Node> = Vec::new();
 
-    if matches!(
-        kind,
-        "function_declaration"
-            | "generator_function_declaration"
-            | "method_definition"
-            | "arrow_function"
-            | "function"
-    ) {
-        if let Some(info) = parse_function(node, content, in_class || kind == "method_definition") {
-            functions.push(info);
-        }
-    } else if kind == "class_declaration" || kind == "class" {
-        if let Some(info) = parse_class(node, content) {
-            functions.push(info);
-        }
-    } else if kind == "lexical_declaration" || kind == "variable_declaration" {
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "variable_declarator"
-                && let Some(info) = parse_variable_declarator(child, content)
-            {
+    while let Some((node, in_class)) = stack.pop() {
+        let kind = node.kind();
+
+        if matches!(
+            kind,
+            "function_declaration"
+                | "generator_function_declaration"
+                | "method_definition"
+                | "arrow_function"
+                | "function"
+        ) {
+            if let Some(info) = parse_function(
+                node,
+                content,
+                in_class || kind == "method_definition",
+                index,
+            ) {
                 functions.push(info);
             }
+        } else if kind == "class_declaration" || kind == "class" {
+            if let Some(info) = parse_class(node, content) {
+                functions.push(info);
+            }
+        } else if kind == "lexical_declaration" || kind == "variable_declaration" {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "variable_declarator"
+                    && let Some(info) = parse_variable_declarator(child, content, index)
+                {
+                    functions.push(info);
+                }
+            }
         }
-    }
 
-    let is_class_body = kind == "class_body";
+        let is_class_body = kind == "class_body";
 
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        traverse(child, content, functions, in_class || is_class_body);
+        children.clear();
+        {
+            let mut cursor = node.walk();
+            children.extend(node.children(&mut cursor));
+        }
+        // Reverse push preserves the pre-order a recursive walk would produce.
+        for &child in children.iter().rev() {
+            stack.push((child, in_class || is_class_body));
+        }
     }
 }
 
-fn parse_function(node: Node, content: &str, is_method: bool) -> Option<FunctionInfo> {
+fn parse_function(
+    node: Node,
+    content: &str,
+    is_method: bool,
+    index: &ComplexityIndex,
+) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut params_str = String::new();
 
@@ -96,7 +125,7 @@ fn parse_function(node: Node, content: &str, is_method: bool) -> Option<Function
     let start_line = node.start_position().row + 1;
     let end_line = node.end_position().row + 1;
 
-    let complexity = ast_complexity(node, content.as_bytes());
+    let complexity = index.get(node);
 
     let mut parameters = Vec::new();
     let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');
@@ -123,7 +152,11 @@ fn parse_function(node: Node, content: &str, is_method: bool) -> Option<Function
     })
 }
 
-fn parse_variable_declarator(node: Node, content: &str) -> Option<FunctionInfo> {
+fn parse_variable_declarator(
+    node: Node,
+    content: &str,
+    index: &ComplexityIndex,
+) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut func_node = None;
 
@@ -143,7 +176,7 @@ fn parse_variable_declarator(node: Node, content: &str) -> Option<FunctionInfo> 
     if let Some(fnode) = func_node
         && !name.is_empty()
     {
-        let mut info = parse_function(fnode, content, false)?;
+        let mut info = parse_function(fnode, content, false, index)?;
         info.name = name;
         let text = fnode.utf8_text(content.as_bytes()).unwrap_or("");
         if text.starts_with("async ") {

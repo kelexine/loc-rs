@@ -2,7 +2,7 @@
 // extractors/java.rs — Java/Kotlin/C# function extraction via Tree-sitter
 
 use super::Extractor;
-use super::tree_sitter::ast_complexity;
+use super::tree_sitter::ComplexityIndex;
 use crate::models::FunctionInfo;
 use tree_sitter::Node;
 
@@ -11,8 +11,9 @@ pub struct JavaExtractor;
 impl Extractor for JavaExtractor {
     fn extract(&self, content: &str) -> Vec<FunctionInfo> {
         super::with_parsed_tree(tree_sitter_java::LANGUAGE.into(), content, |tree| {
+            let index = ComplexityIndex::build(tree.root_node(), content.as_bytes());
             let mut functions = Vec::new();
-            traverse(tree.root_node(), content, &mut functions, false);
+            traverse(tree.root_node(), content, &mut functions, false, &index);
             functions.sort_by_key(|f| f.line_start);
             functions
         })
@@ -20,30 +21,53 @@ impl Extractor for JavaExtractor {
     }
 }
 
-fn traverse(node: Node, content: &str, functions: &mut Vec<FunctionInfo>, in_class: bool) {
-    let kind = node.kind();
+/// Explicit-stack DFS — see `rust.rs::traverse` for why this is not a
+/// recursive walk: extraction runs on rayon worker threads with 2 MiB stacks.
+fn traverse(
+    node: Node,
+    content: &str,
+    functions: &mut Vec<FunctionInfo>,
+    in_class: bool,
+    index: &ComplexityIndex,
+) {
+    let mut stack: Vec<(Node, bool)> = vec![(node, in_class)];
+    let mut children: Vec<Node> = Vec::new();
 
-    if kind == "method_declaration" || kind == "constructor_declaration" {
-        if let Some(info) = parse_method(node, content, in_class) {
+    while let Some((node, in_class)) = stack.pop() {
+        let kind = node.kind();
+
+        if kind == "method_declaration" || kind == "constructor_declaration" {
+            if let Some(info) = parse_method(node, content, in_class, index) {
+                functions.push(info);
+            }
+        } else if (kind == "class_declaration"
+            || kind == "record_declaration"
+            || kind == "interface_declaration")
+            && let Some(info) = parse_class(node, content)
+        {
             functions.push(info);
         }
-    } else if (kind == "class_declaration"
-        || kind == "record_declaration"
-        || kind == "interface_declaration")
-        && let Some(info) = parse_class(node, content)
-    {
-        functions.push(info);
-    }
 
-    let is_class_body = kind == "class_body";
+        let is_class_body = kind == "class_body";
 
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        traverse(child, content, functions, in_class || is_class_body);
+        children.clear();
+        {
+            let mut cursor = node.walk();
+            children.extend(node.children(&mut cursor));
+        }
+        // Reverse push preserves the pre-order a recursive walk would produce.
+        for &child in children.iter().rev() {
+            stack.push((child, in_class || is_class_body));
+        }
     }
 }
 
-fn parse_method(node: Node, content: &str, is_method: bool) -> Option<FunctionInfo> {
+fn parse_method(
+    node: Node,
+    content: &str,
+    is_method: bool,
+    index: &ComplexityIndex,
+) -> Option<FunctionInfo> {
     let mut name = String::new();
     let mut params_str = String::new();
 
@@ -70,7 +94,7 @@ fn parse_method(node: Node, content: &str, is_method: bool) -> Option<FunctionIn
     let start_line = node.start_position().row + 1;
     let end_line = node.end_position().row + 1;
 
-    let complexity = ast_complexity(node, content.as_bytes());
+    let complexity = index.get(node);
 
     let mut parameters = Vec::new();
     let trimmed_params = params_str.trim_start_matches('(').trim_end_matches(')');

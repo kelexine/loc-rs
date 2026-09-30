@@ -22,7 +22,7 @@ pub enum OutputFormat {
 
 /// loc-rs — Advanced Lines of Code counter
 ///
-/// A fast, feature-rich LOC tool with function extraction, git integration,
+/// A fast, feature-rich LOC tool with function extraction,
 /// cascading .gitignore support, canonical language breakdown, and multi-format export.
 /// When run inside a coding agent (`CLAUDECODE`, `AI_AGENT`, `CODEX_SANDBOX`, … are set),
 /// output switches to agent mode automatically — no flag needed.
@@ -113,10 +113,6 @@ pub struct Args {
     /// Emit a warning for files that exceed this line count
     #[arg(long = "warn-size", value_name = "LINES")]
     pub warn_size: Option<usize>,
-
-    /// [DEPRECATED] Previously used for git history last-modified dates; disabled to prevent history traversal hangs.
-    #[arg(long = "git-dates", hide = true)]
-    pub git_dates: bool,
 
     /// Disable parallel file processing
     #[arg(long = "no-parallel")]
