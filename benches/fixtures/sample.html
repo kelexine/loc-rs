@@ -1,0 +1,40 @@
+<!-- Author: kelexine <https://github.com/kelexine> -->
+<!-- Benchmark fixture: HTML with embedded script and style blocks. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Bench sample</title>
+    <style>
+        /* layout */
+        body { margin: 0; font-family: sans-serif; }
+
+        .card { padding: 1rem; border: 1px solid #ccc; }
+        .card:hover { background: #f5f5f5; }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <h1 id="title">Hello</h1>
+        <button id="go">Go</button>
+    </main>
+
+    <script>
+        // wire up the button
+        const button = document.getElementById('go');
+        let clicks = 0;
+
+        button.addEventListener('click', () => {
+            clicks += 1;
+            document.getElementById('title').textContent = `clicked ${clicks} // times`;
+        });
+    </script>
+
+    <script lang="ts">
+        /* typed helper */
+        function clamp(n: number, lo: number, hi: number): number {
+            return Math.min(Math.max(n, lo), hi);
+        }
+    </script>
+</body>
+</html>

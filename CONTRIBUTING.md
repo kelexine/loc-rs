@@ -30,6 +30,36 @@ cargo run -- -d
 cargo run -- -d -f
 ```
 
+## Benchmarks
+
+Criterion benchmarks live in `benches/`. Run them when touching anything on the
+scan path (tokenizer, encoding, extractors, discovery, `run_scan`).
+
+```bash
+cargo bench                                    # everything
+cargo bench --bench loc_bench -- lines/        # one group (name prefix filter)
+cargo bench --bench loc_bench -- --test        # smoke pass: run each bench once
+cargo bench --bench loc_bench -- --save-baseline before   # then compare with
+cargo bench --bench loc_bench -- --baseline before        # after your change
+```
+
+Groups: `lines`, `encoding`, `embedded`, `extractors`, `parse`, `discovery`, `pipeline`, `e2e`.
+
+Rules for benchmark code:
+
+- Inputs come from the committed files in `benches/fixtures/`; larger inputs are
+  built by repeating them (`benches/support/`). Add a new language by adding a
+  fixture and one entry in `benches/support/fixtures.rs`.
+- Every fixture starts and ends in a neutral lexer state (no unterminated block
+  comment or string) so repetition scales counts linearly. Repeated copies must
+  also parse without syntax errors (for example PHP closes its tag with `?>`);
+  the `parse` group asserts this, because error recovery skews timings.
+- Every bench asserts its setup (expected counts, classification) before timing,
+  so a broken input fails loudly instead of producing a meaningless number.
+- `benches/support/` must not depend on `loc-rs` internals; it is validated by
+  `tests/bench_support.rs` (`cargo test`).
+- Keep `cargo clippy --all-targets --all-features` clean; it covers `benches/`.
+
 ## Project Conventions
 
 - Keep behavior changes covered by tests.

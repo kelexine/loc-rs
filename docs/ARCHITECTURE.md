@@ -79,3 +79,14 @@ The output system operates on a prioritized state machine resolving into four fo
   - `tests/cli.rs`
   - `tests/core.rs`
   - `tests/export.rs`
+  - `tests/bench_support.rs` (validates the benchmark fixture/corpus builders against the real binary)
+
+## Benchmarks
+
+Criterion suite in `benches/` (`harness = false`, target `loc_bench`).
+
+- **Binary-only crate**: `loc-rs` has no library target, so `benches/main.rs` mounts the scan-path modules (`cli`, `config`, `counter`, `extractors`, `language`, `locignore`, `models`) directly from `src/` with `#[path]`. `src/` is untouched and benches run the exact shipped code. Presentation modules (`agent`, `display`, `export`) are not mounted.
+- **Groups** (`benches/groups/`, one module each): `lines` (tokenizer), `encoding` (detect + decode), `embedded` (HTML/Jupyter), `extractors` (tree-sitter), `parse` (phase split: parse vs. complexity walk vs. bare-DFS floor), `discovery` (`LocIgnore` + traversal), `pipeline` (`run_scan`), `e2e` (spawns the `loc` binary via `CARGO_BIN_EXE_loc`).
+- **Inputs** (`benches/support/`): committed language samples in `benches/fixtures/`, scaled deterministically by repetition; `corpus` materialises on-disk trees (sources plus pruned dirs, lockfile, binary asset, ignore profiles) in a `TempDir`; `encodings` derives BOM/BOM-less UTF-8/16/32, invalid UTF-8 and binary variants.
+- **Guards**: each bench asserts its setup before timing (entry counts, encoding classification, line partitioning), and `e2e` isolates the config dir so user config cannot skew results.
+- **Note**: Cargo compiles bench targets with `cfg(test)`, so the mounted modules' unit-test blocks are compiled too; `benches/main.rs` allows the resulting unused imports for that crate only.

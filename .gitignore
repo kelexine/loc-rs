@@ -15,5 +15,9 @@ Cargo.lock
 *.jsonl
 *.csv
 
+# Committed benchmark fixtures are inputs, not test outputs
+!/benches/fixtures/
+!/benches/fixtures/**
+
 # Environment
 .env
