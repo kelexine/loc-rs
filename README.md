@@ -231,8 +231,32 @@ snapshots
 | `glsl` | `GLSL` | `.glsl` `.vert` `.frag` `.geom` `.comp` `.hlsl` `.wgsl` |
 | `protobuf` | `Protobuf` | `.proto` |
 | `graphql` | `GraphQL` | `.graphql` `.gql` |
+| `android-init` / `rc` | `Android Init RC` | `.rc` `init.rc` `ueventd.rc` `init.*.rc` |
+| `android-properties` / `prop` | `Android Properties` | `.prop` `build.prop` `default.prop` `system.prop` |
+| `selinux` / `te` | `SELinux Policy` | `.te` `.fc` `file_contexts` `*_contexts` `sepolicy` |
+| `systemd` / `service` | `Systemd Unit` | `.service` `.socket` `.target` `.timer` `.mount` `.automount` `.swap` `.path` `.slice` `.scope` |
+| `dotenv` / `env` | `Dotenv` | `.env` `.env.*` |
+| `udev-rules` | `Udev Rules` | `.rules` |
+| `desktop-entry` | `Desktop Entry` | `.desktop` `.directory` |
+| `hcl` / `tf` / `terraform` | `Terraform / HCL` | `.tf` `.tfvars` `.hcl` |
+| `nix` | `Nix` | `.nix` |
+| `powershell` / `ps1` / `pwsh` | `PowerShell` | `.ps1` `.psm1` `.psd1` |
+| `batch` / `bat` | `Batch` | `.bat` `.cmd` |
+| `verilog` / `sv` | `Verilog` | `.sv` `.svh` `.vh` |
+| `vhdl` / `vhd` | `VHDL` | `.vhd` `.vhdl` |
+| `typst` / `typ` | `Typst` | `.typ` |
+| `asciidoc` / `adoc` | `AsciiDoc` | `.adoc` `.asciidoc` |
+| `jinja` / `j2` | `Jinja` | `.j2` `.jinja` `.jinja2` `.twig` |
+| `handlebars` / `hbs` | `Handlebars` | `.hbs` `.handlebars` `.mustache` |
+| `tcl` | `Tcl` | `.tcl` `.tk` |
+| `applescript` | `AppleScript` | `.applescript` `.scpt` |
+| `lisp` | `Lisp` | `.lisp` `.lsp` `.cl` |
+| `scheme` | `Scheme` | `.scm` `.ss` `.rkt` |
+| `d` | `D` | `.d` `.di` |
+| `org` | `Org` | `.org` |
+| `text` | `Plain Text` | `.txt` `.text` `LICENSE` `COPYING` `AUTHORS` `NOTICE` `CHANGELOG` `README` |
 
-Language aliases are supported for common names such as `py`, `js`, `ts`, `tsx`, `rs`, `c`, `h`, `cpp`, `hpp`, `dts`, `dtsi`, `rb`, `sh`, `bash`, `zsh`, `md`, `yml`, `kt`, `hs`, `c++`, `cxx`, `cc`, and `cs`.
+Language aliases are supported for common names such as `py`, `js`, `ts`, `tsx`, `rs`, `c`, `h`, `cpp`, `hpp`, `dts`, `dtsi`, `rb`, `sh`, `bash`, `zsh`, `md`, `yml`, `kt`, `hs`, `c++`, `cxx`, `cc`, `cs`, `rc`, `systemd`, `service`, `tf`, `terraform`, `nix`, `ps1`, `pwsh`, `bat`, `sv`, `vhd`, and `typ`.
 
 ---
 

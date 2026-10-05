@@ -104,6 +104,43 @@ pub static LANGUAGE_MAP: Lazy<HashMap<&'static str, Vec<&'static str>>> = Lazy::
     m.insert("vim", vec![".vim"]);
     m.insert("text", vec![".txt", ".text"]);
     m.insert("dws", vec![".dws"]);
+    m.insert("android-init", vec![".rc"]);
+    m.insert(
+        "systemd",
+        vec![
+            ".service",
+            ".socket",
+            ".target",
+            ".timer",
+            ".mount",
+            ".automount",
+            ".swap",
+            ".path",
+            ".slice",
+            ".scope",
+        ],
+    );
+    m.insert("selinux", vec![".te", ".fc"]);
+    m.insert("android-properties", vec![".prop"]);
+    m.insert("dotenv", vec![".env"]);
+    m.insert("udev-rules", vec![".rules"]);
+    m.insert("desktop-entry", vec![".desktop", ".directory"]);
+    m.insert("hcl", vec![".tf", ".tfvars", ".hcl"]);
+    m.insert("nix", vec![".nix"]);
+    m.insert("powershell", vec![".ps1", ".psm1", ".psd1"]);
+    m.insert("batch", vec![".bat", ".cmd"]);
+    m.insert("verilog", vec![".sv", ".svh", ".vh"]);
+    m.insert("vhdl", vec![".vhd", ".vhdl"]);
+    m.insert("typst", vec![".typ"]);
+    m.insert("asciidoc", vec![".adoc", ".asciidoc"]);
+    m.insert("jinja", vec![".j2", ".jinja", ".jinja2", ".twig"]);
+    m.insert("handlebars", vec![".hbs", ".handlebars", ".mustache"]);
+    m.insert("tcl", vec![".tcl", ".tk"]);
+    m.insert("applescript", vec![".applescript", ".scpt"]);
+    m.insert("lisp", vec![".lisp", ".lsp", ".cl"]);
+    m.insert("scheme", vec![".scm", ".ss", ".rkt"]);
+    m.insert("d", vec![".d", ".di"]);
+    m.insert("org", vec![".org"]);
     m
 });
 
@@ -154,6 +191,33 @@ static ALIASES: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     m.insert("cfg", "config");
     m.insert("ini", "config");
     m.insert("txt", "text");
+    m.insert("rc", "android-init");
+    m.insert("init", "android-init");
+    m.insert("initrc", "android-init");
+    m.insert("systemd", "systemd");
+    m.insert("service", "systemd");
+    m.insert("te", "selinux");
+    m.insert("selinux", "selinux");
+    m.insert("prop", "android-properties");
+    m.insert("properties", "android-properties");
+    m.insert("env", "dotenv");
+    m.insert("tf", "hcl");
+    m.insert("terraform", "hcl");
+    m.insert("nix", "nix");
+    m.insert("ps1", "powershell");
+    m.insert("pwsh", "powershell");
+    m.insert("bat", "batch");
+    m.insert("cmd", "batch");
+    m.insert("sv", "verilog");
+    m.insert("vhd", "vhdl");
+    m.insert("typ", "typst");
+    m.insert("adoc", "asciidoc");
+    m.insert("j2", "jinja");
+    m.insert("hbs", "handlebars");
+    m.insert("tcl", "tcl");
+    m.insert("scm", "scheme");
+    m.insert("rkt", "scheme");
+    m.insert("lsp", "lisp");
     m
 });
 
@@ -255,7 +319,8 @@ pub static BINARY_EXTENSIONS: Lazy<std::collections::HashSet<&'static str>> = La
         ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".pdf", ".zip", ".tar", ".gz", ".bz2",
         ".xz", ".rar", ".7z", ".exe", ".dll", ".so", ".dylib", ".bin", ".wasm", ".mp3", ".mp4",
         ".avi", ".mov", ".wav", ".flac", ".ogg", ".ttf", ".otf", ".woff", ".woff2", ".eot", ".pyc",
-        ".pyo", ".class", ".o", ".a", ".lib", ".db", ".sqlite", ".sqlite3",
+        ".pyo", ".class", ".o", ".a", ".lib", ".db", ".sqlite", ".sqlite3", ".apk", ".dex",
+        ".odex", ".vdex", ".dtb", ".ko", ".jar",
     ]
     .iter()
     .copied()
@@ -386,6 +451,46 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
         multi: Some(("/*", "*/")),
         supports_nesting: false,
     };
+    let nix_style = CommentSpec {
+        single: Some("#"),
+        multi: Some(("/*", "*/")),
+        supports_nesting: false,
+    };
+    let powershell_style = CommentSpec {
+        single: Some("#"),
+        multi: Some(("<#", "#>")),
+        supports_nesting: true,
+    };
+    let batch_style = CommentSpec {
+        single: Some("REM "),
+        multi: None,
+        supports_nesting: false,
+    };
+    let asciidoc_style = CommentSpec {
+        single: Some("//"),
+        multi: Some(("////", "////")),
+        supports_nesting: false,
+    };
+    let jinja_style = CommentSpec {
+        single: None,
+        multi: Some(("{#", "#}")),
+        supports_nesting: false,
+    };
+    let handlebars_style = CommentSpec {
+        single: None,
+        multi: Some(("{{!", "}}")),
+        supports_nesting: false,
+    };
+    let applescript_style = CommentSpec {
+        single: Some("--"),
+        multi: Some(("(*", "*)")),
+        supports_nesting: true,
+    };
+    let hcl_style = CommentSpec {
+        single: Some("#"),
+        multi: Some(("/*", "*/")),
+        supports_nesting: false,
+    };
 
     // Mapping
     let mappings = [
@@ -449,10 +554,15 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
                 ".lex",
                 ".ll",
                 ".bp",
+                ".sv",
+                ".svh",
+                ".vh",
+                ".d",
+                ".di",
             ],
             c_style,
         ),
-        (vec![".rs", ".swift"], c_style_nested),
+        (vec![".rs", ".swift", ".typ"], c_style_nested),
         (vec![".py", ".pyw", ".pyi", ".pyx", ".pxd"], py_style),
         (
             vec![
@@ -493,6 +603,26 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
                 ".sed",
                 ".po",
                 ".pot",
+                ".rc",
+                ".service",
+                ".socket",
+                ".target",
+                ".timer",
+                ".mount",
+                ".automount",
+                ".swap",
+                ".path",
+                ".slice",
+                ".scope",
+                ".te",
+                ".fc",
+                ".prop",
+                ".env",
+                ".rules",
+                ".desktop",
+                ".directory",
+                ".tcl",
+                ".tk",
             ],
             bash_style,
         ),
@@ -504,12 +634,15 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
         ),
         (vec![".css"], css_style),
         (vec![".scss", ".sass", ".less"], css_preprocessor_style),
-        (vec![".sql", ".asn1", ".asn"], sql_style),
+        (vec![".sql", ".asn1", ".asn", ".vhd", ".vhdl"], sql_style),
         (vec![".lua"], lua_style),
         (vec![".hs", ".lhs"], haskell_style),
         (vec![".rb"], ruby_style), // Overwrite for block comments
         (
-            vec![".s", ".asm", ".clj", ".cljs", ".cljc", ".edn"],
+            vec![
+                ".s", ".asm", ".clj", ".cljs", ".cljc", ".edn", ".lisp", ".lsp", ".cl", ".scm",
+                ".ss", ".rkt",
+            ],
             semicolon_style,
         ),
         (vec![".ml", ".mli"], ocaml_style),
@@ -524,6 +657,14 @@ pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::ne
         (vec![".rst"], rst_style),
         (vec![".vim"], vim_style),
         (vec![".lds", ".ld"], lds_style),
+        (vec![".nix"], nix_style),
+        (vec![".ps1", ".psm1", ".psd1"], powershell_style),
+        (vec![".bat", ".cmd"], batch_style),
+        (vec![".adoc", ".asciidoc"], asciidoc_style),
+        (vec![".j2", ".jinja", ".jinja2", ".twig"], jinja_style),
+        (vec![".hbs", ".handlebars", ".mustache"], handlebars_style),
+        (vec![".applescript", ".scpt"], applescript_style),
+        (vec![".tf", ".tfvars", ".hcl"], hcl_style),
     ];
 
     for (exts, spec) in mappings {
@@ -668,6 +809,122 @@ pub fn detect_known_filename(path: &std::path::Path) -> Option<KnownFileSpec> {
         });
     }
 
+    if name == "init.rc"
+        || (name.starts_with("init.") && name.ends_with(".rc"))
+        || name == "ueventd.rc"
+        || (name.starts_with("ueventd.") && name.ends_with(".rc"))
+    {
+        return Some(KnownFileSpec {
+            language: "Android Init RC",
+            breakdown_key: "Android Init RC",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == "build.prop"
+        || name == "default.prop"
+        || name == "system.prop"
+        || name == "vendor.prop"
+    {
+        return Some(KnownFileSpec {
+            language: "Android Properties",
+            breakdown_key: "Android Properties",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == "file_contexts"
+        || name == "property_contexts"
+        || name == "service_contexts"
+        || name == "hwservice_contexts"
+        || name == "vndservice_contexts"
+        || name == "sepolicy"
+        || name == "sepolicy.recovery"
+        || (name.ends_with("_contexts") && !name.contains('.'))
+    {
+        return Some(KnownFileSpec {
+            language: "SELinux Policy",
+            breakdown_key: "SELinux Policy",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == "LICENSE"
+        || name == "LICENCE"
+        || name.starts_with("LICENSE-")
+        || name.starts_with("LICENSE_")
+        || name.starts_with("LICENCE-")
+        || name.starts_with("LICENCE_")
+        || name == "COPYING"
+        || name.starts_with("COPYING.")
+        || name == "AUTHORS"
+        || name == "CONTRIBUTORS"
+        || name == "PATENTS"
+        || name == "NOTICE"
+        || name == "CREDITS"
+        || name == "TODO"
+        || name == "CHANGELOG"
+        || name == "NEWS"
+        || name == "HISTORY"
+        || name == "README"
+    {
+        return Some(KnownFileSpec {
+            language: "Plain Text",
+            breakdown_key: "Plain Text",
+            comment_spec: CommentSpec {
+                single: None,
+                multi: None,
+                supports_nesting: false,
+            },
+        });
+    }
+
+    if name == ".env" || name.starts_with(".env.") || name.ends_with(".env") {
+        return Some(KnownFileSpec {
+            language: "Dotenv",
+            breakdown_key: "Dotenv",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == ".gitignore"
+        || name == ".gitattributes"
+        || name == ".gitmodules"
+        || name == ".gitconfig"
+    {
+        return Some(KnownFileSpec {
+            language: "Git Config",
+            breakdown_key: "Git Config",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == ".editorconfig"
+        || name == ".npmignore"
+        || name == ".dockerignore"
+        || name == ".prettierignore"
+        || name == ".eslintignore"
+        || name == ".locignore"
+    {
+        return Some(KnownFileSpec {
+            language: "Config",
+            breakdown_key: "Config",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if name == "rc.local"
+        || name == "rc.sysinit"
+        || name == "rc.shutdown"
+        || name.starts_with("rc.")
+    {
+        return Some(KnownFileSpec {
+            language: "Shell",
+            breakdown_key: "Shell",
+            comment_spec: bash_comment,
+        });
+    }
+
     None
 }
 
@@ -709,11 +966,25 @@ pub fn detect_shebang(first_line: &str) -> Option<KnownFileSpec> {
         || line.contains("fish")
         || line.contains("ksh")
         || line.contains("dash")
+        || line.contains("openrc-run")
+        || line.contains("runscript")
     {
         return Some(KnownFileSpec {
             language: "Shell",
             breakdown_key: "Shell",
             comment_spec: bash_comment,
+        });
+    }
+
+    if line.contains("pwsh") || line.contains("powershell") {
+        return Some(KnownFileSpec {
+            language: "PowerShell",
+            breakdown_key: "PowerShell",
+            comment_spec: CommentSpec {
+                single: Some("#"),
+                multi: Some(("<#", "#>")),
+                supports_nesting: true,
+            },
         });
     }
 
@@ -746,6 +1017,42 @@ pub fn detect_shebang(first_line: &str) -> Option<KnownFileSpec> {
             language: "PHP",
             breakdown_key: "PHP",
             comment_spec: c_comment,
+        });
+    }
+
+    if line.contains("tclsh") || line.contains("wish") {
+        return Some(KnownFileSpec {
+            language: "Tcl",
+            breakdown_key: "Tcl",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if line.contains("awk") {
+        return Some(KnownFileSpec {
+            language: "AWK",
+            breakdown_key: "AWK",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if line.contains("sed") {
+        return Some(KnownFileSpec {
+            language: "Sed",
+            breakdown_key: "Sed",
+            comment_spec: bash_comment,
+        });
+    }
+
+    if line.contains("lua") {
+        return Some(KnownFileSpec {
+            language: "Lua",
+            breakdown_key: "Lua",
+            comment_spec: CommentSpec {
+                single: Some("--"),
+                multi: Some(("--[[", "]]")),
+                supports_nesting: false,
+            },
         });
     }
 
@@ -865,6 +1172,45 @@ pub fn canonical_language_name(input: &str) -> &'static str {
         "md" | "markdown" | "mdx" => "Markdown",
         "ipynb" | "jupyter" => "Jupyter",
 
+        // Android & Mobile
+        "rc" | "android init rc" | "android-init" => "Android Init RC",
+        "prop" | "android properties" | "android-properties" => "Android Properties",
+        "te" | "fc" | "selinux policy" | "selinux" => "SELinux Policy",
+
+        // Init & Service systems
+        "service" | "socket" | "target" | "timer" | "mount" | "automount" | "swap" | "path"
+        | "slice" | "scope" | "systemd unit" | "systemd" => "Systemd Unit",
+
+        // DevOps & Configurations
+        "env" | "dotenv" => "Dotenv",
+        "git config" | "gitconfig" => "Git Config",
+        "rules" | "udev rules" | "udev-rules" => "Udev Rules",
+        "desktop" | "directory" | "desktop entry" | "desktop-entry" => "Desktop Entry",
+        "tf" | "tfvars" | "hcl" | "terraform" => "Terraform / HCL",
+        "nix" => "Nix",
+
+        // Shell & Scripting
+        "ps1" | "psm1" | "psd1" | "powershell" | "pwsh" => "PowerShell",
+        "bat" | "cmd" | "batch" => "Batch",
+        "tcl" | "tk" => "Tcl",
+        "applescript" | "scpt" => "AppleScript",
+
+        // Hardware Description
+        "sv" | "svh" | "vh" | "verilog" | "systemverilog" => "Verilog",
+        "vhd" | "vhdl" => "VHDL",
+
+        // Documentation & Templating
+        "typ" | "typst" => "Typst",
+        "adoc" | "asciidoc" => "AsciiDoc",
+        "j2" | "jinja" | "jinja2" | "twig" => "Jinja",
+        "hbs" | "handlebars" | "mustache" => "Handlebars",
+        "org" => "Org",
+
+        // Languages
+        "lisp" | "lsp" => "Lisp",
+        "scheme" | "ss" | "rkt" => "Scheme",
+        "d" | "di" => "D",
+
         _ => match input {
             "C" => "C",
             "C Header" => "C Header",
@@ -947,6 +1293,30 @@ pub fn canonical_language_name(input: &str) -> &'static str {
             "Jenkinsfile" => "Jenkinsfile",
             "Markdown" => "Markdown",
             "Jupyter" => "Jupyter",
+            "Android Init RC" => "Android Init RC",
+            "Android Properties" => "Android Properties",
+            "SELinux Policy" => "SELinux Policy",
+            "Systemd Unit" => "Systemd Unit",
+            "Dotenv" => "Dotenv",
+            "Git Config" => "Git Config",
+            "Udev Rules" => "Udev Rules",
+            "Desktop Entry" => "Desktop Entry",
+            "Terraform / HCL" => "Terraform / HCL",
+            "Nix" => "Nix",
+            "PowerShell" => "PowerShell",
+            "Batch" => "Batch",
+            "Tcl" => "Tcl",
+            "AppleScript" => "AppleScript",
+            "Verilog" => "Verilog",
+            "VHDL" => "VHDL",
+            "Typst" => "Typst",
+            "AsciiDoc" => "AsciiDoc",
+            "Jinja" => "Jinja",
+            "Handlebars" => "Handlebars",
+            "Org" => "Org",
+            "Lisp" => "Lisp",
+            "Scheme" => "Scheme",
+            "D" => "D",
             _ => "Unknown",
         },
     }
@@ -1146,6 +1516,35 @@ mod tests {
         assert_eq!(jenkins.language, "Jenkinsfile");
         assert_eq!(jenkins.comment_spec.single, Some("//"));
 
+        let init_rc = detect_known_filename(Path::new("init.rc")).unwrap();
+        assert_eq!(init_rc.language, "Android Init RC");
+        assert_eq!(init_rc.breakdown_key, "Android Init RC");
+        assert_eq!(init_rc.comment_spec.single, Some("#"));
+
+        let init_target = detect_known_filename(Path::new("init.mt6765.rc")).unwrap();
+        assert_eq!(init_target.language, "Android Init RC");
+
+        let ueventd = detect_known_filename(Path::new("ueventd.rc")).unwrap();
+        assert_eq!(ueventd.language, "Android Init RC");
+
+        let prop = detect_known_filename(Path::new("build.prop")).unwrap();
+        assert_eq!(prop.language, "Android Properties");
+
+        let selinux_fc = detect_known_filename(Path::new("file_contexts")).unwrap();
+        assert_eq!(selinux_fc.language, "SELinux Policy");
+
+        let license = detect_known_filename(Path::new("LICENSE")).unwrap();
+        assert_eq!(license.language, "Plain Text");
+
+        let dotenv = detect_known_filename(Path::new(".env.local")).unwrap();
+        assert_eq!(dotenv.language, "Dotenv");
+
+        let gitignore = detect_known_filename(Path::new(".gitignore")).unwrap();
+        assert_eq!(gitignore.language, "Git Config");
+
+        let rc_local = detect_known_filename(Path::new("rc.local")).unwrap();
+        assert_eq!(rc_local.language, "Shell");
+
         assert!(detect_known_filename(Path::new("regular_file.rs")).is_none());
     }
 
@@ -1159,6 +1558,14 @@ mod tests {
         let sh = detect_shebang("#!/bin/sh").unwrap();
         assert_eq!(sh.breakdown_key, "Shell");
 
+        let openrc = detect_shebang("#!/sbin/openrc-run").unwrap();
+        assert_eq!(openrc.language, "Shell");
+        assert_eq!(openrc.breakdown_key, "Shell");
+
+        let pwsh = detect_shebang("#!/usr/bin/env pwsh").unwrap();
+        assert_eq!(pwsh.language, "PowerShell");
+        assert_eq!(pwsh.breakdown_key, "PowerShell");
+
         let python = detect_shebang("#!/usr/bin/env python3").unwrap();
         assert_eq!(python.language, "Python");
         assert_eq!(python.breakdown_key, "Python");
@@ -1171,6 +1578,12 @@ mod tests {
         let node = detect_shebang("#!/usr/bin/env node").unwrap();
         assert_eq!(node.language, "JavaScript");
         assert_eq!(node.breakdown_key, "JavaScript");
+
+        let tcl = detect_shebang("#!/usr/bin/tclsh").unwrap();
+        assert_eq!(tcl.language, "Tcl");
+
+        let lua = detect_shebang("#!/usr/bin/lua").unwrap();
+        assert_eq!(lua.language, "Lua");
 
         assert!(detect_shebang("echo 'not a shebang'").is_none());
         assert!(detect_shebang("# plain comment").is_none());
@@ -1188,6 +1601,23 @@ mod tests {
             vec![".f", ".for", ".f90", ".f95", ".f03", ".f08"]
         );
         assert_eq!(resolve_extensions("ocaml"), vec![".ml", ".mli"]);
+        assert_eq!(resolve_extensions("rc"), vec![".rc"]);
+        assert_eq!(resolve_extensions("tf"), vec![".tf", ".tfvars", ".hcl"]);
+        assert_eq!(
+            resolve_extensions("systemd"),
+            vec![
+                ".service",
+                ".socket",
+                ".target",
+                ".timer",
+                ".mount",
+                ".automount",
+                ".swap",
+                ".path",
+                ".slice",
+                ".scope",
+            ]
+        );
 
         assert!(COMMENT_REGISTRY.contains_key(".s"));
         assert!(COMMENT_REGISTRY.contains_key(".ml"));
@@ -1197,6 +1627,15 @@ mod tests {
         assert!(COMMENT_REGISTRY.contains_key(".pas"));
         assert!(COMMENT_REGISTRY.contains_key(".dart"));
         assert!(COMMENT_REGISTRY.contains_key(".proto"));
+        assert!(COMMENT_REGISTRY.contains_key(".rc"));
+        assert!(COMMENT_REGISTRY.contains_key(".service"));
+        assert!(COMMENT_REGISTRY.contains_key(".te"));
+        assert!(COMMENT_REGISTRY.contains_key(".prop"));
+        assert!(COMMENT_REGISTRY.contains_key(".tf"));
+        assert!(COMMENT_REGISTRY.contains_key(".nix"));
+        assert!(COMMENT_REGISTRY.contains_key(".ps1"));
+        assert!(COMMENT_REGISTRY.contains_key(".typ"));
+        assert!(COMMENT_REGISTRY.contains_key(".adoc"));
     }
 
     #[test]
@@ -1211,6 +1650,14 @@ mod tests {
         assert_eq!(canonical_language_name("py"), "Python");
         assert_eq!(canonical_language_name("sh"), "Shell");
         assert_eq!(canonical_language_name("Makefile"), "Makefile");
+        assert_eq!(canonical_language_name("rc"), "Android Init RC");
+        assert_eq!(canonical_language_name("service"), "Systemd Unit");
+        assert_eq!(canonical_language_name("te"), "SELinux Policy");
+        assert_eq!(canonical_language_name("prop"), "Android Properties");
+        assert_eq!(canonical_language_name("tf"), "Terraform / HCL");
+        assert_eq!(canonical_language_name("nix"), "Nix");
+        assert_eq!(canonical_language_name("ps1"), "PowerShell");
+        assert_eq!(canonical_language_name("typ"), "Typst");
         assert_eq!(canonical_language_name("unknown_ext_123"), "Unknown");
         assert_eq!(canonical_language_name(""), "Unknown");
     }

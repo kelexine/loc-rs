@@ -141,6 +141,7 @@ pub fn file_to_value(
         "is_binary": fi.is_binary,
         "is_lockfile": fi.is_lockfile,
         "extension": fi.extension(),
+        "language": fi.language,
     });
 
     if include_functions {

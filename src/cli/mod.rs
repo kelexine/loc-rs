@@ -72,11 +72,14 @@ SUPPORTED LANGUAGES (LOC Counting):
   Shell, Makefile, Kconfig, Config, Dockerfile, CMake, Meson, Bazel,
   JavaScript, TypeScript, TSX, JSX, Vue, Svelte, HTML, CSS, SCSS, Sass, Less,
   JSON, YAML, TOML, XML, SVG, SQL, Protobuf, GraphQL, Coccinelle, Bison, Flex,
-  Linker Script, Android Blueprint, Mediatek DWS, reStructuredText, AWK, Sed,
-  ASN.1, Gettext, Graphviz, TeX, Vim Script, Plain Text, Go, Java,
-  Kotlin, Swift, C#, Ruby, PHP, Perl, Lua, Zig, Nim, OCaml, Erlang, Elixir,
-  Scala, Haskell, Clojure, R, Julia, Dart, Fortran, Pascal, V, Odin, CUDA,
-  GLSL Shaders, Jupyter Notebooks
+  Linker Script, Android Blueprint, Android Init RC, Android Properties,
+  SELinux Policy, Systemd Unit, Dotenv, Git Config, Udev Rules, Desktop Entry,
+  Terraform / HCL, Nix, PowerShell, Batch, Verilog, VHDL, Typst, AsciiDoc,
+  Jinja, Handlebars, Tcl, AppleScript, Lisp, Scheme, D, Org, Mediatek DWS,
+  reStructuredText, AWK, Sed, ASN.1, Gettext, Graphviz, TeX, Vim Script,
+  Plain Text, Go, Java, Kotlin, Swift, C#, Ruby, PHP, Perl, Lua, Zig, Nim,
+  OCaml, Erlang, Elixir, Scala, Haskell, Clojure, R, Julia, Dart, Fortran,
+  Pascal, V, Odin, CUDA, GLSL Shaders, Jupyter Notebooks
 
 FUNCTION EXTRACTION:
   Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#, PHP, Swift, Ruby"

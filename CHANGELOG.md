@@ -5,6 +5,16 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-10-05
+
+### Added
+- Expanded language and configuration support: Android Init RC (`init.rc`, `ueventd.rc`, `*.rc`), Android Properties (`build.prop`, `default.prop`, `system.prop`, `*.prop`), SELinux Policy (`*.te`, `file_contexts`, `*_contexts`, `sepolicy`), Systemd Units (`.service`, `.socket`, `.target`, `.timer`, `.mount`, `.automount`, `.swap`, `.path`, `.slice`, `.scope`), Dotenv (`.env`, `.env.*`), Git Config (`.gitignore`, `.gitattributes`, `.gitmodules`, `.gitconfig`), Udev Rules (`.rules`), Desktop Entries (`.desktop`, `.directory`), Terraform / HCL (`.tf`, `.tfvars`, `.hcl`), Nix (`.nix`), PowerShell (`.ps1`, `.psm1`, `.psd1`), Batch (`.bat`, `.cmd`), Verilog / SystemVerilog (`.sv`, `.svh`, `.vh`), VHDL (`.vhd`, `.vhdl`), Typst (`.typ`), AsciiDoc (`.adoc`, `.asciidoc`), Jinja / Twig (`.j2`, `.jinja`, `.jinja2`, `.twig`), Handlebars / Mustache (`.hbs`, `.handlebars`, `.mustache`), Tcl (`.tcl`, `.tk`), AppleScript (`.applescript`, `.scpt`), Lisp (`.lisp`, `.lsp`, `.cl`), Scheme (`.scm`, `.ss`, `.rkt`), D (`.d`, `.di`), and Org (`.org`).
+- SysVinit & OpenRC service detection: directory-aware classification for extensionless scripts residing in `init.d/` and `rc.d/` directories as `Shell`, and recognition of `#!/sbin/openrc-run` and `#!/sbin/runscript` shebangs.
+- Repository root & metadata file recognition: automatic classification of `LICENSE`, `COPYING`, `AUTHORS`, `CONTRIBUTORS`, `PATENTS`, `NOTICE`, `CREDITS`, `TODO`, `CHANGELOG`, `NEWS`, `HISTORY`, and `README` as `Plain Text`, reducing unnecessary `Unknown` fallbacks for standard prose and documentation assets.
+- Modeline interpreter fallback: automatic detection of Vim (`vim: set ft=...`) and Emacs (`-*- mode: ... -*-`) modelines within the first 3 lines of extensionless text files.
+- Binary extension whitelist: fast-path skipping for Android and kernel binaries (`.apk`, `.dex`, `.odex`, `.vdex`, `.dtb`, `.ko`, `.jar`).
+- JSON export metadata: added `language` field to file objects in JSON outputs.
+
 ## [0.3.0] - 2026-09-30
 
 ### Removed (Breaking)

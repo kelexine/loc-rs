@@ -141,6 +141,54 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
         spec = Some(shebang.comment_spec);
     }
 
+    // 4. Directory context check for extensionless files (e.g. /etc/init.d/service, rc.d/*, pam.d/*)
+    if spec.is_none()
+        && ext_str.is_empty()
+        && let Some(parent) = path
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+    {
+        if parent == "init.d"
+            || parent == "rc.d"
+            || (parent.starts_with("rc") && parent.ends_with(".d"))
+        {
+            resolved_lang = Some("Shell");
+            spec = Some(crate::language::CommentSpec {
+                single: Some("#"),
+                multi: None,
+                supports_nesting: false,
+            });
+        } else if parent == "pam.d" {
+            resolved_lang = Some("Config");
+            spec = Some(crate::language::CommentSpec {
+                single: Some("#"),
+                multi: None,
+                supports_nesting: false,
+            });
+        }
+    }
+
+    // 5. Modeline check for extensionless files (vim: set ft=... or -*- mode: ... -*-)
+    if spec.is_none()
+        && ext_str.is_empty()
+        && let Some(ref s) = content
+    {
+        for line in s.lines().take(3) {
+            if let Some(ft) = extract_modeline_filetype(line) {
+                let canonical = crate::language::canonical_language_name(&ft);
+                if canonical != "Unknown" {
+                    resolved_lang = Some(canonical);
+                    let exts = crate::language::resolve_extensions(&ft);
+                    spec = exts
+                        .iter()
+                        .find_map(|e| crate::language::COMMENT_REGISTRY.get(e.as_str()).copied());
+                    break;
+                }
+            }
+        }
+    }
+
     // Deferred type filter check for extensionless files
     if let Some(allowed) = &config.allowed_extensions
         && ext_str.is_empty()
@@ -494,4 +542,87 @@ mod tests {
         // Function extraction should be skipped due to size cap
         assert_eq!(info.function_count(), 0);
     }
+
+    #[test]
+    fn test_initd_directory_context_detection() {
+        let dir = tempdir().unwrap();
+        let init_dir = dir.path().join("init.d");
+        fs::create_dir_all(&init_dir).unwrap();
+        let svc_path = init_dir.join("myservice");
+        fs::write(&svc_path, "# Init script\nstart() {\n  echo hi\n}\n").unwrap();
+
+        let config = ScanConfig {
+            target_dir: dir.path().to_path_buf(),
+            target_paths: vec![dir.path().to_path_buf()],
+            allowed_extensions: None,
+            warn_size: None,
+            parallel: false,
+            extract_functions: false,
+            locignore: LocIgnore::empty(),
+            include_hidden: false,
+        };
+
+        let result = process_file(&svc_path, &config).unwrap().unwrap();
+        assert_eq!(result.language.as_deref(), Some("Shell"));
+        assert_eq!(result.comment, 1);
+        assert_eq!(result.code, 3);
+    }
+
+    #[test]
+    fn test_modeline_detection() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("custom_script");
+        fs::write(&file_path, "# vim: set ft=python:\nprint('hello')\n").unwrap();
+
+        let config = ScanConfig {
+            target_dir: dir.path().to_path_buf(),
+            target_paths: vec![dir.path().to_path_buf()],
+            allowed_extensions: None,
+            warn_size: None,
+            parallel: false,
+            extract_functions: false,
+            locignore: LocIgnore::empty(),
+            include_hidden: false,
+        };
+
+        let result = process_file(&file_path, &config).unwrap().unwrap();
+        assert_eq!(result.language.as_deref(), Some("Python"));
+        assert_eq!(result.comment, 1);
+        assert_eq!(result.code, 1);
+    }
+}
+
+/// Extract filetype from Vim or Emacs modelines on header lines.
+fn extract_modeline_filetype(line: &str) -> Option<String> {
+    let lower = line.to_ascii_lowercase();
+    if lower.contains("vim:") || lower.contains("vi:") {
+        for token in lower.split_whitespace() {
+            let token = token.trim_matches(|c: char| c == ':' || c == ';');
+            if let Some(ft) = token
+                .strip_prefix("ft=")
+                .or_else(|| token.strip_prefix("filetype="))
+                .or_else(|| token.strip_prefix("syntax="))
+            {
+                let clean = ft.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-');
+                if !clean.is_empty() {
+                    return Some(clean.to_string());
+                }
+            }
+        }
+    }
+    if lower.contains("-*-")
+        && let Some(idx) = lower.find("mode:")
+    {
+        let after = &lower[idx + 5..];
+        if let Some(first_word) = after.split_whitespace().next() {
+            let mode =
+                first_word.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-');
+            let mode = mode.strip_suffix("-mode").unwrap_or(mode);
+            let mode = if mode == "shell-script" { "sh" } else { mode };
+            if !mode.is_empty() {
+                return Some(mode.to_string());
+            }
+        }
+    }
+    None
 }

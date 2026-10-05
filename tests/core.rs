@@ -270,3 +270,109 @@ fn test_locignore_precedence_over_gitignore_in_scan() {
     assert!(paths.iter().any(|p| p.contains("keep.tmp")));
     assert!(!paths.iter().any(|p| p.contains("drop.tmp")));
 }
+
+#[test]
+fn test_android_init_rc_and_properties() {
+    let fixture = make_fixture(&[
+        (
+            "init.rc",
+            "# Android Init\non early-init\n    start ueventd\n\non boot\n    setprop ro.test 1\n",
+        ),
+        (
+            "init.mt6765.rc",
+            "# Target Init\non post-fs\n    mkdir /data/vendor 0771\n",
+        ),
+        (
+            "build.prop",
+            "# Build properties\nro.build.version.release=13\nro.product.model=P50\n",
+        ),
+    ]);
+
+    let out = run_loc(&["--json", fixture.path().to_str().unwrap()]);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+
+    let files = parsed["files"].as_array().unwrap();
+    let init_file = files
+        .iter()
+        .find(|f| f["path"].as_str().unwrap().ends_with("init.rc"))
+        .unwrap();
+    assert_eq!(init_file["language"], "Android Init RC");
+    assert_eq!(init_file["comment"], 1);
+
+    let prop_file = files
+        .iter()
+        .find(|f| f["path"].as_str().unwrap().ends_with("build.prop"))
+        .unwrap();
+    assert_eq!(prop_file["language"], "Android Properties");
+    assert_eq!(prop_file["comment"], 1);
+}
+
+#[test]
+fn test_systemd_and_initd_service_files() {
+    let fixture = make_fixture(&[
+        (
+            "foo.service",
+            "# Systemd unit\n[Unit]\nDescription=Foo\n\n[Service]\nExecStart=/usr/bin/foo\n",
+        ),
+        (
+            "init.d/bar",
+            "# Init.d SysV script\ncase \"$1\" in\n  start)\n    echo starting\n    ;;\nesac\n",
+        ),
+    ]);
+
+    let out = run_loc(&["--json", fixture.path().to_str().unwrap()]);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+
+    let files = parsed["files"].as_array().unwrap();
+    let svc = files
+        .iter()
+        .find(|f| f["path"].as_str().unwrap().ends_with("foo.service"))
+        .unwrap();
+    assert_eq!(svc["language"], "Systemd Unit");
+    assert_eq!(svc["comment"], 1);
+
+    let initd = files
+        .iter()
+        .find(|f| f["path"].as_str().unwrap().ends_with("bar"))
+        .unwrap();
+    assert_eq!(initd["language"], "Shell");
+    assert_eq!(initd["comment"], 1);
+}
+
+#[test]
+fn test_license_and_metadata_files_not_unknown() {
+    let fixture = make_fixture(&[
+        (
+            "LICENSE",
+            "MIT License\nCopyright 2026\nPermission is hereby granted\n",
+        ),
+        (".env.local", "# Secret config\nAPI_KEY=xyz123\nPORT=8080\n"),
+    ]);
+
+    let out = run_loc(&[
+        "--json",
+        "--include-hidden",
+        fixture.path().to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+
+    let files = parsed["files"].as_array().unwrap();
+    let lic = files
+        .iter()
+        .find(|f| f["path"].as_str().unwrap().ends_with("LICENSE"))
+        .unwrap();
+    assert_eq!(lic["language"], "Plain Text");
+
+    let env = files
+        .iter()
+        .find(|f| f["path"].as_str().unwrap().ends_with(".env.local"))
+        .unwrap();
+    assert_eq!(env["language"], "Dotenv");
+    assert_eq!(env["comment"], 1);
+}
