@@ -63,6 +63,11 @@ fn test_detailed_breakdown_flag() {
         "Detailed breakdown missing in output:\n{}",
         stdout
     );
+    assert!(
+        !stdout.contains("LOC-RS ANALYSIS SUMMARY"),
+        "Summary box should be omitted when -d is specified:\n{}",
+        stdout
+    );
 }
 
 #[test]
@@ -121,6 +126,30 @@ fn test_warn_size_flag() {
     assert!(
         stdout.contains("LARGE") || stdout.contains("exceed"),
         "Expected size warning in output:\n{}",
+        stdout
+    );
+}
+
+#[test]
+fn test_detailed_with_warn_size() {
+    let content = "let x = 1;\n".repeat(600);
+    let fixture = make_fixture(&[("big.js", &content)]);
+
+    let out = run_loc(&[fixture.path().to_str().unwrap(), "-d", "--warn-size", "500"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("exceed"),
+        "Expected size warning with -d in output:\n{}",
+        stdout
+    );
+    assert!(
+        !stdout.contains("LOC-RS ANALYSIS SUMMARY"),
+        "Summary box should be omitted with -d:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains("JavaScript") || stdout.contains("js"),
+        "Detailed table should appear:\n{}",
         stdout
     );
 }
@@ -567,4 +596,48 @@ fn test_mixed_file_and_directory_arguments() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid json output");
     assert_eq!(json["metadata"]["total_files"], 2);
+}
+
+#[test]
+fn test_breakdown_alphabetical_ascending_with_unknown_last() {
+    let fixture = make_fixture(&[
+        ("main.c", "int main() { return 0; }\n"),
+        ("script.py", "print('hello')\n"),
+        ("lib.rs", "pub fn f() {}\n"),
+        ("config.yaml", "key: value\n"),
+        ("tool.zig", "pub fn main() void {}\n"),
+        ("weird.xyzabc", "some random bytes or text here\n"),
+    ]);
+
+    let out = run_loc(&[fixture.path().to_str().unwrap(), "-d"]);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+
+    let c_pos = stdout
+        .find("C ")
+        .or_else(|| stdout.find("C\t"))
+        .expect("C found");
+    let py_pos = stdout.find("Python").expect("Python found");
+    let rs_pos = stdout.find("Rust").expect("Rust found");
+    let yaml_pos = stdout.find("YAML").expect("YAML found");
+    let zig_pos = stdout.find("Zig").expect("Zig found");
+    let unk_pos = stdout.find("Unknown").expect("Unknown found");
+
+    assert!(c_pos < py_pos, "C must precede Python in alphabetical sort");
+    assert!(
+        py_pos < rs_pos,
+        "Python must precede Rust in alphabetical sort"
+    );
+    assert!(
+        rs_pos < yaml_pos,
+        "Rust must precede YAML in alphabetical sort"
+    );
+    assert!(
+        yaml_pos < zig_pos,
+        "YAML must precede Zig in alphabetical sort"
+    );
+    assert!(
+        zig_pos < unk_pos,
+        "Unknown must be placed after Zig (at the very end)"
+    );
 }

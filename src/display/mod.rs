@@ -297,90 +297,95 @@ pub fn display_results(
 
     println!();
 
-    // ── Summary Box ─────────────────────────────────────────────────────────
-    let sum_widths = [30, 25, 13];
-    let top_title = "LOC-RS ANALYSIS SUMMARY".cyan().bold().to_string();
-    println!("  {}", format!("┌{}┐", "─".repeat(76)).bright_black());
-    print_full_width_row(&top_title, 74, true);
-    print_sep(&sum_widths, "├", "┬", "┤");
+    if show_details {
+        // ── Per-Language Breakdown Table ─────────────────────────────────────
+        display_breakdown(&result.breakdown, total_lines, text_files, show_functions);
+    } else {
+        // ── Summary Box ───────────────────────────────────────────────────────
+        let sum_widths = [30, 25, 13];
+        let top_title = "LOC-RS ANALYSIS SUMMARY".cyan().bold().to_string();
+        println!("  {}", format!("┌{}┐", "─".repeat(76)).bright_black());
+        print_full_width_row(&top_title, 74, true);
+        print_sep(&sum_widths, "├", "┬", "┤");
 
-    let h_metric = "Metric".bold().to_string();
-    let h_count = "Count".bold().to_string();
-    let h_share = "Share".bold().to_string();
-    print_row(&[
-        (&h_metric, 30, false),
-        (&h_count, 25, true),
-        (&h_share, 13, true),
-    ]);
-    print_sep(&sum_widths, "├", "┼", "┤");
+        let h_metric = "Metric".bold().to_string();
+        let h_count = "Count".bold().to_string();
+        let h_share = "Share".bold().to_string();
+        print_row(&[
+            (&h_metric, 30, false),
+            (&h_count, 25, true),
+            (&h_share, 13, true),
+        ]);
+        print_sep(&sum_widths, "├", "┼", "┤");
 
-    let code = result.total_code();
-    let comment = result.total_comment();
-    let blank = result.total_blank();
+        let code = result.total_code();
+        let comment = result.total_comment();
+        let blank = result.total_blank();
 
-    let row_code = "Code".green().to_string();
-    let val_code = fmt_num(code).green().to_string();
-    let share_code = fmt_percent(code, total_lines).bright_black().to_string();
-    print_row(&[
-        (&row_code, 30, false),
-        (&val_code, 25, true),
-        (&share_code, 13, true),
-    ]);
+        let row_code = "Code".green().to_string();
+        let val_code = fmt_num(code).green().to_string();
+        let share_code = fmt_percent(code, total_lines).bright_black().to_string();
+        print_row(&[
+            (&row_code, 30, false),
+            (&val_code, 25, true),
+            (&share_code, 13, true),
+        ]);
 
-    let row_comment = "Comments".magenta().to_string();
-    let val_comment = fmt_num(comment).magenta().to_string();
-    let share_comment = fmt_percent(comment, total_lines).bright_black().to_string();
-    print_row(&[
-        (&row_comment, 30, false),
-        (&val_comment, 25, true),
-        (&share_comment, 13, true),
-    ]);
+        let row_comment = "Comments".magenta().to_string();
+        let val_comment = fmt_num(comment).magenta().to_string();
+        let share_comment = fmt_percent(comment, total_lines).bright_black().to_string();
+        print_row(&[
+            (&row_comment, 30, false),
+            (&val_comment, 25, true),
+            (&share_comment, 13, true),
+        ]);
 
-    let row_blank = "Blank".dimmed().to_string();
-    let val_blank = fmt_num(blank).dimmed().to_string();
-    let share_blank = fmt_percent(blank, total_lines).bright_black().to_string();
-    print_row(&[
-        (&row_blank, 30, false),
-        (&val_blank, 25, true),
-        (&share_blank, 13, true),
-    ]);
+        let row_blank = "Blank".dimmed().to_string();
+        let val_blank = fmt_num(blank).dimmed().to_string();
+        let share_blank = fmt_percent(blank, total_lines).bright_black().to_string();
+        print_row(&[
+            (&row_blank, 30, false),
+            (&val_blank, 25, true),
+            (&share_blank, 13, true),
+        ]);
 
-    print_sep(&sum_widths, "├", "┼", "┤");
+        print_sep(&sum_widths, "├", "┼", "┤");
 
-    let row_total = "Total Lines".bold().to_string();
-    let val_total = fmt_num(total_lines).bold().to_string();
-    let share_total = "100.00%".bold().to_string();
-    print_row(&[
-        (&row_total, 30, false),
-        (&val_total, 25, true),
-        (&share_total, 13, true),
-    ]);
+        let row_total = "Total Lines".bold().to_string();
+        let val_total = fmt_num(total_lines).bold().to_string();
+        let share_total = "100.00%".bold().to_string();
+        print_row(&[
+            (&row_total, 30, false),
+            (&val_total, 25, true),
+            (&share_total, 13, true),
+        ]);
 
-    println!("  {}", format!("├{}┤", "─".repeat(76)).bright_black());
+        println!("  {}", format!("├{}┤", "─".repeat(76)).bright_black());
 
-    let mut file_parts = vec![format!("{} text", fmt_num(text_files).blue())];
-    if bin_files > 0 {
-        file_parts.push(format!("{} binary", fmt_num(bin_files).yellow()));
+        let mut file_parts = vec![format!("{} text", fmt_num(text_files).blue())];
+        if bin_files > 0 {
+            file_parts.push(format!("{} binary", fmt_num(bin_files).yellow()));
+        }
+        if lockfile_count > 0 {
+            file_parts.push(format!(
+                "{} Lockfiles",
+                fmt_num(lockfile_count).bright_black()
+            ));
+        }
+        let file_summary = format!("Files: {}", file_parts.join("  │  "));
+        print_full_width_row(&file_summary, 74, false);
+
+        if show_functions && (total_fns > 0 || total_cls > 0) {
+            let fn_summary = format!(
+                "Functions: {}  │  Classes/Structs: {}",
+                fmt_num(total_fns).magenta(),
+                fmt_num(total_cls).magenta()
+            );
+            print_full_width_row(&fn_summary, 74, false);
+        }
+
+        println!("  {}", format!("└{}┘", "─".repeat(76)).bright_black());
     }
-    if lockfile_count > 0 {
-        file_parts.push(format!(
-            "{} Lockfiles",
-            fmt_num(lockfile_count).bright_black()
-        ));
-    }
-    let file_summary = format!("Files: {}", file_parts.join("  │  "));
-    print_full_width_row(&file_summary, 74, false);
-
-    if show_functions && (total_fns > 0 || total_cls > 0) {
-        let fn_summary = format!(
-            "Functions: {}  │  Classes/Structs: {}",
-            fmt_num(total_fns).magenta(),
-            fmt_num(total_cls).magenta()
-        );
-        print_full_width_row(&fn_summary, 74, false);
-    }
-
-    println!("  {}", format!("└{}┘", "─".repeat(76)).bright_black());
 
     if let Some(ws) = warn_size {
         let large_files = result.files.iter().filter(|f| f.lines > ws).count();
@@ -398,13 +403,7 @@ pub fn display_results(
         }
     }
 
-    // ── Per-Language Breakdown Table ─────────────────────────────────────────
-    if show_details {
-        println!();
-        display_breakdown(&result.breakdown, total_lines, text_files, show_functions);
-    } else {
-        println!();
-    }
+    println!();
 }
 
 fn display_breakdown(
@@ -423,7 +422,10 @@ fn display_breakdown(
                 && stats.blank == 0)
         })
         .collect();
-    sorted.sort_by_key(|a| std::cmp::Reverse(a.1.lines));
+    sorted.sort_by_key(|(ext, _)| {
+        let is_unknown = ext.eq_ignore_ascii_case("Unknown");
+        (is_unknown, ext.to_ascii_lowercase())
+    });
 
     if has_functions {
         let widths = [22, 7, 10, 10, 9, 10, 8];
@@ -602,7 +604,6 @@ fn display_breakdown(
         ]);
         print_sep(&widths, "└", "┴", "┘");
     }
-    println!();
 }
 
 /// Render the function-analysis report for extracted functions and classes.
