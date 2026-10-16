@@ -48,6 +48,8 @@ const AGENT_ENV_VARS: &[&str] = &[
     "ZED_TERM",
     "CURSOR_AGENT",
     "CURSOR_TRACE_ID",
+    "VTCODE",
+    "TERM_PROGRAM",
     "AI_AGENT",
     "AGENT",
 ];

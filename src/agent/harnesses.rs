@@ -97,13 +97,16 @@ pub enum AgentHarnessKey {
     GithubCopilot,
     Goose,
     HermesAgent,
+    Hi,
     KiloCode,
     Kiro,
     OpenClaw,
+    SandbaseHarness,
     OpenCode,
     Pi,
     Replit,
     Trae,
+    Vtcode,
     Warp,
     Zed,
     CursorCli,
@@ -127,13 +130,16 @@ impl AgentHarnessKey {
             Self::GithubCopilot => "github-copilot",
             Self::Goose => "goose",
             Self::HermesAgent => "hermes-agent",
+            Self::Hi => "hi",
             Self::KiloCode => "kilo-code",
             Self::Kiro => "kiro",
             Self::OpenClaw => "openclaw",
+            Self::SandbaseHarness => "sandbase-harness",
             Self::OpenCode => "opencode",
             Self::Pi => "pi",
             Self::Replit => "replit",
             Self::Trae => "trae",
+            Self::Vtcode => "vtcode",
             Self::Warp => "warp",
             Self::Zed => "zed",
             Self::CursorCli => "cursor-cli",
@@ -161,13 +167,16 @@ impl AgentHarnessKey {
             b"github-copilot" => Some(Self::GithubCopilot),
             b"goose" => Some(Self::Goose),
             b"hermes-agent" => Some(Self::HermesAgent),
+            b"hi" => Some(Self::Hi),
             b"kilo-code" => Some(Self::KiloCode),
             b"kiro" => Some(Self::Kiro),
             b"openclaw" => Some(Self::OpenClaw),
+            b"sandbase-harness" => Some(Self::SandbaseHarness),
             b"opencode" => Some(Self::OpenCode),
             b"pi" => Some(Self::Pi),
             b"replit" => Some(Self::Replit),
             b"trae" => Some(Self::Trae),
+            b"vtcode" => Some(Self::Vtcode),
             b"warp" => Some(Self::Warp),
             b"zed" => Some(Self::Zed),
             b"cursor-cli" => Some(Self::CursorCli),
@@ -180,7 +189,7 @@ impl AgentHarnessKey {
     /// Returns the static [`AgentHarness`] descriptor for this key.
     #[inline]
     pub const fn info(self) -> &'static AgentHarness {
-        // Linear scan of a 23-element array; the compiler constant-folds this
+        // Linear scan of a 26-element array; the compiler constant-folds this
         // when `self` is known at compile time.
         let mut i = 0;
         while i < AGENT_HARNESSES.len() {
@@ -206,13 +215,16 @@ impl AgentHarnessKey {
         Self::GithubCopilot,
         Self::Goose,
         Self::HermesAgent,
+        Self::Hi,
         Self::KiloCode,
         Self::Kiro,
         Self::OpenClaw,
+        Self::SandbaseHarness,
         Self::OpenCode,
         Self::Pi,
         Self::Replit,
         Self::Trae,
+        Self::Vtcode,
         Self::Warp,
         Self::Zed,
         Self::CursorCli,
@@ -425,6 +437,17 @@ pub const AGENT_HARNESSES: &[(AgentHarnessKey, AgentHarness)] = &[
         },
     ),
     (
+        AgentHarnessKey::Hi,
+        AgentHarness {
+            pretty_label: "hi",
+            repo_url: Some("https://github.com/PipeNetwork/hi"),
+            docs_url: Some("https://github.com/PipeNetwork/hi#readme"),
+            description: Some("Rust terminal coding agent with verification-in-the-loop."),
+            // No specific env-var; detected only via STANDARD_AGENT_ENV_VARS.
+            env_vars: &[],
+        },
+    ),
+    (
         AgentHarnessKey::KiloCode,
         AgentHarness {
             pretty_label: "Kilo Code",
@@ -465,6 +488,21 @@ pub const AGENT_HARNESSES: &[(AgentHarnessKey, AgentHarness)] = &[
                 name: "OPENCLAW_SHELL",
                 pattern: EnvPattern::Any,
             }],
+        },
+    ),
+    (
+        AgentHarnessKey::SandbaseHarness,
+        AgentHarness {
+            pretty_label: "SandBase Harness",
+            repo_url: Some("https://github.com/sandbaseai/sandbase-harness"),
+            docs_url: Some(
+                "https://github.com/sandbaseai/sandbase-harness/blob/main/docs/installation.md",
+            ),
+            description: Some(
+                "Local-first, self-hosted runtime for persistent AI agent sessions and MCP tools.",
+            ),
+            // No specific env-var; detected only via STANDARD_AGENT_ENV_VARS.
+            env_vars: &[],
         },
     ),
     (
@@ -518,6 +556,22 @@ pub const AGENT_HARNESSES: &[(AgentHarnessKey, AgentHarness)] = &[
             env_vars: &[EnvVarCheck {
                 name: "TRAE_AI_SHELL_ID",
                 pattern: EnvPattern::Any,
+            }],
+        },
+    ),
+    (
+        AgentHarnessKey::Vtcode,
+        AgentHarness {
+            pretty_label: "VTCode",
+            repo_url: Some("https://github.com/vinhnx/VTCode"),
+            docs_url: None,
+            description: Some(
+                "Rust coding agent with multi-provider LLM support, OS-native sandboxing, and extensible skills.",
+            ),
+            // Exact match: VTCODE == "1"
+            env_vars: &[EnvVarCheck {
+                name: "VTCODE",
+                pattern: EnvPattern::Exact("1"),
             }],
         },
     ),
@@ -851,6 +905,19 @@ mod tests {
     }
 
     #[test]
+    fn vtcode_uses_exact_match() {
+        let info = AgentHarnessKey::Vtcode.info();
+        assert_eq!(info.env_vars.len(), 1);
+        assert_eq!(info.env_vars[0].pattern, EnvPattern::Exact("1"),);
+    }
+
+    #[test]
+    fn hi_and_sandbase_have_no_env_vars() {
+        assert!(AgentHarnessKey::Hi.info().env_vars.is_empty());
+        assert!(AgentHarnessKey::SandbaseHarness.info().env_vars.is_empty());
+    }
+
+    #[test]
     fn devin_has_no_env_vars() {
         assert!(AgentHarnessKey::Devin.info().env_vars.is_empty());
     }
@@ -952,6 +1019,26 @@ mod tests {
     fn detect_exact_pattern_non_warp_terminal_does_not_match() {
         let result = detect_with(mock_env(&[("TERM_PROGRAM", "iTerm.app")]));
         assert_ne!(result, DetectionResult::Known(AgentHarnessKey::Warp));
+    }
+
+    #[test]
+    fn detect_vtcode_exact_match() {
+        let result = detect_with(mock_env(&[("VTCODE", "1")]));
+        assert_eq!(result, DetectionResult::Known(AgentHarnessKey::Vtcode));
+    }
+
+    #[test]
+    fn detect_vtcode_wrong_value_does_not_match() {
+        // Exact("1") must not match other non-empty values.
+        let result = detect_with(mock_env(&[("VTCODE", "0")]));
+        assert_eq!(result, DetectionResult::None);
+    }
+
+    #[test]
+    fn detect_hi_via_standard_var() {
+        // `hi` has no dedicated env-var; it is only reachable through AI_AGENT.
+        let result = detect_with(mock_env(&[("AI_AGENT", "hi")]));
+        assert_eq!(result, DetectionResult::Known(AgentHarnessKey::Hi));
     }
 
     #[test]

@@ -5,6 +5,11 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Agent registry sync with [huggingface.js `agent-harnesses.ts`](https://github.com/huggingface/huggingface.js/blob/main/packages/tasks/src/agent-harnesses.ts): added `hi` (PipeNetwork, standard-var detection only), `sandbase-harness` (SandBase AI, standard-var detection only), and `vtcode` (VTCode, exact-match `VTCODE=1`) (`src/agent/harnesses.rs`). Registry now covers 26 harnesses; loc-rs-specific `warp` detection retained.
+
 ## [0.3.1] - 2026-10-05
 
 ### Added

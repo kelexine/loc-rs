@@ -446,6 +446,41 @@ pub fn is_binary_file(path: &Path) -> bool {
     }
 }
 
+/// Extract filetype from Vim or Emacs modelines on header lines.
+fn extract_modeline_filetype(line: &str) -> Option<String> {
+    let lower = line.to_ascii_lowercase();
+    if lower.contains("vim:") || lower.contains("vi:") {
+        for token in lower.split_whitespace() {
+            let token = token.trim_matches(|c: char| c == ':' || c == ';');
+            if let Some(ft) = token
+                .strip_prefix("ft=")
+                .or_else(|| token.strip_prefix("filetype="))
+                .or_else(|| token.strip_prefix("syntax="))
+            {
+                let clean = ft.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-');
+                if !clean.is_empty() {
+                    return Some(clean.to_string());
+                }
+            }
+        }
+    }
+    if lower.contains("-*-")
+        && let Some(idx) = lower.find("mode:")
+    {
+        let after = &lower[idx + 5..];
+        if let Some(first_word) = after.split_whitespace().next() {
+            let mode =
+                first_word.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-');
+            let mode = mode.strip_suffix("-mode").unwrap_or(mode);
+            let mode = if mode == "shell-script" { "sh" } else { mode };
+            if !mode.is_empty() {
+                return Some(mode.to_string());
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -590,39 +625,4 @@ mod tests {
         assert_eq!(result.comment, 1);
         assert_eq!(result.code, 1);
     }
-}
-
-/// Extract filetype from Vim or Emacs modelines on header lines.
-fn extract_modeline_filetype(line: &str) -> Option<String> {
-    let lower = line.to_ascii_lowercase();
-    if lower.contains("vim:") || lower.contains("vi:") {
-        for token in lower.split_whitespace() {
-            let token = token.trim_matches(|c: char| c == ':' || c == ';');
-            if let Some(ft) = token
-                .strip_prefix("ft=")
-                .or_else(|| token.strip_prefix("filetype="))
-                .or_else(|| token.strip_prefix("syntax="))
-            {
-                let clean = ft.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-');
-                if !clean.is_empty() {
-                    return Some(clean.to_string());
-                }
-            }
-        }
-    }
-    if lower.contains("-*-")
-        && let Some(idx) = lower.find("mode:")
-    {
-        let after = &lower[idx + 5..];
-        if let Some(first_word) = after.split_whitespace().next() {
-            let mode =
-                first_word.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-');
-            let mode = mode.strip_suffix("-mode").unwrap_or(mode);
-            let mode = if mode == "shell-script" { "sh" } else { mode };
-            if !mode.is_empty() {
-                return Some(mode.to_string());
-            }
-        }
-    }
-    None
 }
