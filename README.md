@@ -14,8 +14,8 @@
 - **Nested comment support**: Handles nested block comments (e.g. `/* /* nested */ */` in Rust and Swift, `{- {- ... -} -}` in Haskell).
 - **Embedded-language analysis**: Accurately extracts and credits embedded code blocks inside HTML, Vue, and Svelte templates (`<script>` to JS/TS, `<style>` to CSS/SCSS).
 - **Jupyter Notebook (`.ipynb`) support**: Deserializes notebook JSON, identifies the active kernel language, and parses code and markdown cells into respective language statistics.
-- **Tree view**: Renders a recursive project tree when `--tree` is enabled, with optional binary-file display.
-- **Function extraction and Analysis**: Uses Tree-sitter-backed extractors for Rust, Python, JavaScript/TypeScript, Go, C/C++, Java, Kotlin, C#, Scala, PHP, Swift, and Ruby.
+- **Tree view**: Renders a recursive project tree when `--tree` is enabled, with optional binary-file display (`-b`).
+- **Function extraction and Analysis**: Uses dedicated Tree-sitter-backed extractors for Rust, Python, JavaScript/TypeScript, Go, C/C++, Java, Kotlin, C#, Scala, PHP, Swift, and Ruby.
 - **Complexity analysis**: Reports function length and a branch-count cyclomatic complexity estimate.
 - **Agent detection**: Switches to token-efficient TSV output when run inside AI coding agents (Claude Code, Codex, Antigravity, Gemini CLI, etc.).
 - **Lockfile awareness**: Automatically detects dependency lockfiles (Cargo.lock, package-lock.json, etc.), excluding them from line metrics to prevent skewed stats.
@@ -107,12 +107,12 @@ loc [OPTIONS] [PATHS]...
 | Scan a specific directory | `loc src/` |
 | Count a single file | `loc src/main.rs` |
 | Count multiple files or globs | `loc *.rs *.py` |
-| Show per-extension metrics | `loc -d` |
+| Show per-language metrics | `loc -d` |
 | Show a recursive tree | `loc --tree` |
 | Include binary files in the tree | `loc --tree -b` |
 | Extract functions and methods | `loc -f` |
 | Show function complexity analysis | `loc --func-analysis` |
-| Scan only selected languages | `loc -t rust,python,typescript` (or repeat `-t`) |
+| Scan only selected languages | `loc -t rust,python,typescript` (or `loc -t rust src/`) |
 | Warn for files above 500 lines | `loc --warn-size 500` |
 | Include hidden files and directories | `loc --include-hidden` |
 | Disable parallel processing | `loc --no-parallel` |
@@ -285,9 +285,10 @@ Function extraction is available when `-f` or `--func-analysis` is enabled. The 
 
 | Format | Extension | Contents |
 |---|---|---|
-| JSON | `.json` | Metadata, extension breakdown, files, and optional function data |
+| JSON | `.json` | Metadata, language breakdown, files, and optional function data |
 | JSON Lines | `.jsonl` | One file record per line |
 | CSV | `.csv` | File-level metrics, with optional function columns |
+| TSV | `.tsv` | Token-efficient section-delimited tables (`SUMMARY`, `BREAKDOWN`, `FILES`, `FUNCTIONS`) |
 | HTML | `.html`, `.htm` | Standalone visual report with charts and searchable file table |
 
 ---

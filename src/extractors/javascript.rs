@@ -97,30 +97,27 @@ fn parse_function(
     index: &ComplexityIndex,
 ) -> Option<FunctionInfo> {
     let mut name = String::new();
-    let mut params_str = String::new();
+    let mut params_str = "";
+    let mut is_async = false;
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         let kind = child.kind();
-        if (kind == "identifier" || kind == "property_identifier") && name.is_empty() {
+        if kind == "async" {
+            is_async = true;
+        } else if (kind == "identifier" || kind == "property_identifier") && name.is_empty() {
             name = child
                 .utf8_text(content.as_bytes())
                 .unwrap_or("")
                 .to_string();
         } else if kind == "formal_parameters" {
-            params_str = child
-                .utf8_text(content.as_bytes())
-                .unwrap_or("")
-                .to_string();
+            params_str = child.utf8_text(content.as_bytes()).unwrap_or("");
         }
     }
 
     if name.is_empty() {
         name = "?".to_string();
     }
-
-    let text = node.utf8_text(content.as_bytes()).unwrap_or("");
-    let is_async = text.starts_with("async ");
 
     let start_line = node.start_position().row + 1;
     let end_line = node.end_position().row + 1;
@@ -178,10 +175,6 @@ fn parse_variable_declarator(
     {
         let mut info = parse_function(fnode, content, false, index)?;
         info.name = name;
-        let text = fnode.utf8_text(content.as_bytes()).unwrap_or("");
-        if text.starts_with("async ") {
-            info.is_async = true;
-        }
         return Some(info);
     }
     None

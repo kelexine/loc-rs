@@ -4,8 +4,8 @@
 
 ## Scope
 
-- Scans files and optionally reads git metadata.
-- Generates local reports (JSON/JSONL/CSV/HTML).
+- Scans local files and directories.
+- Generates local reports (JSON/JSONL/CSV/TSV/HTML).
 - Includes a composite GitHub Action for CI integration.
 
 ## Threat Model Highlights

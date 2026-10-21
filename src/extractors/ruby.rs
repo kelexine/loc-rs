@@ -70,7 +70,7 @@ fn parse_method(
     index: &ComplexityIndex,
 ) -> Option<FunctionInfo> {
     let mut name = String::new();
-    let mut params_str = String::new();
+    let mut params_str = "";
 
     if let Some(name_node) = node.child_by_field_name("name") {
         name = name_node
@@ -80,10 +80,7 @@ fn parse_method(
     }
 
     if let Some(params_node) = node.child_by_field_name("parameters") {
-        params_str = params_node
-            .utf8_text(content.as_bytes())
-            .unwrap_or("")
-            .to_string();
+        params_str = params_node.utf8_text(content.as_bytes()).unwrap_or("");
     }
 
     if name.is_empty() || name == "?" || name == "?obj" {

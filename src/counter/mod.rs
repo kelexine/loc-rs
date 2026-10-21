@@ -125,29 +125,34 @@ impl ScanConfig {
 
 /// Run the full scan and return a ScanResult.
 pub fn run_scan(config: &ScanConfig) -> Result<ScanResult> {
-    let mut files = Vec::new();
-    let mut seen = HashSet::new();
-
     let paths: &[PathBuf] = if config.target_paths.is_empty() {
         std::slice::from_ref(&config.target_dir)
     } else {
         &config.target_paths
     };
 
-    for path in paths {
-        if path.is_file() {
-            if seen.insert(path.clone()) {
-                files.push(path.clone());
-            }
-        } else if path.is_dir() {
-            let dir_files = get_manual_files(path, &config.locignore, config.include_hidden);
-            for f in dir_files {
-                if seen.insert(f.clone()) {
-                    files.push(f);
+    let mut files = if paths.len() == 1 && paths[0].is_dir() {
+        // Fast-path: single directory scan needs no deduplication HashSet or PathBuf cloning
+        get_manual_files(&paths[0], &config.locignore, config.include_hidden)
+    } else {
+        let mut files = Vec::new();
+        let mut seen = rustc_hash::FxHashSet::default();
+        for path in paths {
+            if path.is_file() {
+                if seen.insert(path.clone()) {
+                    files.push(path.clone());
+                }
+            } else if path.is_dir() {
+                let dir_files = get_manual_files(path, &config.locignore, config.include_hidden);
+                for f in dir_files {
+                    if seen.insert(f.clone()) {
+                        files.push(f);
+                    }
                 }
             }
         }
-    }
+        files
+    };
 
     let mut file_infos: Vec<FileInfo> = if config.parallel && files.len() > PARALLEL_FILE_THRESHOLD
     {

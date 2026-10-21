@@ -259,15 +259,20 @@ pub fn write_function_analysis_sections<W: Write>(
     writeln!(w, "total_functions\t{}", result.total_functions())?;
     writeln!(w, "total_classes\t{}", result.total_classes())?;
 
-    let non_class_fns: Vec<_> = files_with_fns
-        .iter()
-        .flat_map(|f| f.functions.iter().filter(|fn_| !fn_.is_class))
-        .collect();
-    let avg_len = if non_class_fns.is_empty() {
+    let mut sum_lines = 0usize;
+    let mut count_fns = 0usize;
+    for f in &files_with_fns {
+        for fn_ in &f.functions {
+            if !fn_.is_class {
+                sum_lines += fn_.line_count();
+                count_fns += 1;
+            }
+        }
+    }
+    let avg_len = if count_fns == 0 {
         0.0_f64
     } else {
-        non_class_fns.iter().map(|f| f.line_count()).sum::<usize>() as f64
-            / non_class_fns.len() as f64
+        sum_lines as f64 / count_fns as f64
     };
     writeln!(w, "avg_function_length\t{:.2}", avg_len)?;
 
@@ -285,6 +290,10 @@ pub fn write_function_analysis_sections<W: Write>(
                 .map(move |f| (fi.path.as_path(), f))
         })
         .collect();
+    if all_fns.len() > 10 {
+        all_fns.select_nth_unstable_by_key(10, |(_, func)| std::cmp::Reverse(func.line_count()));
+        all_fns.truncate(10);
+    }
     all_fns.sort_by_key(|(_, func)| std::cmp::Reverse(func.line_count()));
 
     writeln!(w)?;
@@ -318,6 +327,10 @@ pub fn write_function_analysis_sections<W: Write>(
         .collect();
 
     if !complex.is_empty() {
+        if complex.len() > 15 {
+            complex.select_nth_unstable_by_key(15, |(_, func)| std::cmp::Reverse(func.complexity));
+            complex.truncate(15);
+        }
         complex.sort_by_key(|(_, func)| std::cmp::Reverse(func.complexity));
         writeln!(w)?;
         writeln!(w, "# HIGH_COMPLEXITY")?;
@@ -332,7 +345,11 @@ pub fn write_function_analysis_sections<W: Write>(
     }
 
     // ── TOP_FILES (top 10 by function count) ─────────────────────────────
-    let mut sorted_files = files_with_fns.clone();
+    let mut sorted_files = files_with_fns;
+    if sorted_files.len() > 10 {
+        sorted_files.select_nth_unstable_by_key(10, |f| std::cmp::Reverse(f.function_count()));
+        sorted_files.truncate(10);
+    }
     sorted_files.sort_by_key(|f| std::cmp::Reverse(f.function_count()));
 
     writeln!(w)?;

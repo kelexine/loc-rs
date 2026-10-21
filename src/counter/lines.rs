@@ -56,10 +56,22 @@ pub fn analyze_content_with_spec(
     content: &str,
     spec: Option<&CommentSpec>,
 ) -> (usize, usize, usize, usize) {
+    let (total, code, comment, blank, _) = analyze_content_with_spec_and_max_len(content, spec);
+    (total, code, comment, blank)
+}
+
+/// Same as [`analyze_content_with_spec`], additionally returning the maximum
+/// byte length of any line in `content` so callers do not need a second pass
+/// over the file to guard against minified single-line files.
+pub fn analyze_content_with_spec_and_max_len(
+    content: &str,
+    spec: Option<&CommentSpec>,
+) -> (usize, usize, usize, usize, usize) {
     let mut total = 0usize;
     let mut code = 0usize;
     let mut comment = 0usize;
     let mut blank = 0usize;
+    let mut max_line_len = 0usize;
 
     let mut comment_depth = 0usize;
     let mut quote_state = QuoteState::None;
@@ -68,13 +80,16 @@ pub fn analyze_content_with_spec(
         for line in content.lines() {
             total += 1;
             let bytes = line.as_bytes();
+            if bytes.len() > max_line_len {
+                max_line_len = bytes.len();
+            }
             if bytes.iter().all(|b| b.is_ascii_whitespace()) {
                 blank += 1;
             } else {
                 code += 1;
             }
         }
-        return (total, code, 0, blank);
+        return (total, code, 0, blank, max_line_len);
     }
 
     // Check if the multi-line comment delimiters match Python triple quotes
@@ -115,6 +130,9 @@ pub fn analyze_content_with_spec(
         total += 1;
         let bytes = line.as_bytes();
         let len = bytes.len();
+        if len > max_line_len {
+            max_line_len = len;
+        }
         // Set when a backslash is the last byte of a `"…"` string (line continuation).
         let mut line_continues = false;
         // Fast-path: find first non-whitespace byte
@@ -183,9 +201,22 @@ pub fn analyze_content_with_spec(
                         i += e_bytes.len();
                         continue;
                     }
+
+                    // SIMD jump to the next possible start or end marker first byte
+                    let next_rel = if supports_nesting {
+                        memchr::memchr2(s_bytes[0], e_bytes[0], &bytes[i + 1..])
+                    } else {
+                        memchr::memchr(e_bytes[0], &bytes[i + 1..])
+                    };
+                    match next_rel {
+                        Some(rel) => {
+                            i += 1 + rel;
+                            continue;
+                        }
+                        None => break,
+                    }
                 }
-                i += 1;
-                continue;
+                break;
             }
 
             // ── In Triple-Quote String / Docstring (Python style) ────────────────
@@ -194,8 +225,10 @@ pub fn analyze_content_with_spec(
                 if bytes[i..].starts_with(b"\"\"\"") {
                     quote_state = QuoteState::None;
                     i += 3;
+                } else if let Some(rel) = memchr::memchr(b'"', &bytes[i + 1..]) {
+                    i += 1 + rel;
                 } else {
-                    i += 1;
+                    break;
                 }
                 continue;
             }
@@ -205,8 +238,10 @@ pub fn analyze_content_with_spec(
                 if bytes[i..].starts_with(b"'''") {
                     quote_state = QuoteState::None;
                     i += 3;
+                } else if let Some(rel) = memchr::memchr(b'\'', &bytes[i + 1..]) {
+                    i += 1 + rel;
                 } else {
-                    i += 1;
+                    break;
                 }
                 continue;
             }
@@ -220,8 +255,10 @@ pub fn analyze_content_with_spec(
                     } else if b == b'\'' {
                         quote_state = QuoteState::None;
                         i += 1;
+                    } else if let Some(rel) = memchr::memchr2(b'\\', b'\'', &bytes[i + 1..]) {
+                        i += 1 + rel;
                     } else {
-                        i += 1;
+                        break;
                     }
                     continue;
                 }
@@ -233,8 +270,10 @@ pub fn analyze_content_with_spec(
                     } else if b == b'"' {
                         quote_state = QuoteState::None;
                         i += 1;
+                    } else if let Some(rel) = memchr::memchr2(b'\\', b'"', &bytes[i + 1..]) {
+                        i += 1 + rel;
                     } else {
-                        i += 1;
+                        break;
                     }
                     continue;
                 }
@@ -243,8 +282,10 @@ pub fn analyze_content_with_spec(
                     if raw_string_closes(bytes, i, raw_hashes) {
                         quote_state = QuoteState::None;
                         i += 1 + raw_hashes;
+                    } else if let Some(rel) = memchr::memchr(b'"', &bytes[i + 1..]) {
+                        i += 1 + rel;
                     } else {
-                        i += 1;
+                        break;
                     }
                     continue;
                 }
@@ -255,8 +296,10 @@ pub fn analyze_content_with_spec(
                     } else if b == b'`' {
                         quote_state = QuoteState::None;
                         i += 1;
+                    } else if let Some(rel) = memchr::memchr2(b'\\', b'`', &bytes[i + 1..]) {
+                        i += 1 + rel;
                     } else {
-                        i += 1;
+                        break;
                     }
                     continue;
                 }
@@ -361,7 +404,7 @@ pub fn analyze_content_with_spec(
         }
     }
 
-    (total, code, comment, blank)
+    (total, code, comment, blank, max_line_len)
 }
 
 /// Count lines in an already-loaded content string or decoded slice.

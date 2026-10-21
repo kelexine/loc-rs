@@ -3,6 +3,7 @@
 
 use super::Extractor;
 use crate::models::FunctionInfo;
+use rustc_hash::FxHashMap;
 use std::collections::HashMap;
 use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator};
 
@@ -17,81 +18,84 @@ use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator}
 // Used by all tree-sitter-backed language extractors.  Languages without a
 // grammar fall back to `estimate_complexity` in extractors/mod.rs.
 
-/// Node types that constitute a decision point (each adds one independent path).
-/// Covers every tree-sitter grammar bundled with loc-rs.
-const DECISION_NODE_TYPES: &[&str] = &[
-    // ── if / elif / elseif ────────────────────────────────────────────────
-    "if_expression",   // Rust
-    "if_statement",    // Python, JS, TS, Java, C, C++, Go, PHP, Swift
-    "elif_clause",     // Python   ← never double-counted with if_statement
-    "elseif_clause",   // PHP
-    "if",              // Ruby
-    "elsif",           // Ruby
-    "unless",          // Ruby
-    "if_modifier",     // Ruby (`x if y`)
-    "unless_modifier", // Ruby (`x unless y`)
-    // ── loops ────────────────────────────────────────────────────────────
-    "while_expression",       // Rust, Scala
-    "while_statement",        // Python, JS, TS, Java, C, C++, PHP, Swift, Kotlin, C#
-    "do_statement",           // JS, TS, Java, C, C++, PHP, C# (special-cased: needs `while`)
-    "do_while_statement",     // Kotlin
-    "do_while_expression",    // Scala
-    "repeat_while_statement", // Swift
-    "for_expression",         // Rust, Scala
-    "for_statement",          // Python, JS, TS, Java, C, C++, PHP, Kotlin, C#
-    "for_range_loop",         // C++ (`for (auto x : xs)`)
-    "for_in_statement",       // JS, TS
-    "for_of_statement",       // JS, TS
-    "foreach_statement",      // PHP, C#
-    "enhanced_for_statement", // Java
-    "loop_expression",        // Rust (infinite loop)
-    "while",                  // Ruby
-    "until",                  // Ruby
-    "for",                    // Ruby
-    "while_modifier",         // Ruby
-    "until_modifier",         // Ruby
-    // ── match / switch cases ─────────────────────────────────────────────
-    "match_arm",                    // Rust — each arm = 1 decision point
-    "case_statement",               // C, C++
-    "switch_block_statement_group", // Java
-    "switch_section",               // C#
-    "switch_expression_arm",        // C#
-    "expression_case_clause",       // Go
-    "case_clause",                  // Go, Python `match`, Scala
-    "switch_case",                  // JS, TS
-    "switch_entry",                 // Swift
-    "when_entry",                   // Kotlin
-    "when",                         // Ruby
-    // ── exception handling ────────────────────────────────────────────────
-    "catch_clause",    // JS, TS, Java, C++, C#, Scala
-    "catch_block",     // Swift, Kotlin
-    "except_clause",   // Python
-    "rescue_clause",   // Ruby
-    "rescue",          // Ruby (alternate form)
-    "rescue_modifier", // Ruby (`x rescue y`)
-    // ── ternary / conditional ─────────────────────────────────────────────
-    "ternary_expression",     // JS, TS, PHP, Java, C, C++
-    "conditional_expression", // C, C++ (some grammars)
-    "conditional",            // Ruby ternary
-    // ── guard ────────────────────────────────────────────────────────────
-    "guard_statement", // Swift
-    // ── logical operators as first-class node types (some grammars) ──────
-    "boolean_operator", // Python: `and` / `or`
-    "logical_and",      // some grammars
-    "logical_or",       // some grammars
-];
+/// Returns `true` when `kind` is a decision-point AST node type across any
+/// bundled tree-sitter grammar. Compiled to a jump/hash dispatch by LLVM
+/// instead of a 48-element linear slice scan per visited AST node.
+#[inline]
+fn is_decision_node_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        // ── if / elif / elseif ────────────────────────────────────────────
+        "if_expression"
+            | "if_statement"
+            | "elif_clause"
+            | "elseif_clause"
+            | "if"
+            | "elsif"
+            | "unless"
+            | "if_modifier"
+            | "unless_modifier"
+            // ── loops ─────────────────────────────────────────────────────
+            | "while_expression"
+            | "while_statement"
+            | "do_while_statement"
+            | "do_while_expression"
+            | "repeat_while_statement"
+            | "for_expression"
+            | "for_statement"
+            | "for_range_loop"
+            | "for_in_statement"
+            | "for_of_statement"
+            | "foreach_statement"
+            | "enhanced_for_statement"
+            | "loop_expression"
+            | "while"
+            | "until"
+            | "for"
+            | "while_modifier"
+            | "until_modifier"
+            // ── match / switch cases ──────────────────────────────────────
+            | "match_arm"
+            | "case_statement"
+            | "switch_block_statement_group"
+            | "switch_section"
+            | "switch_expression_arm"
+            | "expression_case_clause"
+            | "case_clause"
+            | "switch_case"
+            | "switch_entry"
+            | "when_entry"
+            | "when"
+            // ── exception handling ────────────────────────────────────────
+            | "catch_clause"
+            | "catch_block"
+            | "except_clause"
+            | "rescue_clause"
+            | "rescue"
+            | "rescue_modifier"
+            // ── ternary / conditional / guard / boolean ops ───────────────
+            | "ternary_expression"
+            | "conditional_expression"
+            | "conditional"
+            | "guard_statement"
+            | "boolean_operator"
+            | "logical_and"
+            | "logical_or"
+    )
+}
 
-/// Binary-expression node types that contain `&&`/`||` as operator child tokens
-/// rather than exposing them as a named node type.
-const BINARY_EXPR_TYPES: &[&str] = &[
-    "binary_expression",  // Rust, JS, TS, Java, C, C++, Go, PHP, Swift, Kotlin, C#
-    "infix_expression",   // Scala
-    "binary",             // Ruby
-    "logical_expression", // some TS grammars
-];
+#[inline]
+fn is_binary_expr_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "binary_expression" | "infix_expression" | "binary" | "logical_expression"
+    )
+}
 
-/// Operator texts treated as logical decision points inside binary expressions.
-const LOGICAL_OPS: &[&str] = &["&&", "||", "and", "or"];
+#[inline]
+fn is_logical_op(text: &str) -> bool {
+    matches!(text, "&&" | "||" | "and" | "or")
+}
 
 /// Count decision points contributed directly by `node` (excluding its descendants).
 ///
@@ -111,9 +115,9 @@ fn node_decision_count(node: Node<'_>, src: &[u8]) -> u32 {
         let has_while = node.children(&mut cursor).any(|c| c.kind() == "while");
         return u32::from(has_while);
     }
-    if DECISION_NODE_TYPES.contains(&kind) {
+    if is_decision_node_kind(kind) {
         1
-    } else if BINARY_EXPR_TYPES.contains(&kind) {
+    } else if is_binary_expr_kind(kind) {
         let mut count = 0;
         let child_count = node.child_count();
         for i in 0..child_count {
@@ -121,7 +125,7 @@ fn node_decision_count(node: Node<'_>, src: &[u8]) -> u32 {
                 && (!child.is_named() || child.kind() == "operator_identifier")
             {
                 let text = child.utf8_text(src).unwrap_or("");
-                if LOGICAL_OPS.contains(&text) {
+                if is_logical_op(text) {
                     count += 1;
                 }
             }
@@ -138,15 +142,17 @@ fn node_decision_count(node: Node<'_>, src: &[u8]) -> u32 {
 /// Replaces quadratic $O(N \times \text{depth})$ re-walks when functions are nested.
 #[derive(Debug, Clone, Default)]
 pub struct ComplexityIndex {
-    complexities: HashMap<usize, u32>,
+    complexities: FxHashMap<usize, u32>,
 }
 
 impl ComplexityIndex {
     /// Build a complexity index for the entire subtree rooted at `root`.
     pub fn build(root: Node<'_>, src: &[u8]) -> Self {
-        let mut complexities = HashMap::new();
+        let estimated_nodes = (src.len() / 24).max(16);
+        let mut complexities =
+            FxHashMap::with_capacity_and_hasher(estimated_nodes, Default::default());
         let mut cursor = root.walk();
-        let mut stack: Vec<(usize, u32)> = Vec::new();
+        let mut stack: Vec<(usize, u32)> = Vec::with_capacity(64);
 
         stack.push((cursor.node().id(), node_decision_count(cursor.node(), src)));
 

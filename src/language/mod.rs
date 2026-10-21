@@ -2,11 +2,11 @@
 // language.rs — Language-to-extension mapping and resolution
 
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Static map from language name → list of file extensions (with leading dot).
-pub static LANGUAGE_MAP: Lazy<HashMap<&'static str, Vec<&'static str>>> = Lazy::new(|| {
-    let mut m = HashMap::new();
+pub static LANGUAGE_MAP: Lazy<FxHashMap<&'static str, Vec<&'static str>>> = Lazy::new(|| {
+    let mut m = FxHashMap::default();
     m.insert("python", vec![".py", ".pyw", ".pyi", ".pyx", ".pxd"]);
     m.insert("javascript", vec![".js", ".mjs", ".cjs"]);
     m.insert("typescript", vec![".ts", ".mts"]);
@@ -145,8 +145,8 @@ pub static LANGUAGE_MAP: Lazy<HashMap<&'static str, Vec<&'static str>>> = Lazy::
 });
 
 /// Aliases: short names / common misspellings → canonical language names.
-static ALIASES: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
-    let mut m = HashMap::new();
+static ALIASES: Lazy<FxHashMap<&'static str, &'static str>> = Lazy::new(|| {
+    let mut m = FxHashMap::default();
     m.insert("py", "python");
     m.insert("js", "javascript");
     m.insert("ts", "typescript");
@@ -256,7 +256,7 @@ pub fn resolve_extensions(input: &str) -> Vec<String> {
 /// excluded from all line-count statistics.  If a lockfile is already
 /// covered by any ignore file (`.locignore`, `.gitignore`, etc.) it is
 /// excluded entirely from the scan — the ignore rule takes precedence.
-pub static LOCKFILE_NAMES: Lazy<std::collections::HashSet<&'static str>> = Lazy::new(|| {
+pub static LOCKFILE_NAMES: Lazy<FxHashSet<&'static str>> = Lazy::new(|| {
     [
         // Rust / Cargo
         "Cargo.lock",
@@ -314,7 +314,7 @@ pub fn is_lockfile(path: &std::path::Path) -> bool {
 }
 
 /// Binary extensions — files with these extensions are skipped for line counting.
-pub static BINARY_EXTENSIONS: Lazy<std::collections::HashSet<&'static str>> = Lazy::new(|| {
+pub static BINARY_EXTENSIONS: Lazy<FxHashSet<&'static str>> = Lazy::new(|| {
     [
         ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".pdf", ".zip", ".tar", ".gz", ".bz2",
         ".xz", ".rar", ".7z", ".exe", ".dll", ".so", ".dylib", ".bin", ".wasm", ".mp3", ".mp4",
@@ -339,8 +339,8 @@ pub struct CommentSpec {
 }
 
 /// Registry for comment specifications by extension.
-pub static COMMENT_REGISTRY: Lazy<HashMap<&'static str, CommentSpec>> = Lazy::new(|| {
-    let mut m = HashMap::new();
+pub static COMMENT_REGISTRY: Lazy<FxHashMap<&'static str, CommentSpec>> = Lazy::new(|| {
+    let mut m = FxHashMap::default();
 
     let c_style = CommentSpec {
         single: Some("//"),
@@ -1065,8 +1065,20 @@ pub fn detect_shebang(first_line: &str) -> Option<KnownFileSpec> {
 /// "Device Tree", "Rust", "Python", etc. Unrecognized or unidentifiable extensions
 /// resolve to `"Unknown"` rather than inflating breakdown metrics.
 pub fn canonical_language_name(input: &str) -> &'static str {
-    let lower = input.trim_start_matches('.').to_ascii_lowercase();
-    match lower.as_str() {
+    let trimmed = input.trim_start_matches('.');
+    let mut stack_buf = [0u8; 32];
+    let mut owned_lower: Option<String> = None;
+    let lower: &str = if !trimmed.bytes().any(|b| b.is_ascii_uppercase()) {
+        trimmed
+    } else if trimmed.is_ascii() && trimmed.len() <= stack_buf.len() {
+        for (i, b) in trimmed.bytes().enumerate() {
+            stack_buf[i] = b.to_ascii_lowercase();
+        }
+        std::str::from_utf8(&stack_buf[..trimmed.len()]).unwrap_or(trimmed)
+    } else {
+        owned_lower.insert(trimmed.to_ascii_lowercase()).as_str()
+    };
+    match lower {
         // C & C Header
         "c" | "c_shipped" | "i" => "C",
         "h" | "h_shipped" | "inl" => "C Header",
@@ -1323,7 +1335,7 @@ pub fn canonical_language_name(input: &str) -> &'static str {
 }
 
 /// Directories excluded by default in non-git mode.
-pub static EXCLUDED_DIRS: Lazy<std::collections::HashSet<&'static str>> = Lazy::new(|| {
+pub static EXCLUDED_DIRS: Lazy<FxHashSet<&'static str>> = Lazy::new(|| {
     [
         "node_modules",
         ".git",

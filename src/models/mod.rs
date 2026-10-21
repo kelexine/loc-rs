@@ -133,12 +133,19 @@ impl FileInfo {
     }
 
     pub fn avg_function_length(&self) -> f64 {
-        let non_class: Vec<_> = self.functions.iter().filter(|f| !f.is_class).collect();
-        if non_class.is_empty() {
-            return 0.0;
+        let mut total = 0usize;
+        let mut count = 0usize;
+        for f in &self.functions {
+            if !f.is_class {
+                total += f.line_count();
+                count += 1;
+            }
         }
-        let total: usize = non_class.iter().map(|f| f.line_count()).sum();
-        total as f64 / non_class.len() as f64
+        if count == 0 {
+            0.0
+        } else {
+            total as f64 / count as f64
+        }
     }
 
     /// File extension without the leading dot, or empty string.

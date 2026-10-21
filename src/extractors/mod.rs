@@ -66,8 +66,8 @@ pub fn get_extractor(path: &Path) -> Option<Box<dyn Extractor>> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 thread_local! {
-    static TS_PARSER: RefCell<::tree_sitter::Parser> =
-        RefCell::new(::tree_sitter::Parser::new());
+    static TS_PARSER: RefCell<(Option<::tree_sitter::Language>, ::tree_sitter::Parser)> =
+        RefCell::new((None, ::tree_sitter::Parser::new()));
 }
 
 /// Set `language` on the thread-local parser, parse `content`, and invoke `f`
@@ -77,9 +77,13 @@ where
     F: FnOnce(::tree_sitter::Tree) -> R,
 {
     TS_PARSER.with(|cell| {
-        let mut parser = cell.borrow_mut();
-        if parser.set_language(&language).is_err() {
-            return None;
+        let mut slot = cell.borrow_mut();
+        let (cached_lang, parser) = &mut *slot;
+        if cached_lang.as_ref() != Some(&language) {
+            if parser.set_language(&language).is_err() {
+                return None;
+            }
+            *cached_lang = Some(language);
         }
 
         let bytes = content.as_bytes();
@@ -88,8 +92,13 @@ where
 
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(2);
-        let mut progress_cb =
-            |_state: &::tree_sitter::ParseState| -> bool { start.elapsed() >= timeout };
+        let mut ticks = 0u32;
+        let mut progress_cb = |_state: &::tree_sitter::ParseState| -> bool {
+            ticks = ticks.wrapping_add(1);
+            // Sample wall-clock time only every 64 parser steps to avoid
+            // excessive clock_gettime syscalls during normal parsing.
+            ticks.is_multiple_of(64) && start.elapsed() >= timeout
+        };
 
         let options = ::tree_sitter::ParseOptions::new().progress_callback(&mut progress_cb);
         parser

@@ -5,7 +5,7 @@ Common issues and how to resolve them.
 ## `Functions: 0` in summary
 
 Cause:
-- Function extraction is disabled or lamguage might not be supported.
+- Function extraction is disabled or language might not be supported.
 
 Fix:
 

@@ -20,21 +20,21 @@ This document explains how `loc-rs` is organized and how data flows through the 
 - `src/language/mod.rs`
   - Language-extension mapping, alias resolution, comment specs, default exclusions.
 - `src/counter/mod.rs` & submodules
-  - `counter/process.rs`: File worker, single-read byte loading, lossy UTF-8 fallback, binary checks, embedded language routing.
-  - `counter/lines.rs`: Byte and string line analysis, stateful quote tracking, string comment masking, nested block comment tracking.
+  - `counter/process.rs`: File worker, single-read byte loading, stack-buffered extension resolution, SIMD null-byte binary detection, lossy UTF-8 fallback, embedded language routing.
+  - `counter/lines.rs`: SIMD `memchr`-accelerated byte tokenizer, stateful quote & raw-string tracking, string comment masking, nested block comment tracking, single-pass `max_line_len` tracking.
   - `counter/embedded.rs`: HTML `<script>`/`<style>` extraction and Jupyter notebook (`.ipynb`) cell JSON extraction.
   - `counter/discovery.rs`: Filesystem directory walking with ignore rules.
 - `src/agent/mod.rs`
-  - Environment-based auto-detection of AI coding agents (Claude Code, Gemini CLI, etc.).
+  - Environment-based auto-detection of AI coding agents (Claude Code, Gemini CLI, Antigravity, etc.).
   - Orchestration of token-efficient "Agent Mode" (TSV) output.
 - `src/extractors/*`
-  - Tree-sitter-backed per-language function extraction implementations.
+  - Dedicated Tree-sitter-backed per-language function extractors (`rust`, `python`, `javascript`, `go`, `cpp`, `java`, `kotlin`, `csharp`, `scala`, `php`, `swift`, `ruby`) with thread-local parser/grammar caching.
 - `src/models/mod.rs`
-  - Core data structures (`FileInfo`, `EmbeddedChunk`, `FunctionInfo`, `ScanResult`, extension stats).
+  - Core data structures (`FileInfo`, `EmbeddedChunk`, `FunctionInfo`, `ScanResult`, language breakdown stats).
 - `src/display/mod.rs`
-  - Summary, breakdown, tree view, and function analysis output.
+  - Summary, breakdown, tree view, and $O(N)$ top-$K$ function analysis output.
 - `src/export/*`
-  - Report serialization and export format handling.
+  - Report serialization and export format handling (`json`, `jsonl`, `csv`, `tsv`, `html`).
 
 ## Discovery Strategy
 
@@ -46,9 +46,9 @@ This document explains how `loc-rs` is organized and how data flows through the 
 ## Function Extraction Model
 
 - Extraction is opt-in (`-f` or `--func-analysis`, or config default).
-- Extractors parse ASTs via Tree-sitter grammar crates.
-- Output includes name, line range, method/class flags, and complexity estimate.
-- Complexity is a cyclomatic approximation computed over the Tree-sitter AST, shared by every language extractor via `extractors::tree_sitter::ast_complexity`.
+- Extractors parse ASTs via dedicated Tree-sitter grammar crates (12 language families: Rust, Python, JS/TS, Go, C/C++, Java, Kotlin, C#, Scala, PHP, Swift, Ruby) using thread-local `Parser` instances with cached active `Language` grammars and throttled timeout guards.
+- Output includes name, line range, parameter count, method/class/async flags, and complexity estimate.
+- Complexity is a cyclomatic approximation computed in a single iterative post-order pass (`ComplexityIndex` backed by `FxHashMap` and jump-table node classification) in `extractors::tree_sitter`.
 
 ## Output Model & Agent Integration
 

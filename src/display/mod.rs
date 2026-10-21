@@ -638,15 +638,20 @@ pub fn display_function_analysis(result: &ScanResult, root: &Path) {
 fn display_overall_stats(result: &ScanResult, files_with_fns: &[&FileInfo]) {
     let total_fns = result.total_functions();
     let total_cls = result.total_classes();
-    let non_class_fns: Vec<_> = files_with_fns
-        .iter()
-        .flat_map(|f| f.functions.iter().filter(|fn_| !fn_.is_class))
-        .collect();
-    let avg_len = if non_class_fns.is_empty() {
+    let mut sum_lines = 0usize;
+    let mut count_fns = 0usize;
+    for f in files_with_fns {
+        for fn_ in &f.functions {
+            if !fn_.is_class {
+                sum_lines += fn_.line_count();
+                count_fns += 1;
+            }
+        }
+    }
+    let avg_len = if count_fns == 0 {
         0.0
     } else {
-        non_class_fns.iter().map(|f| f.line_count()).sum::<usize>() as f64
-            / non_class_fns.len() as f64
+        sum_lines as f64 / count_fns as f64
     };
 
     println!("{}", "Overall Statistics:".bold());
@@ -665,11 +670,14 @@ fn display_largest_functions(files_with_fns: &[&FileInfo], root: &Path) {
                 .map(move |f| (fi.path.as_path(), f))
         })
         .collect();
-    all_fns.sort_by_key(|a| std::cmp::Reverse(a.1.line_count()));
-
     if all_fns.is_empty() {
         return;
     }
+    if all_fns.len() > 10 {
+        all_fns.select_nth_unstable_by_key(10, |a| std::cmp::Reverse(a.1.line_count()));
+        all_fns.truncate(10);
+    }
+    all_fns.sort_by_key(|a| std::cmp::Reverse(a.1.line_count()));
 
     println!("{}", "Top 10 Largest Functions:".bold());
     println!(
@@ -718,6 +726,10 @@ fn display_complex_functions(files_with_fns: &[&FileInfo], root: &Path) {
         return;
     }
 
+    if complex_fns.len() > 15 {
+        complex_fns.select_nth_unstable_by_key(15, |a| std::cmp::Reverse(a.1.complexity));
+        complex_fns.truncate(15);
+    }
     complex_fns.sort_by_key(|a| std::cmp::Reverse(a.1.complexity));
     println!("{}", "High Complexity Functions (>10):".bold());
     println!("{:<42} {:<32} {:>12}", "Function", "File", "Complexity");
@@ -741,6 +753,10 @@ fn display_complex_functions(files_with_fns: &[&FileInfo], root: &Path) {
 
 fn display_top_files(files_with_fns: &[&FileInfo], root: &Path) {
     let mut sorted_files = files_with_fns.to_vec();
+    if sorted_files.len() > 10 {
+        sorted_files.select_nth_unstable_by_key(10, |b| std::cmp::Reverse(b.function_count()));
+        sorted_files.truncate(10);
+    }
     sorted_files.sort_by_key(|b| std::cmp::Reverse(b.function_count()));
 
     println!("{}", "Top 10 Files by Function Count:\n".bold());

@@ -88,17 +88,11 @@ fn traverse(
         }
 
         if kind == "function_definition" {
-            functions.push(parse_function(
-                node,
-                content,
-                in_class,
-                pending_decorators.clone(),
-                index,
-            ));
-            pending_decorators.clear();
+            let decorators = std::mem::take(&mut pending_decorators);
+            functions.push(parse_function(node, content, in_class, decorators, index));
         } else if kind == "class_definition" {
-            functions.push(parse_class(node, content, pending_decorators.clone()));
-            pending_decorators.clear();
+            let decorators = std::mem::take(&mut pending_decorators);
+            functions.push(parse_class(node, content, decorators));
         }
 
         let is_class_body = kind == "class_definition";
@@ -124,7 +118,7 @@ fn parse_function(
 ) -> FunctionInfo {
     let mut name = String::new();
     let mut is_async = false;
-    let mut params_str = String::new();
+    let mut params_str = "";
     let mut docstring = None;
 
     let mut cursor = node.walk();
@@ -138,10 +132,7 @@ fn parse_function(
         } else if kind == "async" {
             is_async = true;
         } else if kind == "parameters" {
-            params_str = child
-                .utf8_text(content.as_bytes())
-                .unwrap_or("")
-                .to_string();
+            params_str = child.utf8_text(content.as_bytes()).unwrap_or("");
         } else if kind == "block" && child.child_count() > 0 {
             let first_stmt = child.child(0).unwrap();
             if first_stmt.kind() == "expression_statement" && first_stmt.child_count() > 0 {
@@ -196,7 +187,7 @@ fn parse_function(
 
 fn parse_class(node: Node, content: &str, decorators: Vec<String>) -> FunctionInfo {
     let mut name = String::new();
-    let mut params_str = String::new();
+    let mut params_str = "";
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
@@ -207,10 +198,7 @@ fn parse_class(node: Node, content: &str, decorators: Vec<String>) -> FunctionIn
                 .unwrap_or("")
                 .to_string();
         } else if kind == "argument_list" {
-            params_str = child
-                .utf8_text(content.as_bytes())
-                .unwrap_or("")
-                .to_string();
+            params_str = child.utf8_text(content.as_bytes()).unwrap_or("");
         }
     }
 

@@ -80,15 +80,17 @@ fn traverse(
             }
 
             actions.clear();
-            let mut pending_attrs: Vec<String> = Vec::new();
+            let mut pending_is_test = false;
             for &child in &children {
                 let ckind = child.kind();
                 if ckind == "attribute_item" {
                     let text = child.utf8_text(content.as_bytes()).unwrap_or("");
-                    pending_attrs.push(text.to_string());
+                    if text.contains("test") {
+                        pending_is_test = true;
+                    }
                 } else if ckind == "function_item" {
-                    let is_test = pending_attrs.iter().any(|a| a.contains("test"));
-                    pending_attrs.clear();
+                    let is_test = pending_is_test;
+                    pending_is_test = false;
                     if !is_test
                         && let Some(info) =
                             parse_function(child, content, in_impl || is_impl, index)
@@ -96,16 +98,16 @@ fn traverse(
                         actions.push(Step::Emit(info));
                     }
                 } else if ckind == "struct_item" {
-                    pending_attrs.clear();
+                    pending_is_test = false;
                     if let Some(info) = parse_struct(child, content) {
                         actions.push(Step::Emit(info));
                     }
                 } else if ckind == "impl_item" {
-                    pending_attrs.clear();
+                    pending_is_test = false;
                     // Descend into impl blocks with in_impl=true
                     actions.push(Step::Visit(child, true));
                 } else {
-                    pending_attrs.clear();
+                    pending_is_test = false;
                     actions.push(Step::Visit(child, in_impl || is_impl));
                 }
             }
@@ -143,7 +145,7 @@ fn parse_function(
     let mut name = String::new();
     let mut is_async = false;
     let mut is_pub = false;
-    let mut params_str = String::new();
+    let mut params_str = "";
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
@@ -162,10 +164,7 @@ fn parse_function(
         } else if kind == "visibility_modifier" {
             is_pub = true;
         } else if kind == "parameters" {
-            params_str = child
-                .utf8_text(content.as_bytes())
-                .unwrap_or("")
-                .to_string();
+            params_str = child.utf8_text(content.as_bytes()).unwrap_or("");
         }
     }
 

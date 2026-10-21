@@ -67,7 +67,7 @@ fn parse_function(
     index: &ComplexityIndex,
 ) -> Option<FunctionInfo> {
     let mut name = String::new();
-    let mut params_str = String::new();
+    let mut params_str = "";
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
@@ -84,10 +84,7 @@ fn parse_function(
                         .unwrap_or("")
                         .to_string();
                 } else if ikind == "parameter_list" {
-                    params_str = inner_child
-                        .utf8_text(content.as_bytes())
-                        .unwrap_or("")
-                        .to_string();
+                    params_str = inner_child.utf8_text(content.as_bytes()).unwrap_or("");
                 }
             }
         }
@@ -108,10 +105,7 @@ fn parse_function(
                     .unwrap_or("")
                     .to_string();
             } else if ikind == "parameter_list" && params_str.is_empty() {
-                params_str = inner_child
-                    .utf8_text(content.as_bytes())
-                    .unwrap_or("")
-                    .to_string();
+                params_str = inner_child.utf8_text(content.as_bytes()).unwrap_or("");
             }
         }
     }

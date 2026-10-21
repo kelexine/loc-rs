@@ -42,7 +42,7 @@ generated
 
 ## Does `loc-rs` scan binary files?
 
-Binary files are detected and excluded from line metrics. They can be shown in tree output with `--binary`.
+Binary files are detected (via extension fast-path or SIMD null-byte inspection) and excluded from line metrics. They can be shown in `--tree` output with `-b` / `--binary`.
 
 ## Why are my lockfiles showing 0 lines?
 

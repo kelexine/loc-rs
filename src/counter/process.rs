@@ -10,7 +10,7 @@ use super::ScanConfig;
 use super::embedded::{
     is_html_or_template, is_jupyter_notebook, parse_html_embedded, parse_jupyter_notebook,
 };
-use super::lines::analyze_content_with_spec;
+use super::lines::analyze_content_with_spec_and_max_len;
 use crate::extractors;
 use crate::language::BINARY_EXTENSIONS;
 use crate::models::FileInfo;
@@ -18,46 +18,49 @@ use crate::models::FileInfo;
 /// Process a single file: determine binary/text status, load content with UTF-8 fallback,
 /// count code/comment/blank lines, and optionally extract functions.
 pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>> {
-    if !path.is_file() {
-        return Ok(None);
-    }
-
     // ── Lockfile fast-path ────────────────────────────────────────────────────
     // Recognised lockfiles are shown in the tree but never line-counted.
     // This also bypasses the extension filter so that lockfiles always show up
     // in the tree even when -t is specified.
     if crate::language::is_lockfile(path) {
+        if !path.is_file() {
+            return Ok(None);
+        }
         return Ok(Some(
             FileInfo::new(path.to_path_buf(), 0, 0, 0, 0, false).mark_as_lockfile(),
         ));
     }
 
-    // Extract lowercase extension once
-    let ext_str: Cow<'_, str> = match path.extension().and_then(|e| e.to_str()) {
+    // Extract lowercase extension once onto a stack buffer for common ASCII extensions
+    let mut ext_stack_buf = [0u8; 32];
+    let mut ext_owned: Option<String> = None;
+    let ext_str: &str = match path.extension().and_then(|e| e.to_str()) {
+        Some(e) if e.is_ascii() && e.len() < ext_stack_buf.len() => {
+            ext_stack_buf[0] = b'.';
+            for (idx, b) in e.bytes().enumerate() {
+                ext_stack_buf[idx + 1] = b.to_ascii_lowercase();
+            }
+            // SAFETY: e.is_ascii() guarantees all lowercased bytes are valid UTF-8.
+            std::str::from_utf8(&ext_stack_buf[..e.len() + 1]).unwrap_or("")
+        }
         Some(e) => {
             let mut s = String::with_capacity(e.len() + 1);
             s.push('.');
-            if e.is_ascii() {
-                for b in e.bytes() {
-                    s.push(b.to_ascii_lowercase() as char);
-                }
-            } else {
-                for c in e.chars() {
-                    for lc in c.to_lowercase() {
-                        s.push(lc);
-                    }
+            for c in e.chars() {
+                for lc in c.to_lowercase() {
+                    s.push(lc);
                 }
             }
-            Cow::Owned(s)
+            ext_owned.insert(s).as_str()
         }
-        None => Cow::Borrowed(""),
+        None => "",
     };
 
     let known_file = crate::language::detect_known_filename(path);
 
     // Extension filter
     if let Some(allowed) = &config.allowed_extensions {
-        let is_allowed = allowed.contains(ext_str.as_ref())
+        let is_allowed = allowed.contains(ext_str)
             || path
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -78,7 +81,7 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
     }
 
     // Check fast-path binary extension
-    let is_ext_binary = BINARY_EXTENSIONS.contains(ext_str.as_ref());
+    let is_ext_binary = BINARY_EXTENSIONS.contains(ext_str);
 
     // Skip binary files when type-filtering is active
     if is_ext_binary && config.allowed_extensions.is_some() {
@@ -125,11 +128,10 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
     // 2. Extension registry (.rs, .py, .c, etc.)
     // 3. Shebang (#!) for extensionless files
     let mut resolved_lang = known_file.as_ref().map(|k| k.breakdown_key);
-    let mut spec = known_file.as_ref().map(|k| k.comment_spec).or_else(|| {
-        crate::language::COMMENT_REGISTRY
-            .get(ext_str.as_ref())
-            .copied()
-    });
+    let mut spec = known_file
+        .as_ref()
+        .map(|k| k.comment_spec)
+        .or_else(|| crate::language::COMMENT_REGISTRY.get(ext_str).copied());
 
     if spec.is_none()
         && ext_str.is_empty()
@@ -203,27 +205,27 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
     }
 
     let mut embedded_chunks = Vec::new();
-    let (total, code, comment, blank) = match &content {
+    let (total, code, comment, blank, max_line_len) = match &content {
         Some(s) if is_jupyter_notebook(path) => {
             if let Some((t, c, cm, b, chunks)) = parse_jupyter_notebook(s) {
                 embedded_chunks = chunks;
-                (t, c, cm, b)
+                (t, c, cm, b, 0)
             } else {
-                analyze_content_with_spec(s, spec.as_ref())
+                analyze_content_with_spec_and_max_len(s, spec.as_ref())
             }
         }
         Some(s) if is_html_or_template(path) => {
             let container = if ext_str.is_empty() {
                 resolved_lang.unwrap_or(".html")
             } else {
-                ext_str.as_ref()
+                ext_str
             };
             let (t, c, cm, b, chunks) = parse_html_embedded(s, container);
             embedded_chunks = chunks;
-            (t, c, cm, b)
+            (t, c, cm, b, 0)
         }
-        Some(s) => analyze_content_with_spec(s, spec.as_ref()),
-        None => (0, 0, 0, 0),
+        Some(s) => analyze_content_with_spec_and_max_len(s, spec.as_ref()),
+        None => (0, 0, 0, 0, 0),
     };
 
     let mut fi = FileInfo::new(path.to_path_buf(), total, code, comment, blank, is_binary);
@@ -231,7 +233,7 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
     let canonical_lang = if let Some(lang) = resolved_lang {
         crate::language::canonical_language_name(lang)
     } else if !ext_str.is_empty() {
-        crate::language::canonical_language_name(ext_str.as_ref())
+        crate::language::canonical_language_name(ext_str)
     } else {
         "Unknown"
     };
@@ -249,12 +251,10 @@ pub fn process_file(path: &Path, config: &ScanConfig) -> Result<Option<FileInfo>
 
     let should_extract = config.extract_functions
         && !is_binary
+        && max_line_len <= MAX_EXTRACTION_LINE_LENGTH
         && content
             .as_ref()
-            .map(|s| {
-                s.len() <= MAX_EXTRACTION_FILE_SIZE
-                    && !s.lines().any(|l| l.len() > MAX_EXTRACTION_LINE_LENGTH)
-            })
+            .map(|s| s.len() <= MAX_EXTRACTION_FILE_SIZE)
             .unwrap_or(false);
 
     if should_extract
@@ -297,10 +297,10 @@ pub fn detect_encoding(buf: &[u8]) -> TextEncoding {
         return TextEncoding::Utf16Be;
     }
 
-    // 2. Check for null bytes in initial sample
+    // 2. Check for null bytes in initial sample using SIMD memchr
     let check_len = buf.len().min(8192);
     let slice = &buf[..check_len];
-    if !slice.contains(&0u8) {
+    if memchr::memchr(0, slice).is_none() {
         return TextEncoding::Utf8;
     }
 

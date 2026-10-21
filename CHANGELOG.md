@@ -5,10 +5,27 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.2] - 2026-10-21
 
 ### Added
+- Dedicated Tree-sitter language extractors for Kotlin (`.kt`, `.kts`), C# (`.cs`), and Scala (`.scala`, `.sc`) (`src/extractors/kotlin.rs`, `src/extractors/csharp.rs`, `src/extractors/scala.rs`), replacing the previous Java grammar fallback. Supports Kotlin `function_declaration`, `class_declaration`, `object_declaration`, and `suspend` modifiers; C# `method_declaration`, `constructor_declaration`, `local_function_statement`, `class`/`struct`/`interface`/`record` declarations, and `async` modifiers; and Scala `function_definition`, `function_declaration`, `class_definition`, `object_definition`, and `trait_definition`.
+- Expanded cyclomatic complexity AST node coverage across all 12 language extractors (`src/extractors/tree_sitter.rs`): added Ruby (`elsif`, `unless`, `until`, `when`, `rescue`), JavaScript/TypeScript (`switch_case`), Swift (`switch_entry`, `catch_block`, `guard_statement`), C++ (`for_range_loop`, `case_statement`), Kotlin (`when_entry`), C# (`switch_section`, `switch_expression_arm`, `foreach_statement`), and Scala (`case_clause`).
+- Raw string literal tracking (`QuoteState::Raw(usize)`) in the byte-level line tokenizer (`src/counter/lines.rs`), supporting Rust hashed raw strings (`r"..."`, `r#"..."#`) and C#/Python/Kotlin raw strings so trailing backslashes (`r"C:\"`) or embedded quotes/comments inside raw strings never corrupt subsequent line classification.
 - Agent registry sync with [huggingface.js `agent-harnesses.ts`](https://github.com/huggingface/huggingface.js/blob/main/packages/tasks/src/agent-harnesses.ts): added `hi` (PipeNetwork, standard-var detection only), `sandbase-harness` (SandBase AI, standard-var detection only), and `vtcode` (VTCode, exact-match `VTCODE=1`) (`src/agent/harnesses.rs`). Registry now covers 26 harnesses; loc-rs-specific `warp` detection retained.
+
+### Fixed
+- Fixed `.gitignore` and `.locignore` directory and unanchored glob matching (`src/locignore/mod.rs`): enabled `literal_separator(true)` so `*` does not cross `/` boundaries unless `**` is used, normalized trailing-slash directory patterns (`dir/`) to match at any depth, and emitted explicit warnings to `stderr` instead of silently dropping rules if a `GlobSet` fails to compile.
+- Fixed CLI `-t` / `--type` argument parsing (`src/cli/mod.rs`): changed `num_args` from `1..` to `1` with `value_delimiter = ','` so positional paths following `-t <lang>` (e.g. `loc -t rust src/`) are no longer swallowed as language names.
+- Fixed line double-counting in embedded HTML/Vue/Svelte `<script>` and `<style>` blocks (`src/counter/embedded.rs`) when code starts on the same line as the opening tag or ends on the same line as the closing tag.
+- Fixed single-line quote state bleed across lines (`src/counter/lines.rs`): unescaped `"` and `'` string literals now reset at end-of-line unless preceded by a trailing `\` line continuation, preventing unterminated quotes from misclassifying the remainder of a file.
+
+### Performance
+- **SIMD `memchr` byte-scanner & single-pass max-line-length** (`src/counter/lines.rs`, `src/counter/process.rs`): accelerated block comment, triple-quoted string, single/double/backtick string, and raw string scanning with `memchr`/`memchr2`, and fused maximum line length tracking into `analyze_content_with_spec_and_max_len` to eliminate the extra full-file `.lines().any(...)` pass before AST extraction.
+- **Zero-allocation AST function extraction** (`src/extractors/*.rs`): eliminated per-function `params_str: String` heap allocations across all extractors, replaced `pending_attrs: Vec<String>` with a stack `bool` in Rust, replaced `pending_decorators.clone()` with `std::mem::take` in Python, and replaced full-function UTF-8 slicing for `async` detection in JS/TS with an $O(1)$ child token check.
+- **Thread-local Tree-sitter grammar caching & timeout throttling** (`src/extractors/mod.rs`): cached the active `Language` inside thread-local `TS_PARSER` so `parser.set_language()` is skipped when consecutive files share a grammar, and throttled `Instant::now()` timeout checks in `progress_callback` to every 64 parser steps.
+- **Jump-table complexity dispatch & `FxHashMap` index** (`src/extractors/tree_sitter.rs`): replaced 48-element linear slice scans (`DECISION_NODE_TYPES.contains`) with `matches!` jump tables and switched `ComplexityIndex` to a pre-sized `rustc_hash::FxHashMap`.
+- **$O(N)$ top-$K$ selection for `--func-analysis`** (`src/display/mod.rs`, `src/export/tsv.rs`, `src/export/html.rs`, `src/models/mod.rs`): replaced full $O(N \log N)$ sorts over all extracted functions and files with $O(N)$ `select_nth_unstable_by_key` partitioning before sorting only the top-10/top-15 slice, and eliminated temporary `Vec` allocation in `ScanResult::avg_function_length`.
+- **Per-file syscall & allocation elimination** (`src/counter/process.rs`, `src/counter/mod.rs`, `src/language/mod.rs`): removed the redundant initial `path.is_file()` `statx` syscall, lowercased file extensions onto a 32-byte stack buffer instead of heap-allocating a `String` per file, used `memchr` for null-byte binary detection, bypassed `HashSet<PathBuf>` cloning on single-directory scans, and switched all static language/extension/comment/lockfile tables to `FxHashMap`/`FxHashSet`.
 
 ## [0.3.1] - 2026-10-05
 
