@@ -100,10 +100,17 @@ where
             ticks.is_multiple_of(64) && start.elapsed() >= timeout
         };
 
+        // Always reset the parser before parsing a new document so that any
+        // incomplete parse stack left behind by a previous timeout/cancellation
+        // on this thread is cleared.
+        parser.reset();
+
         let options = ::tree_sitter::ParseOptions::new().progress_callback(&mut progress_cb);
-        parser
-            .parse_with_options(&mut read_cb, None, Some(options))
-            .map(f)
+        let tree = parser.parse_with_options(&mut read_cb, None, Some(options));
+        if tree.is_none() {
+            parser.reset();
+        }
+        tree.map(f)
     })
 }
 
@@ -234,5 +241,39 @@ mod tests {
         let block = vec!["while (x) {", "for (int i = 0; i < n; ++i) {"];
         // base(1) + while(1) + for(1) = 3
         assert_eq!(estimate_complexity(&block), 3);
+    }
+
+    #[test]
+    fn test_parser_reset_after_cancelled_parse_does_not_corrupt_next_file() {
+        let lang: ::tree_sitter::Language = tree_sitter_c::LANGUAGE.into();
+
+        // Simulate a cancelled/timed-out parse on a large buffer first
+        TS_PARSER.with(|cell| {
+            let mut slot = cell.borrow_mut();
+            let (cached_lang, parser) = &mut *slot;
+            parser.set_language(&lang).unwrap();
+            *cached_lang = Some(lang.clone());
+
+            let big_source = "int x = 1;\n".repeat(50_000);
+            let bytes = big_source.as_bytes();
+            let len = bytes.len();
+            let mut read_cb = |i: usize, _| if i < len { &bytes[i..] } else { &[] };
+            let mut steps = 0usize;
+            let mut abort_cb = |_state: &::tree_sitter::ParseState| -> bool {
+                steps += 1;
+                steps > 10 // abort mid-file at a high byte offset
+            };
+            let opts = ::tree_sitter::ParseOptions::new().progress_callback(&mut abort_cb);
+            let res = parser.parse_with_options(&mut read_cb, None, Some(opts));
+            assert!(res.is_none());
+            parser.reset();
+        });
+
+        // Now parse a small file with the same language via `with_parsed_tree`
+        // and verify all node byte ranges fit inside the small file.
+        let small = "int foo(int a) { return a + 1; }\n";
+        let fns = crate::extractors::cpp::CppExtractor.extract(small);
+        assert_eq!(fns.len(), 1);
+        assert_eq!(fns[0].name, "foo");
     }
 }

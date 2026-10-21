@@ -5,6 +5,11 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-10-21
+
+### Fixed
+- Fixed a panic (`range start index out of range for slice`) during `--func-analysis` / `-f` on large repositories when a file hits the 2-second Tree-sitter parse timeout (`src/extractors/mod.rs`). Explicitly calling `parser.reset()` before and after cancelled parses prevents Tree-sitter from resuming an aborted parse stack at a stale byte offset on the next file processed by the same worker thread.
+
 ## [0.3.2] - 2026-10-21
 
 ### Added
