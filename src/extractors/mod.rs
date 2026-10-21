@@ -2,13 +2,16 @@
 // extractors/mod.rs — Trait definition, shared utilities, and thread-local tree-sitter parser
 
 pub mod cpp;
+pub mod csharp;
 pub mod go;
 pub mod java;
 pub mod javascript;
+pub mod kotlin;
 pub mod php;
 pub mod python;
 pub mod ruby;
 pub mod rust;
+pub mod scala;
 pub mod swift;
 pub mod tree_sitter;
 
@@ -43,7 +46,10 @@ pub fn get_extractor(path: &Path) -> Option<Box<dyn Extractor>> {
         ".c" | ".h" | ".cpp" | ".cc" | ".cxx" | ".hpp" | ".hxx" => {
             Some(Box::new(cpp::CppExtractor))
         }
-        ".java" | ".kt" | ".kts" | ".cs" | ".scala" => Some(Box::new(java::JavaExtractor)),
+        ".java" => Some(Box::new(java::JavaExtractor)),
+        ".kt" | ".kts" => Some(Box::new(kotlin::KotlinExtractor)),
+        ".cs" => Some(Box::new(csharp::CSharpExtractor)),
+        ".scala" | ".sc" => Some(Box::new(scala::ScalaExtractor)),
         ".php" | ".php3" | ".php4" | ".php5" | ".phtml" => Some(Box::new(php::PhpExtractor)),
         ".swift" => Some(Box::new(swift::SwiftExtractor)),
         ".rb" | ".rake" | ".gemspec" => Some(Box::new(ruby::RubyExtractor)),

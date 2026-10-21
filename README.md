@@ -15,7 +15,7 @@
 - **Embedded-language analysis**: Accurately extracts and credits embedded code blocks inside HTML, Vue, and Svelte templates (`<script>` to JS/TS, `<style>` to CSS/SCSS).
 - **Jupyter Notebook (`.ipynb`) support**: Deserializes notebook JSON, identifies the active kernel language, and parses code and markdown cells into respective language statistics.
 - **Tree view**: Renders a recursive project tree when `--tree` is enabled, with optional binary-file display.
-- **Function extraction and Analysis**: Uses Tree-sitter-backed extractors for Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#/Scala, PHP, Swift, and Ruby.
+- **Function extraction and Analysis**: Uses Tree-sitter-backed extractors for Rust, Python, JavaScript/TypeScript, Go, C/C++, Java, Kotlin, C#, Scala, PHP, Swift, and Ruby.
 - **Complexity analysis**: Reports function length and a branch-count cyclomatic complexity estimate.
 - **Agent detection**: Switches to token-efficient TSV output when run inside AI coding agents (Claude Code, Codex, Antigravity, Gemini CLI, etc.).
 - **Lockfile awareness**: Automatically detects dependency lockfiles (Cargo.lock, package-lock.json, etc.), excluding them from line metrics to prevent skewed stats.
@@ -59,7 +59,7 @@ loc src/
 loc -d
 loc --tree
 loc -f --func-analysis
-loc -t rust python typescript
+loc -t rust,python,typescript
 loc -e report.html -f
 loc --json
 loc -q | head -20
@@ -112,7 +112,7 @@ loc [OPTIONS] [PATHS]...
 | Include binary files in the tree | `loc --tree -b` |
 | Extract functions and methods | `loc -f` |
 | Show function complexity analysis | `loc --func-analysis` |
-| Scan only selected languages | `loc -t rust python typescript` |
+| Scan only selected languages | `loc -t rust,python,typescript` (or repeat `-t`) |
 | Warn for files above 500 lines | `loc --warn-size 500` |
 | Include hidden files and directories | `loc --include-hidden` |
 | Disable parallel processing | `loc --no-parallel` |
@@ -271,7 +271,10 @@ Function extraction is available when `-f` or `--func-analysis` is enabled. The 
 | JavaScript/TypeScript | ✓ | ✓ | ✓ | ✓ | — | — |
 | Go | ✓ | ✓ | — | — | — | — |
 | C/C++ | ✓ | ✓ | ✓ | — | — | — |
-| Java/Kotlin/C#/Scala | ✓ | ✓ | ✓ | — | — | — |
+| Java | ✓ | ✓ | ✓ | — | — | — |
+| Kotlin | ✓ | ✓ | ✓ | — | `suspend` | — |
+| C# | ✓ | ✓ | ✓ | — | `async` | — |
+| Scala | ✓ | ✓ | ✓ | — | — | — |
 | PHP | ✓ | ✓ | ✓ | — | — | — |
 | Swift | ✓ | ✓ | ✓ | ✓ | — | — |
 | Ruby | ✓ | ✓ | ✓ | — | — | — |

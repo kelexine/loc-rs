@@ -13,6 +13,42 @@ enum QuoteState {
     Backtick,
     TripleDouble,
     TripleSingle,
+    /// Rust-style raw string (`r"…"`, `r#"…"#`); closes on `"` + N `#`s.
+    Raw,
+}
+
+/// Returns `true` for bytes that can continue an identifier.
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// If a Rust-style raw string literal opens at `bytes[i]` (`r"`, `r#"`, `br"`, `cr#"`, …),
+/// return the number of `#` delimiters and the index just past the opening quote.
+fn raw_string_open(bytes: &[u8], i: usize) -> Option<(usize, usize)> {
+    if bytes[i] != b'r' {
+        return None;
+    }
+    // The `r` must start a token, optionally after a `b` / `c` prefix.
+    let prefix_len = match i.checked_sub(1).map(|p| bytes[p]) {
+        Some(b'b' | b'c') => 1,
+        _ => 0,
+    };
+    let token_start = i - prefix_len;
+    if token_start > 0 && is_ident_byte(bytes[token_start - 1]) {
+        return None;
+    }
+    let mut j = i + 1;
+    while j < bytes.len() && bytes[j] == b'#' {
+        j += 1;
+    }
+    (j < bytes.len() && bytes[j] == b'"').then_some((j - i - 1, j + 1))
+}
+
+/// Returns `true` when `bytes[i..]` is `"` followed by `hashes` `#` bytes.
+fn raw_string_closes(bytes: &[u8], i: usize, hashes: usize) -> bool {
+    bytes[i] == b'"'
+        && bytes.len() >= i + 1 + hashes
+        && bytes[i + 1..i + 1 + hashes].iter().all(|&b| b == b'#')
 }
 
 /// Analyze text lines using a high-performance zero-allocation byte-level tokenizer.
@@ -52,6 +88,17 @@ pub fn analyze_content_with_spec(
     let multi_end_bytes = spec.and_then(|s| s.multi).map(|(_, e)| e.as_bytes());
     let supports_nesting = spec.map(|s| s.supports_nesting).unwrap_or(false);
 
+    // C-family specs (`//` + non-nesting `/* */`) and Python cannot continue a `"…"`
+    // string onto the next line without a trailing backslash, so a dangling quote
+    // is reset at end-of-line instead of poisoning the rest of the file.
+    let is_c_like = spec
+        .map(|s| s.single == Some("//") && s.multi == Some(("/*", "*/")) && !s.supports_nesting)
+        .unwrap_or(false);
+    let resets_double_at_eol = is_python_docstring_spec || is_c_like;
+    // Rust-like specs (`/* */` that nests) also have raw strings.
+    let supports_raw_strings = supports_nesting && spec.and_then(|s| s.multi) == Some(("/*", "*/"));
+    let mut raw_hashes = 0usize;
+
     // Fast trigger table for lines outside comments and strings
     let mut trigger = [false; 256];
     trigger[b'"' as usize] = true;
@@ -68,7 +115,8 @@ pub fn analyze_content_with_spec(
         total += 1;
         let bytes = line.as_bytes();
         let len = bytes.len();
-
+        // Set when a backslash is the last byte of a `"…"` string (line continuation).
+        let mut line_continues = false;
         // Fast-path: find first non-whitespace byte
         let mut start_idx = 0;
         while start_idx < len && bytes[start_idx].is_ascii_whitespace() {
@@ -180,10 +228,21 @@ pub fn analyze_content_with_spec(
                 QuoteState::Double => {
                     has_code = true;
                     if b == b'\\' {
+                        line_continues = i + 1 >= len;
                         i += 2; // Skip backslash + escaped byte
                     } else if b == b'"' {
                         quote_state = QuoteState::None;
                         i += 1;
+                    } else {
+                        i += 1;
+                    }
+                    continue;
+                }
+                QuoteState::Raw => {
+                    has_code = true;
+                    if raw_string_closes(bytes, i, raw_hashes) {
+                        quote_state = QuoteState::None;
+                        i += 1 + raw_hashes;
                     } else {
                         i += 1;
                     }
@@ -240,6 +299,15 @@ pub fn analyze_content_with_spec(
                 break;
             }
 
+            // Raw string opening (Rust-like languages only)
+            if supports_raw_strings && let Some((hashes, next)) = raw_string_open(bytes, i) {
+                has_code = true;
+                quote_state = QuoteState::Raw;
+                raw_hashes = hashes;
+                i = next;
+                continue;
+            }
+
             // String opening
             if b == b'"' {
                 has_code = true;
@@ -276,6 +344,10 @@ pub fn analyze_content_with_spec(
 
         // Reset single-character/single-quoted strings at end-of-line
         if quote_state == QuoteState::Single {
+            quote_state = QuoteState::None;
+        }
+        // Reset an unterminated `"…"` string where the language cannot span lines.
+        if quote_state == QuoteState::Double && resets_double_at_eol && !line_continues {
             quote_state = QuoteState::None;
         }
 
@@ -362,6 +434,55 @@ fn main() {}
         assert_eq!(comment, 3);
         assert_eq!(blank, 1);
         assert_eq!(total, 5);
+    }
+
+    #[test]
+    fn test_rust_raw_string_with_trailing_backslash() {
+        let rs_path = PathBuf::from("test.rs");
+        let content = "let p = r\"C:\\\";\n// real comment\nlet q = 1;\n";
+        let (total, code, comment, blank) = analyze_content(content, &rs_path);
+        assert_eq!((total, code, comment, blank), (3, 2, 1, 0));
+    }
+
+    #[test]
+    fn test_rust_hashed_raw_string_contains_quotes_and_comment_markers() {
+        let rs_path = PathBuf::from("test.rs");
+        let content = "let s = r#\"say \"hi\" // not a comment\"#;\n// comment\nlet z = 0;\n";
+        let (total, code, comment, blank) = analyze_content(content, &rs_path);
+        assert_eq!((total, code, comment, blank), (3, 2, 1, 0));
+    }
+
+    #[test]
+    fn test_identifier_ending_in_r_is_not_raw_string() {
+        let rs_path = PathBuf::from("test.rs");
+        // `bar"` must not be treated as a raw string opener.
+        let content = "let a = foo(bar\"x\");\n// comment\n";
+        let (_, code, comment, _) = analyze_content(content, &rs_path);
+        assert_eq!((code, comment), (1, 1));
+    }
+
+    #[test]
+    fn test_unterminated_double_quote_resets_in_c_like() {
+        let c_path = PathBuf::from("test.c");
+        let content = "char *s = \"oops;\n// comment\nint x;\n";
+        let (total, code, comment, blank) = analyze_content(content, &c_path);
+        assert_eq!((total, code, comment, blank), (3, 2, 1, 0));
+    }
+
+    #[test]
+    fn test_c_string_line_continuation_keeps_state() {
+        let c_path = PathBuf::from("test.c");
+        let content = "char *s = \"abc \\\n// still string\";\nint x;\n";
+        let (total, code, comment, _) = analyze_content(content, &c_path);
+        assert_eq!((total, code, comment), (3, 3, 0));
+    }
+
+    #[test]
+    fn test_unterminated_double_quote_resets_in_python() {
+        let py_path = PathBuf::from("test.py");
+        let content = "x = \"oops\n# comment\ny = 1\n";
+        let (total, code, comment, _) = analyze_content(content, &py_path);
+        assert_eq!((total, code, comment), (3, 2, 1));
     }
 
     #[test]

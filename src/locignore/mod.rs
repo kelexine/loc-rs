@@ -2,7 +2,7 @@
 // locignore.rs — .locignore engine: glob patterns, per-directory cascade,
 //                negation overrides, and precedence over .gitignore.
 
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use std::path::{Path, PathBuf};
 
 /// A compiled `.locignore` ruleset.
@@ -87,13 +87,30 @@ impl LocIgnore {
 
         Self::collect(root, root, &mut loc, &mut git, &mut has_negations);
 
+        let (loc_set, loc_rules) = Self::finish(loc, ".locignore");
+        let (git_set, git_rules) = Self::finish(git, ".gitignore");
+
         Self {
-            loc_set: loc.builder.build().unwrap_or_else(|_| GlobSet::empty()),
-            loc_rules: loc.rules,
-            git_set: git.builder.build().unwrap_or_else(|_| GlobSet::empty()),
-            git_rules: git.rules,
+            loc_set,
+            loc_rules,
+            git_set,
+            git_rules,
             root: root.to_path_buf(),
             has_negations,
+        }
+    }
+
+    /// Compile an [`IgnoreBuilder`] into its set and rule list.
+    ///
+    /// On a build failure the rules are dropped (rule/glob indices would no longer
+    /// line up) but a warning naming `source` is printed instead of failing silently.
+    fn finish(b: IgnoreBuilder, source: &str) -> (GlobSet, Vec<RuleMeta>) {
+        match b.builder.build() {
+            Ok(set) => (set, b.rules),
+            Err(e) => {
+                eprintln!("[WARN] Failed to compile {source} rules; ignoring them: {e}");
+                (GlobSet::empty(), Vec::new())
+            }
         }
     }
 
@@ -259,14 +276,18 @@ impl LocIgnore {
         is_negation: bool,
     ) {
         for expanded in Self::expand(pattern, dir_rel) {
-            if let Ok(g) = Glob::new(&expanded) {
-                builder.add(g);
-                rules.push(RuleMeta {
-                    rule_id,
-                    is_negation,
-                });
+            // `literal_separator` keeps `*` from crossing `/`, matching gitignore.
+            match GlobBuilder::new(&expanded).literal_separator(true).build() {
+                Ok(g) => {
+                    builder.add(g);
+                    rules.push(RuleMeta {
+                        rule_id,
+                        is_negation,
+                    });
+                }
+                // Skip malformed patterns (don't crash on typos) but tell the user.
+                Err(e) => eprintln!("[WARN] Ignoring invalid ignore pattern '{pattern}': {e}"),
             }
-            // Silently skip malformed patterns — don't crash on user typos.
         }
     }
 
@@ -290,8 +311,17 @@ impl LocIgnore {
         };
 
         // Trailing `/` → directory exclude: match the dir name and everything inside.
+        // Mirrors `.gitignore`: with no other `/` in the pattern the directory is
+        // matched at any depth; a leading or inner `/` anchors it to `dir_rel`.
         if let Some(dir_pat) = pattern.strip_suffix('/') {
-            return vec![prefix(dir_pat), prefix(&format!("{}/**", dir_pat))];
+            let anchored = dir_pat.strip_prefix('/');
+            let name = anchored.unwrap_or(dir_pat);
+            let mut globs = vec![prefix(name), prefix(&format!("{}/**", name))];
+            if anchored.is_none() && !name.contains('/') {
+                globs.push(prefix(&format!("**/{}", name)));
+                globs.push(prefix(&format!("**/{}/**", name)));
+            }
+            return globs;
         }
 
         // Leading `/` → anchored to the containing directory.
@@ -346,6 +376,43 @@ mod tests {
         let e = LocIgnore::expand("dist/", "");
         assert!(e.contains(&"dist".to_string()));
         assert!(e.contains(&"dist/**".to_string()));
+    }
+
+    #[test]
+    fn expand_trailing_slash_matches_any_depth() {
+        let e = LocIgnore::expand("build/", "");
+        assert!(e.contains(&"**/build".to_string()));
+        assert!(e.contains(&"**/build/**".to_string()));
+    }
+
+    #[test]
+    fn expand_anchored_dir_pattern() {
+        let e = LocIgnore::expand("/gen/", "src");
+        assert_eq!(e, vec!["src/gen".to_string(), "src/gen/**".to_string()]);
+        let e = LocIgnore::expand("a/gen/", "");
+        assert_eq!(e, vec!["a/gen".to_string(), "a/gen/**".to_string()]);
+    }
+
+    #[test]
+    fn nested_directory_pattern_excludes_at_any_depth() {
+        let dir = TempDir::new().unwrap();
+        write(dir.path(), ".gitignore", "build/\n");
+        write(dir.path(), "sub/build/out.o", "");
+        write(dir.path(), "sub/src/main.rs", "");
+
+        let li = LocIgnore::build(dir.path());
+        assert!(li.is_excluded(&dir.path().join("sub/build/out.o")));
+        assert!(!li.is_excluded(&dir.path().join("sub/src/main.rs")));
+    }
+
+    #[test]
+    fn star_does_not_cross_directory_separator() {
+        let dir = TempDir::new().unwrap();
+        write(dir.path(), ".locignore", "docs/*.md\n");
+
+        let li = LocIgnore::build(dir.path());
+        assert!(li.is_excluded(&dir.path().join("docs/a.md")));
+        assert!(!li.is_excluded(&dir.path().join("docs/deep/a.md")));
     }
 
     #[test]

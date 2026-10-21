@@ -50,6 +50,33 @@ fn test_type_filter_rust_only() {
 }
 
 #[test]
+fn test_type_filter_before_positional_path_does_not_swallow_path() {
+    let fixture = make_fixture(&[
+        ("main.rs", "fn main() {}\n"),
+        ("script.py", "print('hello')\n"),
+        ("notes.md", "# Notes\n"),
+    ]);
+
+    let out = run_loc(&[
+        "-t",
+        "rust,python",
+        fixture.path().to_str().unwrap(),
+        "--format",
+        "json",
+    ]);
+    assert!(out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("Unknown language filter"),
+        "Positional path must not be consumed by -t:\n{}",
+        stderr
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid json output");
+    assert_eq!(json["metadata"]["total_files"], 2);
+}
+
+#[test]
 fn test_detailed_breakdown_flag() {
     let fixture = make_fixture(&[
         ("main.rs", "fn main() {}\n"),

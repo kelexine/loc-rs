@@ -1,5 +1,5 @@
 // Author: kelexine (https://github.com/kelexine)
-// extractors/java.rs — Java/Kotlin/C# function extraction via Tree-sitter
+// extractors/java.rs — Java function extraction via Tree-sitter
 
 use super::Extractor;
 use super::tree_sitter::ComplexityIndex;

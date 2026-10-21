@@ -276,19 +276,51 @@ pub fn parse_html_embedded(
     )
 }
 
-/// Strip tag bodies from content while preserving tag lines on their respective lines.
+/// Strip tag bodies from content so only the lines *not* already attributed to the
+/// embedded chunk remain in the container.
+///
+/// A multi-line block spans `spanned` physical lines; its (trimmed) body is counted
+/// as `body_lines` lines by the embedded chunk, so exactly `spanned - body_lines`
+/// lines are left behind for the container. This keeps the sum of all chunks equal
+/// to the physical line count even when the body starts on the `<script>` line
+/// (`<script>foo();`) or ends on the `</script>` line (`bar();</script>`).
 fn strip_block(content: &str, regex: &Regex, tag_name: &str) -> String {
-    regex
-        .replace_all(content, |caps: &regex::Captures| {
-            let full = caps.get(0).unwrap().as_str();
-            let attrs = caps.name("attrs").map(|m| m.as_str()).unwrap_or("");
-            if full.contains('\n') {
-                format!("<{}{}>\n</{}>", tag_name, attrs, tag_name)
-            } else {
-                format!("<{}{}></{}>", tag_name, attrs, tag_name)
+    let mut out = String::with_capacity(content.len());
+    let mut last = 0;
+    for caps in regex.captures_iter(content) {
+        let Some(m) = caps.get(0) else { continue };
+        out.push_str(&content[last..m.start()]);
+        last = m.end();
+
+        let full = m.as_str();
+        let attrs = caps.name("attrs").map(|a| a.as_str()).unwrap_or("");
+        if !full.contains('\n') {
+            out.push_str(&format!("<{tag_name}{attrs}></{tag_name}>"));
+            continue;
+        }
+
+        let body = trim_tag_newlines(caps.name("body").map(|b| b.as_str()).unwrap_or(""));
+        let spanned = full.matches('\n').count() + 1;
+        let remaining = spanned.saturating_sub(body.lines().count());
+        match remaining {
+            0 => {
+                // Nothing of the container is left on these lines: drop the block
+                // and, when it started a line, the newline that terminated it.
+                let starts_line = m.start() == 0 || content.as_bytes()[m.start() - 1] == b'\n';
+                if starts_line && content[last..].starts_with('\n') {
+                    last += 1;
+                }
             }
-        })
-        .into_owned()
+            1 => out.push_str(&format!("<{tag_name}{attrs}></{tag_name}>")),
+            n => {
+                out.push_str(&format!("<{tag_name}{attrs}>"));
+                out.push_str(&"\n".repeat(n - 1));
+                out.push_str(&format!("</{tag_name}>"));
+            }
+        }
+    }
+    out.push_str(&content[last..]);
+    out
 }
 
 #[cfg(test)]
@@ -378,6 +410,22 @@ export default {
         assert_eq!(sum_code, phys_c);
         assert_eq!(sum_comment, phys_cm);
         assert_eq!(sum_blank, phys_b);
+    }
+
+    #[test]
+    fn test_script_body_on_tag_lines_is_not_double_counted() {
+        let html = "<html>\n<script>foo();\nbar();</script>\n</html>\n";
+        let (phys_t, _, _, _, chunks) = parse_html_embedded(html, ".html");
+        assert_eq!(phys_t, 4, "physical lines must equal sum of chunks");
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].extension, "html");
+        assert_eq!(chunks[0].lines, 2);
+        assert_eq!(chunks[1].extension, "js");
+        assert_eq!(chunks[1].lines, 2);
+
+        let half = "<html>\n<script>\nfoo();</script>\n</html>\n";
+        let (phys_t, _, _, _, _) = parse_html_embedded(half, ".html");
+        assert_eq!(phys_t, 4);
     }
 
     #[test]

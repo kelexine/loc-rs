@@ -19,7 +19,7 @@ loc --func-analysis
 The language name is not mapped in resolver aliases. Language might not be supported yet, use a supported language or a direct extension:
 
 ```bash
-loc -t .rs .py
+loc -t .rs,.py
 ```
 
 ## How do I ignore project-specific paths without messing with .gitignore rules?

@@ -34,7 +34,7 @@ Fix:
 - Or pass a direct extension:
 
 ```bash
-loc -t .rs .py
+loc -t .rs,.py
 ```
 
 ## Hidden files are missing

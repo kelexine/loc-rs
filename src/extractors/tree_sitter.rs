@@ -21,36 +21,58 @@ use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator}
 /// Covers every tree-sitter grammar bundled with loc-rs.
 const DECISION_NODE_TYPES: &[&str] = &[
     // ── if / elif / elseif ────────────────────────────────────────────────
-    "if_expression", // Rust
-    "if_statement",  // Python, JS, TS, Java, C, C++, Go, PHP, Swift
-    "elif_clause",   // Python   ← never double-counted with if_statement
-    "elseif_clause", // PHP
+    "if_expression",   // Rust
+    "if_statement",    // Python, JS, TS, Java, C, C++, Go, PHP, Swift
+    "elif_clause",     // Python   ← never double-counted with if_statement
+    "elseif_clause",   // PHP
+    "if",              // Ruby
+    "elsif",           // Ruby
+    "unless",          // Ruby
+    "if_modifier",     // Ruby (`x if y`)
+    "unless_modifier", // Ruby (`x unless y`)
     // ── loops ────────────────────────────────────────────────────────────
-    "while_expression",       // Rust
-    "while_statement",        // Python, JS, TS, Java, C, C++, PHP, Swift
-    "do_statement",           // JS, TS, Java, C, C++, PHP
-    "for_expression",         // Rust
-    "for_statement",          // Python, JS, TS, Java, C, C++, PHP
+    "while_expression",       // Rust, Scala
+    "while_statement",        // Python, JS, TS, Java, C, C++, PHP, Swift, Kotlin, C#
+    "do_statement",           // JS, TS, Java, C, C++, PHP, C# (special-cased: needs `while`)
+    "do_while_statement",     // Kotlin
+    "do_while_expression",    // Scala
+    "repeat_while_statement", // Swift
+    "for_expression",         // Rust, Scala
+    "for_statement",          // Python, JS, TS, Java, C, C++, PHP, Kotlin, C#
+    "for_range_loop",         // C++ (`for (auto x : xs)`)
     "for_in_statement",       // JS, TS
     "for_of_statement",       // JS, TS
-    "foreach_statement",      // PHP
+    "foreach_statement",      // PHP, C#
     "enhanced_for_statement", // Java
     "loop_expression",        // Rust (infinite loop)
+    "while",                  // Ruby
+    "until",                  // Ruby
+    "for",                    // Ruby
+    "while_modifier",         // Ruby
+    "until_modifier",         // Ruby
     // ── match / switch cases ─────────────────────────────────────────────
     "match_arm",                    // Rust — each arm = 1 decision point
     "case_statement",               // C, C++
     "switch_block_statement_group", // Java
+    "switch_section",               // C#
+    "switch_expression_arm",        // C#
     "expression_case_clause",       // Go
-    "case_clause",                  // Go, JS
+    "case_clause",                  // Go, Python `match`, Scala
+    "switch_case",                  // JS, TS
+    "switch_entry",                 // Swift
+    "when_entry",                   // Kotlin
     "when",                         // Ruby
     // ── exception handling ────────────────────────────────────────────────
-    "catch_clause",  // JS, TS, Java, C++
-    "except_clause", // Python
-    "rescue_clause", // Ruby
-    "rescue",        // Ruby (alternate form)
+    "catch_clause",    // JS, TS, Java, C++, C#, Scala
+    "catch_block",     // Swift, Kotlin
+    "except_clause",   // Python
+    "rescue_clause",   // Ruby
+    "rescue",          // Ruby (alternate form)
+    "rescue_modifier", // Ruby (`x rescue y`)
     // ── ternary / conditional ─────────────────────────────────────────────
     "ternary_expression",     // JS, TS, PHP, Java, C, C++
     "conditional_expression", // C, C++ (some grammars)
+    "conditional",            // Ruby ternary
     // ── guard ────────────────────────────────────────────────────────────
     "guard_statement", // Swift
     // ── logical operators as first-class node types (some grammars) ──────
@@ -62,24 +84,42 @@ const DECISION_NODE_TYPES: &[&str] = &[
 /// Binary-expression node types that contain `&&`/`||` as operator child tokens
 /// rather than exposing them as a named node type.
 const BINARY_EXPR_TYPES: &[&str] = &[
-    "binary_expression",  // Rust, JS, TS, Java, C, C++, Go, PHP, Ruby
+    "binary_expression",  // Rust, JS, TS, Java, C, C++, Go, PHP, Swift, Kotlin, C#
+    "infix_expression",   // Scala
+    "binary",             // Ruby
     "logical_expression", // some TS grammars
 ];
 
 /// Operator texts treated as logical decision points inside binary expressions.
-const LOGICAL_OPS: &[&str] = &["&&", "||"];
+const LOGICAL_OPS: &[&str] = &["&&", "||", "and", "or"];
 
 /// Count decision points contributed directly by `node` (excluding its descendants).
+///
+/// Only *named* nodes are counted as decision constructs: anonymous keyword
+/// tokens share their text as `kind()` (e.g. the `if` token inside Ruby's
+/// `if` node), so counting them would double-count every construct.
 #[inline]
 fn node_decision_count(node: Node<'_>, src: &[u8]) -> u32 {
+    if !node.is_named() {
+        return 0;
+    }
     let kind = node.kind();
+    // `do_statement` is a do-while loop in C-likes but a plain scope block in Swift
+    // (`do { … } catch …`); only the loop form has a `while` token child.
+    if kind == "do_statement" {
+        let mut cursor = node.walk();
+        let has_while = node.children(&mut cursor).any(|c| c.kind() == "while");
+        return u32::from(has_while);
+    }
     if DECISION_NODE_TYPES.contains(&kind) {
         1
     } else if BINARY_EXPR_TYPES.contains(&kind) {
         let mut count = 0;
         let child_count = node.child_count();
         for i in 0..child_count {
-            if let Some(child) = node.child(i) {
+            if let Some(child) = node.child(i)
+                && (!child.is_named() || child.kind() == "operator_identifier")
+            {
                 let text = child.utf8_text(src).unwrap_or("");
                 if LOGICAL_OPS.contains(&text) {
                     count += 1;
@@ -298,6 +338,59 @@ impl Extractor for TreeSitterExtractor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Parse `code` with `language` and return the whole-tree cyclomatic complexity.
+    fn root_complexity(language: Language, code: &str) -> u32 {
+        let mut parser = Parser::new();
+        parser.set_language(&language).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        ast_complexity(tree.root_node(), code.as_bytes())
+    }
+
+    #[test]
+    fn ruby_control_flow_is_counted_once_each() {
+        let code = "def f(a)\n  if a > 1 && a < 5\n    1\n  elsif a == 0\n    2\n  end\n  \
+                    while a > 0 do a -= 1 end\n  puts 'x' unless a\nend\n";
+        // 1 + if + && + elsif + while + unless modifier
+        assert_eq!(root_complexity(tree_sitter_ruby::LANGUAGE.into(), code), 6);
+    }
+
+    #[test]
+    fn ruby_when_and_rescue_not_double_counted() {
+        let code = "case x\nwhen 1 then 1\nwhen 2 then 2\nend\nbegin\n  y\nrescue\n  z\nend\n";
+        // 1 + when + when + rescue
+        assert_eq!(root_complexity(tree_sitter_ruby::LANGUAGE.into(), code), 4);
+    }
+
+    #[test]
+    fn javascript_switch_cases_are_counted() {
+        let code = "function f(x){ switch (x) { case 1: break; case 2: break; default: break; } }";
+        assert_eq!(
+            root_complexity(tree_sitter_javascript::LANGUAGE.into(), code),
+            3
+        );
+    }
+
+    #[test]
+    fn cpp_range_for_is_counted() {
+        let code = "void f(){ for (auto x : xs) { g(x); } }";
+        assert_eq!(root_complexity(tree_sitter_cpp::LANGUAGE.into(), code), 2);
+    }
+
+    #[test]
+    fn c_do_while_counts_but_swift_do_block_does_not() {
+        let code = "void f(){ do { x(); } while (y); }";
+        // 1 + do-while
+        assert_eq!(root_complexity(tree_sitter_c::LANGUAGE.into(), code), 2);
+    }
+
+    #[test]
+    fn swift_switch_entries_and_catch_are_counted() {
+        let code = "func f() {\n  switch x {\n  case 1: break\n  default: break\n  }\n  \
+                    do { try g() } catch { }\n}\n";
+        // 1 + two switch entries + catch block
+        assert_eq!(root_complexity(tree_sitter_swift::LANGUAGE.into(), code), 4);
+    }
 
     #[test]
     fn test_complexity_index_matches_ast_complexity() {

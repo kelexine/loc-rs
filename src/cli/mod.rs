@@ -43,7 +43,7 @@ EXAMPLES:
   loc -d                       Show per-language breakdown table
   loc -f                       Extract and list functions/methods
   loc -f --func-analysis       Full function complexity report
-  loc -t rust python           Only scan Rust and Python files
+  loc -t rust,python src/      Only scan Rust and Python files (or: -t rust -t python)
   loc -e results.json          Export to JSON
   loc -e stats.csv -f          Export CSV with function data
   loc -e report.html           Export interactive HTML dashboard
@@ -82,7 +82,7 @@ SUPPORTED LANGUAGES (LOC Counting):
   Pascal, V, Odin, CUDA, GLSL Shaders, Jupyter Notebooks
 
 FUNCTION EXTRACTION:
-  Rust, Python, JavaScript/TypeScript, Go, C/C++, Java/Kotlin/C#, PHP, Swift, Ruby"
+  Rust, Python, JavaScript/TypeScript, Go, C/C++, Java, Kotlin, C#, Scala, PHP, Swift, Ruby"
 )]
 pub struct Args {
     /// Target files or directories to scan (default: current directory)
@@ -105,8 +105,17 @@ pub struct Args {
     #[arg(long = "func-analysis")]
     pub func_analysis: bool,
 
-    /// Filter by language(s) — e.g. -t rust python typescript
-    #[arg(short = 't', long = "type", value_name = "LANG", num_args = 1..)]
+    /// Filter by language(s) — e.g. -t rust,python or -t rust -t python
+    ///
+    /// Takes exactly one value per occurrence (comma-separated lists allowed) so
+    /// that positional paths after the flag are not mistaken for languages.
+    #[arg(
+        short = 't',
+        long = "type",
+        value_name = "LANG",
+        num_args = 1,
+        value_delimiter = ','
+    )]
     pub file_types: Vec<String>,
 
     /// Export results to file (.json, .jsonl, .csv, .tsv, or .html)
