@@ -131,6 +131,8 @@ fn print_tree_node(
 
             let lockfile_tag = if fi.is_lockfile {
                 format!(" {}", "[lockfile]".bright_black())
+            } else if fi.language.as_deref() == Some("Log File") {
+                format!(" {}", "[logfile]".bright_black())
             } else {
                 String::new()
             };

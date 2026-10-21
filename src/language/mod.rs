@@ -141,6 +141,7 @@ pub static LANGUAGE_MAP: Lazy<FxHashMap<&'static str, Vec<&'static str>>> = Lazy
     m.insert("scheme", vec![".scm", ".ss", ".rkt"]);
     m.insert("d", vec![".d", ".di"]);
     m.insert("org", vec![".org"]);
+    m.insert("log", vec![".log"]);
     m
 });
 
@@ -218,6 +219,11 @@ static ALIASES: Lazy<FxHashMap<&'static str, &'static str>> = Lazy::new(|| {
     m.insert("scm", "scheme");
     m.insert("rkt", "scheme");
     m.insert("lsp", "lisp");
+    m.insert("log", "log");
+    m.insert("dmesg", "log");
+    m.insert("kmsg", "log");
+    m.insert("logcat", "log");
+    m.insert("ramoops", "log");
     m
 });
 
@@ -491,6 +497,11 @@ pub static COMMENT_REGISTRY: Lazy<FxHashMap<&'static str, CommentSpec>> = Lazy::
         multi: Some(("/*", "*/")),
         supports_nesting: false,
     };
+    let plain_style = CommentSpec {
+        single: None,
+        multi: None,
+        supports_nesting: false,
+    };
 
     // Mapping
     let mappings = [
@@ -665,6 +676,7 @@ pub static COMMENT_REGISTRY: Lazy<FxHashMap<&'static str, CommentSpec>> = Lazy::
         (vec![".hbs", ".handlebars", ".mustache"], handlebars_style),
         (vec![".applescript", ".scpt"], applescript_style),
         (vec![".tf", ".tfvars", ".hcl"], hcl_style),
+        (vec![".log"], plain_style),
     ];
 
     for (exts, spec) in mappings {
@@ -925,6 +937,37 @@ pub fn detect_known_filename(path: &std::path::Path) -> Option<KnownFileSpec> {
         });
     }
 
+    if name == "dmesg"
+        || name == "kmsg"
+        || name == "logcat"
+        || name.starts_with("dmesg.")
+        || name.starts_with("dmesg_")
+        || name.ends_with(".dmesg")
+        || name.starts_with("kmsg.")
+        || name.starts_with("kmsg_")
+        || name.ends_with(".kmsg")
+        || name.contains("kmsg")
+        || name.starts_with("logcat.")
+        || name.starts_with("logcat_")
+        || name.ends_with(".logcat")
+        || name.contains("logcat")
+        || name.contains("ramoops")
+        || name == "pmsg-ramoops-0"
+        || name == "console-ramoops"
+        || name == "console-ramoops-0"
+        || name.starts_with("console-ramoops")
+    {
+        return Some(KnownFileSpec {
+            language: "Log File",
+            breakdown_key: "Log File",
+            comment_spec: CommentSpec {
+                single: None,
+                multi: None,
+                supports_nesting: false,
+            },
+        });
+    }
+
     None
 }
 
@@ -1153,6 +1196,7 @@ pub fn canonical_language_name(input: &str) -> &'static str {
         "tex" | "sty" | "cls" => "TeX",
         "vim" => "Vim Script",
         "txt" | "text" => "Plain Text",
+        "log" | "dmesg" | "kmsg" | "logcat" | "ramoops" => "Log File",
 
         // General purpose languages
         "go" => "Go",
@@ -1271,6 +1315,7 @@ pub fn canonical_language_name(input: &str) -> &'static str {
             "TeX" => "TeX",
             "Vim Script" => "Vim Script",
             "Plain Text" => "Plain Text",
+            "Log" | "Log File" | "Logfile" | "Log Files" => "Log File",
             "Go" => "Go",
             "Java" => "Java",
             "Kotlin" => "Kotlin",
@@ -1556,6 +1601,15 @@ mod tests {
 
         let rc_local = detect_known_filename(Path::new("rc.local")).unwrap();
         assert_eq!(rc_local.language, "Shell");
+
+        let kmsg = detect_known_filename(Path::new("boot-kmsg.log")).unwrap();
+        assert_eq!(kmsg.language, "Log File");
+
+        let dmesg_bare = detect_known_filename(Path::new("dmesg")).unwrap();
+        assert_eq!(dmesg_bare.language, "Log File");
+
+        let ramoops = detect_known_filename(Path::new("console-ramoops-0")).unwrap();
+        assert_eq!(ramoops.language, "Log File");
 
         assert!(detect_known_filename(Path::new("regular_file.rs")).is_none());
     }

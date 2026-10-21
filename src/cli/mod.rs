@@ -77,7 +77,7 @@ SUPPORTED LANGUAGES (LOC Counting):
   Terraform / HCL, Nix, PowerShell, Batch, Verilog, VHDL, Typst, AsciiDoc,
   Jinja, Handlebars, Tcl, AppleScript, Lisp, Scheme, D, Org, Mediatek DWS,
   reStructuredText, AWK, Sed, ASN.1, Gettext, Graphviz, TeX, Vim Script,
-  Plain Text, Go, Java, Kotlin, Swift, C#, Ruby, PHP, Perl, Lua, Zig, Nim,
+  Plain Text, Log File, Go, Java, Kotlin, Swift, C#, Ruby, PHP, Perl, Lua, Zig, Nim,
   OCaml, Erlang, Elixir, Scala, Haskell, Clojure, R, Julia, Dart, Fortran,
   Pascal, V, Odin, CUDA, GLSL Shaders, Jupyter Notebooks
 

@@ -5,6 +5,13 @@ All notable changes to `loc-rs` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2026-10-21
+
+### Added
+- Dedicated `Log File` language categorization: recognizes `.log` files, system diagnostic logs, kernel ring buffers, and crash dumps (`dmesg*`, `kmsg*`, `logcat*`, `*ramoops*`, `console-ramoops*`, `pmsg-ramoops-0`), reporting them under canonical `Log File` language metrics rather than `Unknown` (`src/language/mod.rs`).
+- Tagging of log files with `[logfile]` in `--tree` output (`src/display/mod.rs`).
+- Filter aliases for logs: supports `-t log`, `-t dmesg`, `-t kmsg`, `-t logcat`, and `-t ramoops` without triggering unknown language warnings (`src/language/mod.rs`, `src/counter/mod.rs`).
+
 ## [0.3.3] - 2026-10-21
 
 ### Fixed

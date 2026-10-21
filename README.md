@@ -254,9 +254,10 @@ snapshots
 | `scheme` | `Scheme` | `.scm` `.ss` `.rkt` |
 | `d` | `D` | `.d` `.di` |
 | `org` | `Org` | `.org` |
+| `log` | `Log File` | `.log` `dmesg*` `kmsg*` `logcat*` `*ramoops*` |
 | `text` | `Plain Text` | `.txt` `.text` `LICENSE` `COPYING` `AUTHORS` `NOTICE` `CHANGELOG` `README` |
 
-Language aliases are supported for common names such as `py`, `js`, `ts`, `tsx`, `rs`, `c`, `h`, `cpp`, `hpp`, `dts`, `dtsi`, `rb`, `sh`, `bash`, `zsh`, `md`, `yml`, `kt`, `hs`, `c++`, `cxx`, `cc`, `cs`, `rc`, `systemd`, `service`, `tf`, `terraform`, `nix`, `ps1`, `pwsh`, `bat`, `sv`, `vhd`, and `typ`.
+Language aliases are supported for common names such as `py`, `js`, `ts`, `tsx`, `rs`, `c`, `h`, `cpp`, `hpp`, `dts`, `dtsi`, `rb`, `sh`, `bash`, `zsh`, `md`, `yml`, `kt`, `hs`, `c++`, `cxx`, `cc`, `cs`, `rc`, `systemd`, `service`, `tf`, `terraform`, `nix`, `ps1`, `pwsh`, `bat`, `sv`, `vhd`, `typ`, `log`, `dmesg`, `kmsg`, `logcat`, and `ramoops`.
 
 ---
 

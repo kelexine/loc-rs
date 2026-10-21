@@ -89,8 +89,13 @@ impl ScanConfig {
             let mut exts = HashSet::new();
             for lang in &types_to_use {
                 let resolved = crate::language::resolve_extensions(lang);
-                if resolved.is_empty()
-                    || (resolved.len() == 1 && resolved[0] == format!(".{}", lang))
+                let is_known = crate::language::LANGUAGE_MAP
+                    .contains_key(lang.to_lowercase().as_str())
+                    || crate::language::canonical_language_name(lang) != "Unknown";
+                if !is_known
+                    && (resolved.is_empty()
+                        || (resolved.len() == 1
+                            && resolved[0] == format!(".{}", lang.to_lowercase())))
                 {
                     eprintln!("[WARNING] Unknown language filter: {}", lang);
                 }
